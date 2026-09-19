@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Greater China 2026</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Trip companion for Hong Kong, Macau, Guangzhou, Foshan, Chongqing and Chengdu, 16 Oct - 1 Nov 2026.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Greater China">
+<meta name="theme-color" content="#9E1B1E">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{
+  --bg:#f6f4f1; --surface:#ffffff; --surface-2:#faf8f6; --line:#e4dfd8;
+  --ink:#1b1917; --ink-2:#5c554e; --ink-3:#756f68;
+  --line-strong:#908c88;
+  --brand:#9E1B1E; --brand-2:#c2531f; --accent:#0f6b5c;
+  --on-brand:#ffffff; --nav-g:#1668d6; --on-nav-g:#ffffff;
+  --ok:#1b7f4b; --warn:#a3620a;
+  --radius:16px; --radius-sm:11px;
+  --shadow:0 1px 2px rgba(27,25,23,.06), 0 6px 20px rgba(27,25,23,.07);
+  --tap:46px;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --nav-h:60px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131211; --surface:#1d1b19; --surface-2:#242220; --line:#33302c;
+    --ink:#f2efeb; --ink-2:#b5ada4; --ink-3:#90887f;
+    --line-strong:#686663;
+    --brand:#e8635f; --brand-2:#e8913f; --accent:#4fc0aa;
+    --on-brand:#1b1210; --nav-g:#7cb3f5; --on-nav-g:#1b1210;
+    --ok:#5cc98a; --warn:#e0a54a;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131211; --surface:#1d1b19; --surface-2:#242220; --line:#33302c;
+  --ink:#f2efeb; --ink-2:#b5ada4; --ink-3:#90887f;
+  --line-strong:#686663;
+  --brand:#e8635f; --brand-2:#e8913f; --accent:#4fc0aa;
+  --on-brand:#1b1210; --nav-g:#7cb3f5; --on-nav-g:#1b1210;
+  --ok:#5cc98a; --warn:#e0a54a;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+/* every control gets a visible keyboard ring; pointer taps never show it */
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--brand); outline-offset:2px; border-radius:10px}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important; scroll-behavior:auto !important;
+  }
+  .btn:active,.locrow:active,.stop-main:active,.daychip:active,.bk-head:active{transform:none}
+}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:16px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang SC","PingFang HK","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;
+}
+button,input,textarea,select{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+a{color:var(--brand)}
+.svgic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block;flex:none}
+.svgic.fill{fill:currentColor;stroke:none}
+.navbtn .svgic{width:21px;height:21px}
+.locrow .thumb .svgic,.bk-ic .svgic{width:21px;height:21px}
+input[type="search"]::-webkit-search-cancel-button,input[type="search"]::-webkit-search-decoration{-webkit-appearance:none;appearance:none}
+.zh{font-family:"PingFang SC","PingFang HK","Hiragino Sans GB","Heiti SC","Microsoft YaHei",sans-serif}
+
+/* ---------- chrome ---------- */
+#app{padding-bottom:calc(var(--nav-h) + var(--safe-b) + 8px)}
+header.top{
+  position:sticky; top:0; z-index:40;
+  padding:calc(var(--safe-t) + 10px) 16px 10px;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px);
+  border-bottom:1px solid var(--line);
+}
+.top-row{display:flex;align-items:center;gap:10px;min-height:34px}
+.top h1{font-size:21px;line-height:1.15;margin:0;font-weight:680;letter-spacing:-.02em;flex:1}
+.top .sub{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+.iconbtn{
+  width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink-2);flex:none;
+}
+.iconbtn:active{background:var(--line)}
+main{padding:14px 16px 8px; max-width:720px; margin:0 auto}
+
+nav.tabs{
+  position:fixed; left:0; right:0; bottom:0; z-index:50;
+  display:grid; grid-template-columns:repeat(4,1fr);
+  background:color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px);
+  border-top:1px solid var(--line);
+  padding-bottom:var(--safe-b);
+}
+/* display:grid beats the hidden attribute on its own — the gate needs this */
+nav.tabs[hidden]{display:none}
+nav.tabs button{
+  height:var(--nav-h); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  color:var(--ink-3); font-size:10.5px; font-weight:560; letter-spacing:.01em;
+}
+nav.tabs button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button[aria-selected="true"]{color:var(--brand)}
+
+/* ---------- generic bits ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.muted{color:var(--ink-3)}
+.small{font-size:13px}
+.row{display:flex;align-items:center;gap:10px}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  font-size:11.5px;font-weight:600;background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line);
+  white-space:nowrap;
+}
+.pill.t-restaurant{color:#b4531a;border-color:color-mix(in srgb,#b4531a 30%,var(--line))}
+.pill.t-attraction{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 32%,var(--line))}
+.pill.t-shopping{color:#7a4bb8;border-color:color-mix(in srgb,#7a4bb8 30%,var(--line))}
+.pill.t-hotel{color:var(--ink-2)}
+.section-title{
+  font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);margin:22px 0 9px;
+}
+.section-title:first-child{margin-top:4px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:var(--tap);padding:0 16px;border-radius:12px;font-weight:620;font-size:15px;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink);
+}
+.btn:active{transform:scale(.985)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.ghost{background:transparent}
+.btn.danger{color:#c2352f;border-color:color-mix(in srgb,#c2352f 35%,var(--line))}
+.btn.block{width:100%}
+.btn.sm{min-height:36px;padding:0 12px;font-size:13.5px;border-radius:10px;position:relative}
+/* keeps the visual size but gives the finger a 44px target */
+.btn.sm::after{content:"";position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:44px}
+.empty{padding:34px 18px;text-align:center;color:var(--ink-3);font-size:14.5px}
+
+/* ---------- day strip ---------- */
+.daystrip{display:flex;gap:8px;overflow-x:auto;padding:2px 16px 12px;margin:0 -16px;scrollbar-width:none}
+.daystrip::-webkit-scrollbar{display:none}
+.daychip{
+  flex:none;min-width:62px;padding:8px 10px;border-radius:13px;text-align:center;
+  background:var(--surface);border:1px solid var(--line);
+}
+.daychip .d{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.daychip .n{font-size:18px;font-weight:700;line-height:1.2;margin-top:1px}
+.daychip .m{font-size:10.5px;color:var(--ink-3)}
+.daychip:active{background:var(--surface-2)}
+.daychip[aria-current="true"]{background:var(--brand);border-color:var(--brand)}
+.daychip[aria-current="true"] .d,.daychip[aria-current="true"] .n,.daychip[aria-current="true"] .m{color:var(--on-brand)}
+.daychip.istoday:not([aria-current="true"]){border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand)}
+
+/* ---------- stop cards ---------- */
+.stops{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.stop{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; position:relative;
+}
+.stop.dragging{opacity:.35}
+.stop.dragghost{
+  position:fixed;z-index:200;pointer-events:none;box-shadow:0 12px 34px rgba(0,0,0,.28);
+  transform:scale(1.02);opacity:.97;margin:0;
+}
+.stop-main{display:flex;gap:11px;padding:12px 66px 12px 13px;align-items:flex-start;width:100%;text-align:left;
+  transition:background .12s ease}
+.stop-main:active{background:var(--surface-2)}
+.stop-time{
+  flex:none;width:47px;font-variant-numeric:tabular-nums;font-weight:700;font-size:13.5px;
+  color:var(--brand);padding-top:1px;
+}
+.stop-time.none{color:var(--ink-3);font-weight:600}
+.stop-body{flex:1;min-width:0}
+.stop-en{font-weight:650;font-size:15.5px;line-height:1.28;letter-spacing:-.01em}
+.stop-zh{font-size:16.5px;line-height:1.3;margin-top:1px;color:var(--ink)}
+.stop-sum{font-size:13px;color:var(--ink-2);margin-top:5px;line-height:1.42;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.stop-meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.stop-side{flex:none;display:flex;flex-direction:column;gap:6px;align-items:center}
+.navbtn{
+  width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+  background:var(--brand);color:var(--on-brand);flex:none;
+}
+.navbtn.g{background:var(--nav-g);color:var(--on-nav-g)}
+.navbtn:active{filter:brightness(.92)}
+.stop-tools{
+  display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);
+  background:var(--surface-2);padding:2px 4px;
+}
+.stop-tools button{
+  flex:1;height:44px;display:grid;place-items:center;color:var(--ink-3);
+  font-size:11.5px;font-weight:650;letter-spacing:.03em;border-radius:9px;
+}
+.stop-tools button.g{font-size:14px;letter-spacing:0}
+.stop-tools button:active{background:var(--line)}
+.stop-tools button:disabled{opacity:.34}
+.stop-tools .handle{touch-action:none;cursor:grab}
+.stop-tools .sep{width:1px;height:18px;background:var(--line);flex:none}
+
+/* ---------- search ---------- */
+.searchwrap{position:relative;margin-bottom:12px}
+.searchwrap input{
+  width:100%;min-height:var(--tap);padding:0 40px 0 38px;border-radius:12px;
+  background:var(--surface);border:1px solid var(--line-strong);font-size:16px;
+}
+.searchwrap input:focus{border-color:var(--brand)}
+.searchwrap .mag{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none}
+.searchwrap .clr{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;color:var(--ink-3);display:none;place-items:center}
+.searchwrap.has .clr{display:grid}
+.filters{display:flex;gap:7px;overflow-x:auto;padding-bottom:10px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink-2);position:relative;
+}
+.chip::after{content:"";position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:44px}
+.chip:active{background:var(--line)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* ---------- location list ---------- */
+.loclist{display:flex;flex-direction:column;gap:9px}
+.locrow{
+  display:flex;gap:11px;align-items:center;padding:11px 12px;width:100%;text-align:left;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);
+}
+.locrow{transition:background .12s ease}
+button.locrow:active,.locrow button:active{background:var(--surface-2)}
+.locrow .thumb{
+  width:44px;height:44px;border-radius:11px;flex:none;display:grid;place-items:center;
+  font-size:16px;font-weight:700;color:var(--on-brand);background:linear-gradient(140deg,var(--brand),var(--brand-2));
+}
+.locrow .lb{flex:1;min-width:0}
+.locrow .en{font-weight:640;font-size:15px;line-height:1.25}
+.locrow .zh{font-size:15.5px;line-height:1.3;margin-top:1px}
+.locrow .mt{font-size:12px;color:var(--ink-3);margin-top:3px}
+mark{background:color-mix(in srgb,var(--brand) 24%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+
+/* ---------- bookings ---------- */
+.bk{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);overflow:hidden}
+.bk+.bk{margin-top:9px}
+.bk-head{display:flex;gap:11px;padding:12px;width:100%;text-align:left;align-items:flex-start;
+  transition:background .12s ease}
+.bk-head:active{background:var(--surface-2)}
+.bk-ic{width:38px;height:38px;border-radius:10px;flex:none;display:grid;place-items:center;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line)}
+.bk-b{flex:1;min-width:0}
+.bk-when{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--brand)}
+.bk-t{font-weight:620;font-size:15px;line-height:1.3;margin-top:2px}
+.bk-cn{font-size:12.5px;color:var(--ink-2);margin-top:3px;font-variant-numeric:tabular-nums}
+.bk-cn b{font-weight:700;color:var(--ink);letter-spacing:.04em}
+.bk-body{padding:0 12px 13px 61px;font-size:14px;line-height:1.55;color:var(--ink-2);display:none}
+.bk.open .bk-body{display:block}
+.bk .chev{color:var(--ink-3);transition:transform .18s;flex:none;margin-top:8px}
+.rowend{color:var(--ink-3);flex:none}
+.bk.open .chev{transform:rotate(90deg)}
+
+/* ---------- sheet / detail ---------- */
+.sheet{
+  position:fixed;inset:0;z-index:100;background:var(--bg);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  transform:translateY(100%);transition:transform .26s cubic-bezier(.32,.72,0,1);
+  visibility:hidden;
+}
+.sheet.open{transform:translateY(0);visibility:visible}
+.sheet-top{
+  position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;
+  padding:calc(var(--safe-t) + 9px) 12px 9px;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);
+}
+.sheet-top .ttl{flex:1;font-weight:660;font-size:16px;text-align:center;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-body{padding:0 16px calc(46px + var(--safe-b));max-width:720px;margin:0 auto}
+
+.hero{
+  margin:14px 0 0;border-radius:var(--radius);overflow:hidden;position:relative;
+  background:linear-gradient(145deg,var(--brand),var(--brand-2));
+  min-height:152px;display:flex;flex-direction:column;justify-content:flex-end;padding:16px;
+}
+.hero::after{
+  content:"";position:absolute;inset:0;opacity:.18;pointer-events:none;
+  background:radial-gradient(circle at 78% 18%, #fff 0, transparent 46%);
+}
+.hero .ph{
+  position:absolute;top:11px;left:14px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--on-brand);opacity:.78;font-weight:700;
+}
+.hero .hz{font-size:31px;line-height:1.16;font-weight:700;color:var(--on-brand);letter-spacing:.01em;position:relative}
+.hero .he{font-size:15px;color:var(--on-brand);opacity:.94;margin-top:5px;font-weight:560;position:relative}
+.hero .hm{font-size:12px;color:var(--on-brand);opacity:.84;margin-top:8px;position:relative}
+
+.navrow{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:12px}
+.navrow .btn{min-height:50px;font-size:15.5px}
+.blurb{font-size:15.5px;line-height:1.66;color:var(--ink);margin:0}
+.blurb+.blurb{margin-top:12px}
+ul.lst{margin:0;padding:0;list-style:none}
+ul.lst li{
+  position:relative;padding:9px 0 9px 22px;font-size:14.8px;line-height:1.55;
+  border-bottom:1px solid var(--line);
+}
+ul.lst li:last-child{border-bottom:0}
+ul.lst li::before{
+  content:"";position:absolute;left:5px;top:17px;width:6px;height:6px;border-radius:50%;background:var(--brand);
+}
+ul.lst li .cn{font-weight:650}
+.readaloud{
+  margin-top:12px;padding:14px;border-radius:var(--radius);
+  background:var(--surface);border:1px dashed color-mix(in srgb,var(--brand) 40%,var(--line));
+}
+.readaloud .lbl{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.readaloud .big{font-size:35px;line-height:1.24;font-weight:700;margin-top:6px;letter-spacing:.02em}
+.readaloud .en2{font-size:14px;color:var(--ink-2);margin-top:4px}
+
+/* ---------- forms ---------- */
+.field{margin-bottom:13px}
+.field label{display:block;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.field input,.field textarea,.field select{
+  width:100%;background:var(--surface);border:1px solid var(--line-strong);border-radius:11px;
+  padding:11px 12px;font-size:16px;min-height:var(--tap);
+}
+.field textarea{min-height:104px;line-height:1.55;resize:vertical}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--brand)}
+.field .hint{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.45}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.formactions{display:flex;gap:9px;margin-top:18px;flex-wrap:wrap}
+.formactions .btn{flex:1;min-width:130px}
+
+/* ---------- toast + status ---------- */
+#toast{
+  position:fixed;left:50%;transform:translateX(-50%) translateY(20px);
+  bottom:calc(var(--nav-h) + var(--safe-b) + 14px);z-index:300;
+  background:var(--ink);color:var(--bg);padding:11px 17px;border-radius:12px;font-size:14px;font-weight:560;
+  max-width:88vw;text-align:center;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;
+  box-shadow:0 8px 28px rgba(0,0,0,.3);
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.statusdot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);flex:none}
+.statusdot.on{background:var(--ok)} .statusdot.off{background:var(--warn)}
+.banner{
+  display:flex;gap:9px;align-items:flex-start;padding:11px 13px;border-radius:var(--radius-sm);
+  background:color-mix(in srgb,var(--warn) 12%,var(--surface));
+  border:1px solid color-mix(in srgb,var(--warn) 34%,var(--line));
+  font-size:13.2px;line-height:1.5;color:var(--ink);margin-bottom:13px;
+}
+.banner .bi{flex:none;color:var(--warn);margin-top:1px}
+.banner button{text-decoration:underline;font-weight:650;color:var(--ink)}
+
+/* First-run gate. The page ships with no trip content, so until the Sheet has
+   been reached once there is nothing to show — this is the whole app. */
+#gate{position:fixed;inset:0;z-index:60;overflow-y:auto;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  padding:calc(24px + var(--safe-t)) 16px calc(24px + var(--safe-b))}
+#gate[hidden]{display:none}
+.gatebox{width:100%;max-width:420px}
+.gatebox h1{font-size:25px;line-height:1.2;margin:0 0 3px}
+.gatebox .gsub{margin:0 0 18px;color:var(--ink-2);font-size:14px}
+.gatebox .gblurb{margin:0 0 20px;color:var(--ink-2);font-size:13.5px;line-height:1.6}
+.gatebox .gerr{color:#c2352f;font-size:13px;line-height:1.5;margin:0 0 11px}
+.gatebox .gerr:empty{display:none}
+.gatebox .ghint{margin:14px 0 0;color:var(--ink-3);font-size:12.5px;line-height:1.55}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="top-row">
+      <div style="flex:1;min-width:0">
+        <h1 id="viewTitle">Today</h1>
+        <div class="sub" id="viewSub"></div>
+      </div>
+      <button class="iconbtn" id="btnSettings" aria-label="Settings"></button>
+    </div>
+  </header>
+  <main>
+    <section id="view-today"></section>
+    <section id="view-days" hidden></section>
+    <section id="view-places" hidden></section>
+    <section id="view-bookings" hidden></section>
+  </main>
+</div>
+
+<div id="gate" hidden>
+  <div class="gatebox">
+    <h1>Greater China</h1>
+    <p class="gsub">16 Oct – 1 Nov 2026</p>
+    <p class="gblurb">This page ships empty on purpose — the repo it is served from is
+      public. Every place, booking and day lives in your Google Sheet. Paste the web app
+      URL and the API key once and the trip downloads to this phone, where it stays and
+      keeps working with no signal.</p>
+    <div class="field"><label for="g_url">Web App URL</label>
+      <input id="g_url" inputmode="url" autocapitalize="off" autocorrect="off"
+        placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="field"><label for="g_key">API key</label>
+      <input id="g_key" autocapitalize="off" autocorrect="off"
+        placeholder="the API_KEY you set in Code.gs"></div>
+    <p class="gerr" id="gateErr" role="alert"></p>
+    <button class="btn primary block" id="gateBtn" data-act="gate-connect">Connect</button>
+    <p class="ghint">Both are kept on this phone only, never in the repo. Setting up the
+      Sheet takes about ten minutes and is written up in the project README.</p>
+  </div>
+</div>
+
+<nav class="tabs" id="tabs" role="tablist">
+  <button role="tab" data-view="today" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.2v5.1l3.3 2"/></svg>Today</button>
+  <button role="tab" data-view="days" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5" width="16.8" height="15.2" rx="2.6"/><path d="M3.6 9.6h16.8M8.4 3.4v3.4M15.6 3.4v3.4"/></svg>All Days</button>
+  <button role="tab" data-view="places" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.2s6.6-6 6.6-10.7a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.2 12 21.2Z"/><circle cx="12" cy="10.3" r="2.5"/></svg>Locations</button>
+  <button role="tab" data-view="bookings" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.8" y="5.6" width="18.4" height="12.8" rx="2.4"/><path d="M2.8 10.2h18.4M7 14.6h4"/></svg>Bookings</button>
+</nav>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="sheet-top">
+    <button class="iconbtn" id="sheetBack" aria-label="Close"></button>
+    <div class="ttl" id="sheetTitle"></div>
+    <button class="iconbtn" id="sheetAction" aria-label="Edit"></button>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   Greater China Trip Companion
+   Single page, vanilla JS. Data lives in a Google Sheet behind an Apps Script
+   web app; everything is cached locally so the whole app works offline, which
+   matters because Google services are not reachable from mainland China.
+   ========================================================================== */
+
+var TRIP_START = "2026-10-16";
+var TRIP_END   = "2026-11-01";
+
+var DAY_LABELS = {
+  "2026-10-16":"Sydney → Hong Kong",
+  "2026-10-17":"Hong Kong",
+  "2026-10-18":"Hong Kong",
+  "2026-10-19":"Hong Kong · Lantau",
+  "2026-10-20":"Macau day trip",
+  "2026-10-21":"Hong Kong → Guangzhou",
+  "2026-10-22":"Guangzhou",
+  "2026-10-23":"Foshan day trip",
+  "2026-10-24":"Guangzhou → Chongqing",
+  "2026-10-25":"Chongqing",
+  "2026-10-26":"Chongqing",
+  "2026-10-27":"Chongqing → Chengdu",
+  "2026-10-28":"Chengdu",
+  "2026-10-29":"Leshan day trip",
+  "2026-10-30":"Sanxingdui day trip",
+  "2026-10-31":"Chengdu · fly out tonight",
+  "2026-11-01":"Chengdu → Sydney"
+};
+
+/* Nothing about the trip ships in this file. The repo is public, so the
+   locations, bookings and schedule live only in the Sheet; the app pulls
+   them on first connect and caches them on the phone from then on. */
+var EMPTY = { bookings: [], locations: [], schedule: [] };
+
+/* One icon family: 24x24 box, 1.8 stroke, currentColor. No emoji, no font glyphs. */
+function ic(d, cls){ return '<svg class="svgic'+(cls?" "+cls:"")+'" viewBox="0 0 24 24" aria-hidden="true">'+d+'</svg>'; }
+var IC = {
+  gear:  ic('<path d="M4 7.4h8.2M17.6 7.4H20M4 16.6h3.4M12.8 16.6H20"/><circle cx="15" cy="7.4" r="2.4"/><circle cx="10.2" cy="16.6" r="2.4"/>'),
+  back:  ic('<path d="M14.6 5.4 8 12l6.6 6.6"/>'),
+  chev:  ic('<path d="M9.6 5.4 16.2 12l-6.6 6.6"/>'),
+  up:    ic('<path d="M6.4 14.6 12 9l5.6 5.6"/>'),
+  down:  ic('<path d="M6.4 9.4 12 15l5.6-5.6"/>'),
+  close: ic('<path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6"/>'),
+  info:  ic('<circle cx="12" cy="12" r="8.6"/><path d="M12 11.3v5M12 7.9h.01"/>'),
+  plus:  ic('<path d="M12 5.6v12.8M5.6 12h12.8"/>'),
+  mag:   ic('<circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/>'),
+  pen:   ic('<path d="M4.5 19.5h3.2L18.9 8.3a2.2 2.2 0 0 0-3.2-3.2L4.5 16.3z"/><path d="m14.6 6.2 3.2 3.2"/>'),
+  nav:   ic('<path d="M20.6 3.4 3.9 10.6a.55.55 0 0 0 .04 1.02l6.6 2.2 2.2 6.6a.55.55 0 0 0 1.02.04z"/>', 'fill'),
+  drag:  ic('<circle cx="9.2" cy="6.2" r="1.35"/><circle cx="14.8" cy="6.2" r="1.35"/><circle cx="9.2" cy="12" r="1.35"/><circle cx="14.8" cy="12" r="1.35"/><circle cx="9.2" cy="17.8" r="1.35"/><circle cx="14.8" cy="17.8" r="1.35"/>', 'fill'),
+  attraction: ic('<path d="m12 4.4 2.28 4.86 5.22.72-3.81 3.66.94 5.26L12 16.4l-4.63 2.5.94-5.26L4.5 9.98l5.22-.72z"/>'),
+  restaurant: ic('<path d="M7.4 3.6v6.6a2.1 2.1 0 0 0 4.2 0V3.6M9.5 10.3v10.1M16.8 3.6c-1.3 1.1-1.9 2.7-1.9 4.4s.66 2.6 1.9 2.6v9.8"/>'),
+  shopping:   ic('<path d="M5.5 8.3h13l-1 11.9H6.5z"/><path d="M9.3 10.5V7a2.7 2.7 0 0 1 5.4 0v3.5"/>'),
+  hotel:      ic('<path d="M3.8 20.3V8.7L12 3.6l8.2 5.1v11.6"/><path d="M9.5 20.3v-5.8h5v5.8"/>')
+};
+function typeIcon(t){ return IC[t] || IC.attraction; }
+var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui" };
+
+/* ---------- tiny utils ---------- */
+function $(s,r){ return (r||document).querySelector(s); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function lines(s){ return String(s||"").split(/\r?\n/).map(function(x){return x.trim();}).filter(Boolean); }
+function paras(s){ return String(s||"").split(/\n\s*\n/).map(function(x){return x.trim();}).filter(Boolean); }
+function load(k,d){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }
+function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function uid(p){ return p+"-"+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36); }
+function todayISO(){ var d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function parseISO(s){ var p=String(s).split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
+function fmtDate(iso,long){
+  var d=parseISO(iso);
+  var wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
+  var mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+  return long ? wd+" "+d.getDate()+" "+mo : wd.slice(0,3)+" "+d.getDate()+" "+mo;
+}
+function firstSentence(s,max){
+  s=String(s||"").replace(/\s+/g," ").trim(); if(!s) return "";
+  var m=s.match(/^(.{40,}?[.!?])(\s|$)/); var out=m?m[1]:s;
+  max=max||130; if(out.length>max) out=out.slice(0,max-1).replace(/\s+\S*$/,"")+"…";
+  return out;
+}
+function tripDays(){
+  var out=[], d=parseISO(TRIP_START), end=parseISO(TRIP_END);
+  while(d<=end){
+    out.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));
+    d.setDate(d.getDate()+1);
+  }
+  return out;
+}
+var DAYS = tripDays();
+function toast(msg,ms){
+  var t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t=setTimeout(function(){ t.classList.remove("show"); }, ms||2100);
+}
+
+/* ==========================================================================
+   Store — local cache is the source of truth for rendering; the Sheet is
+   the source of truth on sync. Writes apply locally first, then go out.
+   ========================================================================== */
+var store = {
+  cfg: load(LS.cfg, { url:"", key:"" }),
+  data: null,
+  queue: load(LS.queue, []),
+  online: false,
+  syncing: false,
+
+  init: function(){
+    var cached = load(LS.cache, null);
+    this.data = (cached && cached.locations) ? cached : JSON.parse(JSON.stringify(EMPTY));
+  },
+  configured: function(){ return !!(this.cfg.url && this.cfg.key); },
+  hasData: function(){ return !!(this.data && this.data.locations && this.data.locations.length); },
+  persist: function(){ save(LS.cache, this.data); },
+
+  loc: function(id){
+    for(var i=0;i<this.data.locations.length;i++) if(this.data.locations[i].id===id) return this.data.locations[i];
+    return null;
+  },
+  dayStops: function(date){
+    return this.data.schedule
+      .filter(function(s){ return s.date===date; })
+      .sort(function(a,b){ return (+a.order_index||0)-(+b.order_index||0); });
+  },
+
+  /* ---- remote ---- */
+  call: function(action, payload){
+    var self=this;
+    if(!this.configured()) return Promise.reject(new Error("not-configured"));
+    var body = JSON.stringify({ key:this.cfg.key, action:action, payload:payload||null });
+    // text/plain keeps this a CORS "simple request" so Apps Script needs no preflight
+    return fetch(this.cfg.url, {
+      method:"POST", body:body, redirect:"follow",
+      headers:{ "Content-Type":"text/plain;charset=utf-8" }
+    }).then(function(r){ return r.json(); }).then(function(j){
+      if(!j || !j.ok) throw new Error((j && j.error) || "Request failed");
+      self.online = true;
+      return j.data;
+    }).catch(function(err){ self.online=false; throw err; });
+  },
+
+  enqueue: function(action,payload){
+    this.queue.push({ action:action, payload:payload, ts:Date.now() });
+    save(LS.queue, this.queue);
+    updateStatus();
+  },
+
+  flush: function(){
+    var self=this;
+    if(!this.configured() || !this.queue.length) return Promise.resolve(0);
+    var sent=0;
+    function step(){
+      if(!self.queue.length) return Promise.resolve(sent);
+      var job=self.queue[0];
+      return self.call(job.action, job.payload).then(function(){
+        self.queue.shift(); save(LS.queue, self.queue); sent++; return step();
+      });
+    }
+    return step();
+  },
+
+  /* write-through: apply locally, then send (or queue if offline) */
+  write: function(action, payload, applyLocal){
+    applyLocal();
+    this.persist();
+    if(!this.configured()){ updateStatus(); return Promise.resolve(); }
+    var self=this;
+    return this.call(action,payload).then(function(){
+      updateStatus();
+    }).catch(function(){
+      self.enqueue(action,payload);
+    });
+  },
+
+  sync: function(opts){
+    var self=this; opts=opts||{};
+    if(!this.configured()) return Promise.reject(new Error("not-configured"));
+    if(this.syncing) return Promise.resolve();
+    this.syncing=true; updateStatus();
+    return this.flush()
+      .then(function(){ return self.call("all"); })
+      .then(function(d){
+        if(d && d.locations){
+          self.data = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[] };
+          self.persist();
+        }
+        self.syncing=false; self.online=true; updateStatus();
+        if(!opts.quiet) toast("Synced with the Sheet");
+        render();
+      })
+      .catch(function(err){
+        self.syncing=false; self.online=false; updateStatus();
+        if(!opts.quiet) toast(err.message==="not-configured" ? "Backend not set up yet" : "Offline — using saved copy");
+        throw err;
+      });
+  }
+};
+
+/* ==========================================================================
+   Navigation into Amap / Google Maps
+   ========================================================================== */
+
+/** Amap consumes GCJ-02 by default; dev=1 / coordinate=wgs84 tell it our
+ *  coordinates are plain GPS so it does the shift itself. */
+function navUrls(loc){
+  var lat=Number(loc.lat), lng=Number(loc.lng);
+  var hasXY = isFinite(lat) && isFinite(lng) && (lat!==0 || lng!==0);
+  var zh = loc.name_zh || loc.name_en || "";
+  var q  = encodeURIComponent(zh + (loc.city ? " " + loc.city : ""));
+  var nm = encodeURIComponent(zh);
+  if(loc.nav_app === "amap"){
+    return {
+      app:"Amap 高德",
+      scheme: hasXY
+        ? "iosamap://viewMap?sourceApplication=TripCompanion&poiname="+nm+"&lat="+lat+"&lon="+lng+"&dev=1"
+        : "iosamap://poi?sourceApplication=TripCompanion&keywords="+nm,
+      web: hasXY
+        ? "https://uri.amap.com/marker?position="+lng+","+lat+"&name="+nm+"&coordinate=wgs84&callnative=1&src=TripCompanion"
+        : "https://uri.amap.com/search?keyword="+nm+"&callnative=1&src=TripCompanion",
+      search: "https://uri.amap.com/search?keyword="+nm+(loc.city?"&city="+encodeURIComponent(loc.city):"")+"&callnative=1&src=TripCompanion",
+      cls:"a"
+    };
+  }
+  return {
+    app:"Google Maps",
+    scheme: hasXY
+      ? "comgooglemaps://?q="+nm+"&center="+lat+","+lng+"&zoom=16"
+      : "comgooglemaps://?q="+q,
+    web: "https://www.google.com/maps/search/?api=1&query="+q,
+    search: "https://www.google.com/maps/search/?api=1&query="+q,
+    cls:"g"
+  };
+}
+
+/** Try the native scheme; if we are still here and visible ~1.4s later the
+ *  app is not installed, so fall through to the web URL (which itself offers
+ *  the App Store). */
+function openMaps(loc){
+  var u = navUrls(loc);
+  var bailed = false;
+  function bail(){ bailed = true; }
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("pagehide", bail, { once:true });
+  window.addEventListener("blur", bail, { once:true });
+  function onVis(){ if(document.hidden) bail(); }
+  var t = setTimeout(function(){
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("blur", bail);
+    if(!bailed && !document.hidden) window.location.href = u.web;
+  }, 1400);
+  setTimeout(function(){ clearTimeout(t); }, 20000);
+  try { window.location.href = u.scheme; }
+  catch(e){ clearTimeout(t); window.location.href = u.web; }
+}
+
+/* ==========================================================================
+   Rendering
+   ========================================================================== */
+var ui = load(LS.ui, { view:"today", day:null, q:"", city:"All", type:"All" });
+function defaultDay(){
+  var t = todayISO();
+  return DAYS.indexOf(t) >= 0 ? t : DAYS[0];
+}
+if(!ui.day || DAYS.indexOf(ui.day)<0) ui.day = defaultDay();
+
+function dayNumber(date){ return DAYS.indexOf(date)+1; }
+
+function updateStatus(){
+  var cls = store.syncing ? "" : (store.configured() ? (store.online?"on":"off") : "off");
+  var txt = !store.configured() ? "Local only"
+          : store.syncing ? "Syncing…"
+          : store.online ? (store.queue.length ? store.queue.length+" queued" : "Synced")
+          : (store.queue.length ? store.queue.length+" waiting to send" : "Offline");
+  var html = '<span class="statusdot '+cls+'"></span>'+esc(txt);
+  document.querySelectorAll(".syncbadge").forEach(function(b){ b.innerHTML = html; });
+}
+
+function setView(v){
+  ui.view=v; save(LS.ui,ui);
+  ["today","days","places","bookings"].forEach(function(name){
+    $("#view-"+name).hidden = (name!==v);
+  });
+  document.querySelectorAll("nav.tabs button").forEach(function(b){
+    b.setAttribute("aria-selected", String(b.dataset.view===v));
+  });
+  window.scrollTo(0,0);
+  render();
+}
+
+/* The gate is up whenever this phone holds no trip data — on a fresh install,
+   and after a reset that has not managed to pull again yet. */
+function gateNeeded(){ return !store.hasData(); }
+function applyGate(){
+  var on = gateNeeded();
+  $("#gate").hidden = !on;
+  $("#app").hidden = on;
+  $("#tabs").hidden = on;
+  if(on){
+    $("#g_url").value = store.cfg.url || "";
+    $("#g_key").value = store.cfg.key || "";
+    $("#gateBtn").disabled = false;
+    $("#gateBtn").textContent = store.configured() ? "Try again" : "Connect";
+  }
+}
+
+function render(){
+  applyGate();
+  if(gateNeeded()) return;
+  if(ui.view==="today")    renderDay();
+  if(ui.view==="days")     renderDays();
+  if(ui.view==="places")   renderPlaces();
+  if(ui.view==="bookings") renderBookings();
+  updateStatus();
+}
+
+/* ---------- shared bits ---------- */
+function statusBar(){
+  return '<div class="spread small muted" style="margin:2px 0 12px">'+
+    '<span class="syncbadge row" style="gap:6px"></span>'+
+    '<button class="btn sm ghost" data-act="sync">Sync</button></div>';
+}
+function stopCard(entry, loc, idx, total){
+  var u = navUrls(loc);
+  var summary = entry.notes || firstSentence(loc.history_blurb, 120) || (loc.type+" in "+loc.city);
+  return ''+
+  '<div class="stop" data-sid="'+esc(entry.id)+'" data-lid="'+esc(loc.id)+'">'+
+    '<button class="stop-main" data-act="open" data-lid="'+esc(loc.id)+'">'+
+      '<div class="stop-time '+(entry.planned_time?"":"none")+'">'+esc(entry.planned_time||"––:––")+'</div>'+
+      '<div class="stop-body">'+
+        '<div class="stop-en">'+esc(loc.name_en)+'</div>'+
+        '<div class="stop-zh zh">'+esc(loc.name_zh)+'</div>'+
+        '<div class="stop-sum">'+esc(summary)+'</div>'+
+        '<div class="stop-meta">'+
+          '<span class="pill t-'+esc(loc.type)+'">'+esc(loc.type)+'</span>'+
+          '<span class="pill">'+esc(loc.city)+'</span>'+
+        '</div>'+
+      '</div>'+
+    '</button>'+
+    '<div class="stop-side" style="position:absolute;right:12px;top:12px">'+
+      '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(loc.id)+'" aria-label="Navigate with '+esc(u.app)+'">'+IC.nav+'</button>'+
+    '</div>'+
+    '<div class="stop-tools">'+
+      '<button class="handle g" data-act="drag" aria-label="Drag to reorder">'+IC.drag+'</button>'+
+      '<span class="sep"></span>'+
+      '<button class="g" data-act="up" '+(idx===0?"disabled style=opacity:.28":"")+' aria-label="Move up">'+IC.up+'</button>'+
+      '<button class="g" data-act="down" '+(idx===total-1?"disabled style=opacity:.28":"")+' aria-label="Move down">'+IC.down+'</button>'+
+      '<span class="sep"></span>'+
+      '<button data-act="time" aria-label="Set time">TIME</button>'+
+      '<button data-act="note" aria-label="Edit note">NOTE</button>'+
+      '<button data-act="remove" aria-label="Remove from day">REMOVE</button>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderDayInto(el, date, withStrip){
+  var stops = store.dayStops(date);
+  var n = dayNumber(date);
+  $("#viewTitle").textContent = ui.view==="today" && date===todayISO() ? "Today" : "Day "+n;
+  $("#viewSub").textContent = fmtDate(date,true)+" · "+(DAY_LABELS[date]||"");
+
+  var strip = "";
+  if(withStrip){
+    strip = '<div class="daystrip">'+DAYS.map(function(d,i){
+      var dd=parseISO(d);
+      return '<button class="daychip'+(d===todayISO()?" istoday":"")+'" aria-current="'+(d===date)+'" data-act="day" data-date="'+d+'">'+
+        '<div class="d">Day</div><div class="n">'+(i+1)+'</div>'+
+        '<div class="m">'+dd.getDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][dd.getMonth()]+'</div></button>';
+    }).join("")+'</div>';
+  }
+
+  var body;
+  if(!stops.length){
+    body = '<div class="card empty">Nothing planned for this day yet.</div>';
+  } else {
+    body = '<div class="stops" id="stopList" data-date="'+date+'">'+stops.map(function(s,i){
+      var loc = store.loc(s.location_id);
+      if(!loc) return '<div class="card empty small">Missing location <code>'+esc(s.location_id)+'</code> '+
+        '<button class="btn sm danger" data-act="remove-orphan" data-sid="'+esc(s.id)+'">Remove</button></div>';
+      return stopCard(s, loc, i, stops.length);
+    }).join("")+'</div>';
+  }
+
+  el.innerHTML = statusBar()+strip+body+
+    '<div class="formactions" style="margin-top:16px">'+
+      '<button class="btn primary" data-act="add-existing" data-date="'+date+'">+ Add a stop</button>'+
+      '<button class="btn" data-act="quick-add" data-date="'+date+'">+ New place</button>'+
+    '</div>';
+}
+
+function renderDay(){ renderDayInto($("#view-today"), ui.day, true); }
+
+function renderDays(){
+  $("#viewTitle").textContent="All Days";
+  $("#viewSub").textContent="16 Oct – 1 Nov 2026 · "+DAYS.length+" days";
+  var html = statusBar()+'<div class="loclist">'+DAYS.map(function(d,i){
+    var stops=store.dayStops(d);
+    var cities={}; stops.forEach(function(s){ var l=store.loc(s.location_id); if(l) cities[l.city]=1; });
+    var cs=Object.keys(cities).join(" · ");
+    return '<button class="locrow" data-act="day-open" data-date="'+d+'">'+
+      '<div class="thumb" style="'+(d===todayISO()?"":"background:linear-gradient(140deg,var(--ink-3),var(--ink-2))")+'">'+(i+1)+'</div>'+
+      '<div class="lb"><div class="en">'+esc(fmtDate(d,true))+'</div>'+
+      '<div class="mt" style="margin-top:2px;font-size:13px;color:var(--ink-2)">'+esc(DAY_LABELS[d]||cs||"—")+'</div>'+
+      '<div class="mt">'+(stops.length?stops.length+" stop"+(stops.length>1?"s":""):"nothing planned")+(cs?" · "+esc(cs):"")+'</div></div>'+
+      '<span class="rowend">'+IC.chev+'</span></button>';
+  }).join("")+'</div>';
+  $("#view-days").innerHTML = html;
+}
+
+function matches(loc,q){
+  if(!q) return true;
+  var n=q.toLowerCase();
+  return String(loc.name_en||"").toLowerCase().indexOf(n)>=0 ||
+         String(loc.name_zh||"").indexOf(q)>=0 ||
+         String(loc.name_zh||"").toLowerCase().indexOf(n)>=0 ||
+         String(loc.city||"").toLowerCase().indexOf(n)>=0;
+}
+function hilite(text,q){
+  if(!q) return esc(text);
+  var t=String(text||""), lt=t.toLowerCase(), lq=q.toLowerCase();
+  var i=t.indexOf(q); if(i<0) i=lt.indexOf(lq);
+  if(i<0) return esc(t);
+  return esc(t.slice(0,i))+"<mark>"+esc(t.slice(i,i+q.length))+"</mark>"+esc(t.slice(i+q.length));
+}
+
+function renderPlaces(){
+  $("#viewTitle").textContent="Locations";
+  var all=store.data.locations;
+  $("#viewSub").textContent=all.length+" places · search in English or 中文";
+
+  var cities=["All"]; all.forEach(function(l){ if(cities.indexOf(l.city)<0) cities.push(l.city); });
+  var types=["All","attraction","restaurant","shopping","hotel"];
+  var q=ui.q||"";
+
+  var list=all.filter(function(l){
+    return matches(l,q) && (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type);
+  });
+
+  $("#view-places").innerHTML =
+    '<div class="searchwrap'+(q?" has":"")+'">'+
+      '<span class="mag"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></span>'+
+      '<input id="q" type="search" inputmode="search" autocomplete="off" autocapitalize="off" '+
+        'placeholder="Search in English or Chinese" value="'+esc(q)+'">'+
+      '<button class="clr" data-act="clearq" aria-label="Clear">'+IC.close+'</button>'+
+    '</div>'+
+    '<div class="filters">'+cities.map(function(c){
+      return '<button class="chip" data-act="city" data-v="'+esc(c)+'" aria-pressed="'+(ui.city===c)+'">'+esc(c)+'</button>';
+    }).join("")+'</div>'+
+    '<div class="filters" style="margin-top:-4px">'+types.map(function(t){
+      return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
+        (t==="All"?"All types":esc(t))+'</button>';
+    }).join("")+'</div>'+
+    '<div class="spread small muted" style="margin:4px 0 10px">'+
+      '<span>'+list.length+" of "+all.length+'</span>'+
+      '<button class="btn sm ghost" data-act="new-location">+ New place</button></div>'+
+    (list.length ? '<div class="loclist">'+list.map(function(l){
+      var u=navUrls(l);
+      return '<div class="locrow">'+
+        '<button class="thumb" data-act="open" data-lid="'+esc(l.id)+'" style="border:0">'+typeIcon(l.type)+'</button>'+
+        '<button class="lb" data-act="open" data-lid="'+esc(l.id)+'" style="text-align:left;background:none">'+
+          '<div class="en">'+hilite(l.name_en,q)+'</div>'+
+          '<div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
+          '<div class="mt">'+esc(l.city)+' · '+esc(l.type)+' · '+esc(u.app)+'</div>'+
+        '</button>'+
+        '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(l.id)+'" aria-label="Navigate">'+IC.nav+'</button>'+
+      '</div>';
+    }).join("")+'</div>' : '<div class="card empty">No match for &ldquo;'+esc(q)+'&rdquo;.<br><span class="small">Try part of the Chinese name — two or three characters is enough</span></div>');
+
+  var input=$("#q");
+  if(input){
+    input.addEventListener("input", function(){
+      ui.q=this.value; save(LS.ui,ui);
+      var sel=this.selectionStart;
+      renderPlaces();
+      var ni=$("#q"); if(ni){ ni.focus(); try{ ni.setSelectionRange(sel,sel); }catch(e){} }
+    });
+  }
+}
+
+function svgIc(d){ return '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true">'+d+'</svg>'; }
+var BK_ICON={
+  flight: svgIc('<path d="M20.4 15.6v-1.6l-7-4.2V4.7a1.4 1.4 0 0 0-2.8 0v5.1l-7 4.2v1.6l7-2.1v4.6l-2 1.4v1.2l3.4-.9 3.4.9v-1.2l-2-1.4v-4.6z"/>'),
+  train:  svgIc('<rect x="6" y="3.6" width="12" height="12.4" rx="3"/><path d="M6 10.6h12M8.7 20.4l2-3.2M15.3 20.4l-2-3.2"/><circle cx="9.4" cy="13.4" r=".9"/><circle cx="14.6" cy="13.4" r=".9"/>'),
+  ferry:  svgIc('<path d="M3.4 15.6 5 10.8h14l1.6 4.8"/><path d="M6.8 10.8V6.6h10.4v4.2M12 3.2v3.4"/><path d="M2.6 18.2c1.6 0 1.6 1.6 3.1 1.6s1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.1-1.6"/>'),
+  hotel:  svgIc('<path d="M3.6 20.4V8.6L12 3.4l8.4 5.2v11.8"/><path d="M9.4 20.4v-6h5.2v6"/>')
+};
+function renderBookings(){
+  $("#viewTitle").textContent="Bookings";
+  var bs=store.data.bookings.slice().sort(function(a,b){
+    if(a.date!==b.date) return a.date<b.date?-1:1;
+    return String(a.time||"").localeCompare(String(b.time||""));
+  });
+  $("#viewSub").textContent=bs.length+" flights, trains, ferries and hotels";
+  $("#view-bookings").innerHTML = statusBar()+
+    (bs.length? bs.map(function(b){
+      var dnum = DAYS.indexOf(b.date)>=0 ? "Day "+(DAYS.indexOf(b.date)+1)+" · " : "";
+      return '<div class="bk" data-bid="'+esc(b.id)+'">'+
+        '<button class="bk-head" data-act="bk">'+
+          '<div class="bk-ic">'+(BK_ICON[b.type]||svgIc('<circle cx="12" cy="12" r="6"/>'))+'</div>'+
+          '<div class="bk-b">'+
+            '<div class="bk-when">'+esc(dnum+fmtDate(b.date,false))+(b.time?" · "+esc(b.time):"")+'</div>'+
+            '<div class="bk-t">'+esc(b.description)+'</div>'+
+            (b.confirmation_no?'<div class="bk-cn">Ref <b>'+esc(b.confirmation_no)+'</b></div>':'')+
+          '</div><span class="chev">'+IC.chev+'</span>'+
+        '</button>'+
+        '<div class="bk-body">'+esc(b.details).replace(/\n/g,"<br>")+'</div>'+
+      '</div>';
+    }).join("") : '<div class="card empty">No bookings yet.</div>');
+}
+
+/* ==========================================================================
+   Sheet (detail / edit / forms)
+   ========================================================================== */
+var sheetStack=[];
+function openSheet(title, html, actionLabel, onAction){
+  sheetStack.push({title:title});
+  $("#sheetTitle").textContent=title;
+  $("#sheetBody").innerHTML=html;
+  var a=$("#sheetAction");
+  if(actionLabel){ a.style.visibility="visible"; a.innerHTML=actionLabel; a.onclick=onAction; }
+  else { a.style.visibility="hidden"; a.onclick=null; }
+  $("#sheet").classList.add("open");
+  $("#sheet").scrollTop=0;
+  document.body.style.overflow="hidden";
+}
+function closeSheet(){
+  sheetStack=[];
+  $("#sheet").classList.remove("open");
+  document.body.style.overflow="";
+}
+
+function locationDetail(id){
+  var l=store.loc(id); if(!l) return;
+  var u=navUrls(l);
+  var recs=lines(l.recommendations), dishes=lines(l.dishes_to_order), souv=lines(l.souvenirs);
+  function listItems(arr){
+    return arr.map(function(x){
+      var m=x.match(/^([㐀-鿿＀-￯][^\s]*(?:[㐀-鿿＀-￯·\s]*[㐀-鿿＀-￯])?)\s+(.*)$/);
+      return "<li>"+(m ? '<span class="cn zh">'+esc(m[1])+'</span> '+esc(m[2]) : esc(x))+"</li>";
+    }).join("");
+  }
+  var html =
+    '<div class="hero">'+
+      '<div class="ph">Photo</div>'+
+      '<div class="hz zh">'+esc(l.name_zh)+'</div>'+
+      '<div class="he">'+esc(l.name_en)+'</div>'+
+      '<div class="hm">'+esc(l.city)+' · '+esc(l.type)+' · opens in '+esc(u.app)+'</div>'+
+    '</div>'+
+    '<div class="navrow">'+
+      '<button class="btn primary" data-act="nav" data-lid="'+esc(l.id)+'">'+IC.nav+' Navigate in '+esc(u.app)+'</button>'+
+      '<a class="btn" href="'+esc(u.search)+'" target="_blank" rel="noopener" aria-label="Search this name in the map app"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></a>'+
+    '</div>'+
+    '<div class="readaloud">'+
+      '<div class="lbl">Show this to someone</div>'+
+      '<div class="big zh">'+esc(l.name_zh)+'</div>'+
+      '<div class="en2">'+esc(l.name_en)+(l.city?" · "+esc(l.city):"")+'</div>'+
+    '</div>'+
+    (l.history_blurb ? '<div class="section-title">Background</div>'+
+      paras(l.history_blurb).map(function(p){ return '<p class="blurb">'+esc(p)+'</p>'; }).join("") : "")+
+    (recs.length ? '<div class="section-title">What to do here</div><ul class="lst">'+listItems(recs)+'</ul>' : "")+
+    (dishes.length ? '<div class="section-title">What to order</div><ul class="lst">'+listItems(dishes)+'</ul>' : "")+
+    (souv.length ? '<div class="section-title">Worth buying</div><ul class="lst">'+listItems(souv)+'</ul>' : "")+
+    (l.notes ? '<div class="section-title">Practical</div><p class="blurb">'+esc(l.notes)+'</p>' : "")+
+    '<div class="section-title">On the trip</div>'+
+    (function(){
+      var appear=store.data.schedule.filter(function(s){ return s.location_id===l.id; })
+        .sort(function(a,b){ return a.date<b.date?-1:1; });
+      if(!appear.length) return '<p class="blurb muted small">Not on the schedule yet.</p>'+
+        '<button class="btn block" data-act="add-to-day" data-lid="'+esc(l.id)+'" style="margin-top:8px">Add to a day</button>';
+      return '<ul class="lst">'+appear.map(function(s){
+        return "<li>Day "+dayNumber(s.date)+" · "+esc(fmtDate(s.date,true))+(s.planned_time?" at "+esc(s.planned_time):"")+"</li>";
+      }).join("")+'</ul>'+
+      '<button class="btn block" data-act="add-to-day" data-lid="'+esc(l.id)+'" style="margin-top:10px">Add to another day</button>';
+    })()+
+    '<div class="formactions">'+
+      '<button class="btn" data-act="edit-location" data-lid="'+esc(l.id)+'">Edit this place</button>'+
+    '</div>';
+  openSheet(l.name_en, html, '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5h3.2L18.9 8.3a2.2 2.2 0 0 0-3.2-3.2L4.5 16.3z"/><path d="m14.6 6.2 3.2 3.2"/></svg>', function(){ locationForm(l.id); });
+}
+
+function locationForm(id){
+  var l = id ? store.loc(id) : null;
+  var isNew = !l;
+  l = l || { id:"", name_en:"", name_zh:"", city:"Hong Kong", type:"attraction",
+             lat:"", lng:"", nav_app:"google", history_blurb:"", recommendations:"",
+             dishes_to_order:"", souvenirs:"", notes:"" };
+  var cities=["Hong Kong","Macau","Guangzhou","Foshan","Chongqing","Chengdu"];
+  store.data.locations.forEach(function(x){ if(cities.indexOf(x.city)<0) cities.push(x.city); });
+
+  function sel(name,val,opts){
+    return '<select id="f_'+name+'">'+opts.map(function(o){
+      return '<option value="'+esc(o)+'"'+(String(val)===String(o)?" selected":"")+'>'+esc(o)+'</option>';
+    }).join("")+'</select>';
+  }
+  var html =
+    '<div class="field"><label>Name (English)</label><input id="f_name_en" value="'+esc(l.name_en)+'" placeholder="English name"></div>'+
+    '<div class="field"><label>名称 (Chinese) — required</label>'+
+      '<input id="f_name_zh" class="zh" value="'+esc(l.name_zh)+'" placeholder="中文名" style="font-size:19px">'+
+      '<div class="hint">Every place needs a Chinese name — it is what search, the map apps and showing your phone to a local all run on.</div></div>'+
+    '<div class="grid2">'+
+      '<div class="field"><label>City</label>'+sel("city",l.city,cities)+'</div>'+
+      '<div class="field"><label>Type</label>'+sel("type",l.type,["attraction","restaurant","shopping","hotel"])+'</div>'+
+    '</div>'+
+    '<div class="grid2">'+
+      '<div class="field"><label>Latitude</label><input id="f_lat" inputmode="decimal" value="'+esc(l.lat)+'" placeholder="30.6690"></div>'+
+      '<div class="field"><label>Longitude</label><input id="f_lng" inputmode="decimal" value="'+esc(l.lng)+'" placeholder="104.0570"></div>'+
+    '</div>'+
+    '<div class="field"><label>Map app</label>'+sel("nav_app",l.nav_app,["amap","google"])+
+      '<div class="hint">Amap 高德 for the mainland, Google Maps for Hong Kong and Macau. Set automatically when you pick a city, unless you change it.</div></div>'+
+    '<div class="field"><label>Background / history</label><textarea id="f_history_blurb" placeholder="A couple of paragraphs you would happily read out loud.">'+esc(l.history_blurb)+'</textarea></div>'+
+    '<div class="field"><label>What to do here</label><textarea id="f_recommendations" placeholder="One per line.">'+esc(l.recommendations)+'</textarea>'+
+      '<div class="hint">One item per line.</div></div>'+
+    '<div class="field"><label>Dishes to order</label><textarea id="f_dishes_to_order" placeholder="麻婆豆腐 Mapo tofu — why it matters">'+esc(l.dishes_to_order)+'</textarea>'+
+      '<div class="hint">One per line, Chinese name first then English.</div></div>'+
+    '<div class="field"><label>Worth buying</label><textarea id="f_souvenirs" placeholder="郫县豆瓣酱 Pixian chilli bean paste">'+esc(l.souvenirs)+'</textarea></div>'+
+    '<div class="field"><label>Practical notes</label><textarea id="f_notes" style="min-height:70px">'+esc(l.notes)+'</textarea></div>'+
+    '<div class="formactions">'+
+      '<button class="btn primary" data-act="save-location" data-lid="'+esc(l.id)+'">Save</button>'+
+      (isNew?"":'<button class="btn danger" data-act="delete-location" data-lid="'+esc(l.id)+'">Delete</button>')+
+    '</div>';
+  openSheet(isNew?"New place":"Edit place", html);
+
+  var citySel=$("#f_city"), navSel=$("#f_nav_app");
+  citySel.addEventListener("change", function(){
+    navSel.value = (this.value==="Hong Kong"||this.value==="Macau") ? "google" : "amap";
+  });
+}
+
+function collectLocationForm(existingId){
+  var g=function(k){ var e=$("#f_"+k); return e?e.value.trim():""; };
+  var o={
+    id: existingId || "",
+    name_en:g("name_en"), name_zh:g("name_zh"), city:g("city"), type:g("type"),
+    lat:g("lat"), lng:g("lng"), nav_app:g("nav_app"),
+    history_blurb:$("#f_history_blurb").value.trim(),
+    recommendations:$("#f_recommendations").value.trim(),
+    dishes_to_order:$("#f_dishes_to_order").value.trim(),
+    souvenirs:$("#f_souvenirs").value.trim(),
+    notes:$("#f_notes").value.trim()
+  };
+  if(!o.name_en && !o.name_zh) return { error:"Give the place a name." };
+  if(!o.name_zh) return { error:"The Chinese name is required — you will need it on the ground." };
+  if(!o.name_en) o.name_en=o.name_zh;
+  if(!o.id) o.id=uid("loc");
+  return { value:o };
+}
+
+function quickAddForm(date){
+  var html =
+    '<p class="blurb muted small" style="margin-bottom:14px">Just enough to navigate to it. Fill in the rest later.</p>'+
+    '<div class="field"><label>Name (English)</label><input id="f_name_en" placeholder="That noodle place"></div>'+
+    '<div class="field"><label>名称 (Chinese) — required</label><input id="f_name_zh" class="zh" style="font-size:19px" placeholder="小面馆"></div>'+
+    '<div class="grid2">'+
+      '<div class="field"><label>City</label><select id="f_city">'+
+        ["Hong Kong","Macau","Guangzhou","Foshan","Chongqing","Chengdu"].map(function(c){
+          return '<option'+(c===(guessCity(date)||"")?" selected":"")+'>'+c+'</option>'; }).join("")+
+      '</select></div>'+
+      '<div class="field"><label>Type</label><select id="f_type">'+
+        ["attraction","restaurant","shopping","hotel"].map(function(t){return "<option>"+t+"</option>";}).join("")+
+      '</select></div>'+
+    '</div>'+
+    '<div class="grid2">'+
+      '<div class="field"><label>Latitude</label><input id="f_lat" inputmode="decimal" placeholder="optional"></div>'+
+      '<div class="field"><label>Longitude</label><input id="f_lng" inputmode="decimal" placeholder="optional"></div>'+
+    '</div>'+
+    '<div class="field"><label>Map app</label><select id="f_nav_app">'+
+      '<option value="amap">amap</option><option value="google">google</option></select>'+
+      '<div class="hint">Without coordinates the map app will search the Chinese name instead, which usually works.</div></div>'+
+    '<div class="field"><label>Time on this day</label><input id="f_time" placeholder="e.g. 14:30"></div>'+
+    '<div class="formactions"><button class="btn primary block" data-act="save-quick" data-date="'+esc(date)+'">Add to Day '+dayNumber(date)+'</button></div>';
+  openSheet("New place · Day "+dayNumber(date), html);
+  var c=$("#f_city"), n=$("#f_nav_app");
+  function syncNav(){ n.value=(c.value==="Hong Kong"||c.value==="Macau")?"google":"amap"; }
+  syncNav(); c.addEventListener("change", syncNav);
+}
+
+function guessCity(date){
+  var stops=store.dayStops(date);
+  for(var i=0;i<stops.length;i++){ var l=store.loc(stops[i].location_id); if(l) return l.city; }
+  var lbl=DAY_LABELS[date]||"";
+  var known=["Hong Kong","Macau","Guangzhou","Foshan","Chongqing","Chengdu"];
+  for(var j=0;j<known.length;j++) if(lbl.indexOf(known[j])>=0) return known[j];
+  return "";
+}
+
+function pickLocationForDay(date){
+  var q="";
+  function body(){
+    var list=store.data.locations.filter(function(l){ return matches(l,q); });
+    var already={}; store.dayStops(date).forEach(function(s){ already[s.location_id]=1; });
+    return '<div class="searchwrap'+(q?" has":"")+'" style="margin-top:12px">'+
+        '<span class="mag"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></span>'+
+        '<input id="pq" type="search" placeholder="Search — English or 中文" value="'+esc(q)+'" autocomplete="off">'+
+      '</div>'+
+      '<div class="loclist">'+list.map(function(l){
+        return '<button class="locrow" data-act="pick" data-lid="'+esc(l.id)+'" data-date="'+esc(date)+'">'+
+          '<div class="thumb">'+typeIcon(l.type)+'</div>'+
+          '<div class="lb"><div class="en">'+hilite(l.name_en,q)+'</div>'+
+            '<div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
+            '<div class="mt">'+esc(l.city)+' · '+esc(l.type)+(already[l.id]?" · already on this day":"")+'</div></div>'+
+          '<span class="rowend">'+IC.plus+'</span></button>';
+      }).join("")+'</div>'+
+      (list.length?"":'<div class="card empty">No match.</div>');
+  }
+  openSheet("Add to Day "+dayNumber(date), body());
+  function wire(){
+    var i=$("#pq"); if(!i) return;
+    i.addEventListener("input", function(){
+      q=this.value; var pos=this.selectionStart;
+      $("#sheetBody").innerHTML=body(); wire();
+      var ni=$("#pq"); if(ni){ ni.focus(); try{ ni.setSelectionRange(pos,pos); }catch(e){} }
+    });
+  }
+  wire();
+}
+
+function pickDayForLocation(lid){
+  var html='<div class="loclist" style="margin-top:12px">'+DAYS.map(function(d,i){
+    var n=store.dayStops(d).length;
+    return '<button class="locrow" data-act="pick" data-lid="'+esc(lid)+'" data-date="'+d+'">'+
+      '<div class="thumb">'+(i+1)+'</div>'+
+      '<div class="lb"><div class="en">'+esc(fmtDate(d,true))+'</div>'+
+      '<div class="mt">'+esc(DAY_LABELS[d]||"")+' · '+n+' stop'+(n===1?"":"s")+'</div></div>'+
+      '<span class="rowend">'+IC.plus+'</span></button>';
+  }).join("")+'</div>';
+  openSheet("Add to which day?", html);
+}
+
+function settingsForm(){
+  var c=store.cfg;
+  var html=
+    '<p class="blurb small muted" style="margin:12px 0 16px">The trip lives in the Google Sheet — nothing about it is in the '+
+    'public repo. This phone holds a cached copy, so the app keeps working with no signal, which you will need in '+
+    'mainland China where Google is blocked. Every edit is saved to the Sheet and shared across devices.</p>'+
+    '<div class="field"><label>Web App URL</label>'+
+      '<input id="s_url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="https://script.google.com/macros/s/.../exec" value="'+esc(c.url)+'"></div>'+
+    '<div class="field"><label>API key</label>'+
+      '<input id="s_key" autocapitalize="off" autocorrect="off" placeholder="the API_KEY you set in Code.gs" value="'+esc(c.key)+'">'+
+      '<div class="hint">Stored only on this phone, never in the public repo.</div></div>'+
+    '<div class="formactions">'+
+      '<button class="btn primary" data-act="save-cfg">Save &amp; connect</button>'+
+      '<button class="btn" data-act="test-cfg">Test</button>'+
+    '</div>'+
+    '<div class="section-title">Data</div>'+
+    '<div class="loclist">'+
+      '<div class="locrow"><div class="lb"><div class="en">Pending changes</div>'+
+        '<div class="mt">'+store.queue.length+' waiting to be sent to the Sheet</div></div>'+
+        '<button class="btn sm" data-act="flush">Send</button></div>'+
+      '<div class="locrow"><div class="lb"><div class="en">Pull from the Sheet</div>'+
+        '<div class="mt">Replace this phone’s copy with what is in the Sheet</div></div>'+
+        '<button class="btn sm" data-act="sync">Pull</button></div>'+
+      '<div class="locrow"><div class="lb"><div class="en">Reset this phone</div>'+
+        '<div class="mt">Discards the local copy and downloads the trip again</div></div>'+
+        '<button class="btn sm danger" data-act="reset-local">Reset</button></div>'+
+    '</div>'+
+    '<div class="section-title">About</div>'+
+    '<p class="blurb small muted">'+store.data.locations.length+' places, '+store.data.bookings.length+' bookings, '+
+      store.data.schedule.length+' scheduled stops across '+DAYS.length+' days.<br>'+
+      'Trip: 16 Oct – 1 Nov 2026.</p>';
+  openSheet("Settings", html);
+}
+
+/* ==========================================================================
+   Mutations
+   ========================================================================== */
+function nextOrder(date){
+  var s=store.dayStops(date);
+  return s.length ? (+s[s.length-1].order_index||s.length)+1 : 1;
+}
+function addStop(date, lid, time, note){
+  var entry={ id:uid("sc"), date:date, order_index:nextOrder(date), location_id:lid,
+              planned_time:time||"", notes:note||"" };
+  return store.write("saveScheduleEntry", entry, function(){ store.data.schedule.push(entry); })
+    .then(function(){ return entry; });
+}
+function removeStop(sid){
+  return store.write("deleteScheduleEntry", {id:sid}, function(){
+    store.data.schedule = store.data.schedule.filter(function(s){ return s.id!==sid; });
+  });
+}
+function updateStop(sid, patch){
+  var e=null;
+  store.data.schedule.forEach(function(s){ if(s.id===sid) e=s; });
+  if(!e) return Promise.resolve();
+  Object.keys(patch).forEach(function(k){ e[k]=patch[k]; });
+  return store.write("saveScheduleEntry", e, function(){});
+}
+function commitOrder(date, ids){
+  ids.forEach(function(id,i){
+    store.data.schedule.forEach(function(s){ if(s.id===id) s.order_index=i+1; });
+  });
+  return store.write("setDayOrder", { date:date, ids:ids }, function(){});
+}
+function saveLocation(obj){
+  return store.write("saveLocation", obj, function(){
+    var found=false;
+    store.data.locations = store.data.locations.map(function(l){
+      if(l.id===obj.id){ found=true; return obj; } return l;
+    });
+    if(!found) store.data.locations.push(obj);
+  });
+}
+function deleteLocation(id){
+  return store.write("deleteLocation", {id:id}, function(){
+    store.data.locations = store.data.locations.filter(function(l){ return l.id!==id; });
+    store.data.schedule  = store.data.schedule.filter(function(s){ return s.location_id!==id; });
+  });
+}
+
+/* ==========================================================================
+   Events
+   ========================================================================== */
+document.addEventListener("click", function(ev){
+  var t=ev.target.closest("[data-act]");
+  if(!t) return;
+  var act=t.dataset.act;
+  var lid=t.dataset.lid, sid=t.dataset.sid || (t.closest("[data-sid]")||{dataset:{}}).dataset.sid;
+  var date=t.dataset.date;
+
+  switch(act){
+    case "open": ev.preventDefault(); locationDetail(lid); return;
+    case "nav": {
+      ev.preventDefault();
+      var l=store.loc(lid); if(l) openMaps(l);
+      return;
+    }
+    case "day": case "day-open":
+      ui.day=date; save(LS.ui,ui); setView("today"); return;
+    case "sync":
+      store.sync().catch(function(){}); return;
+    case "gate-connect": {
+      var gUrl=$("#g_url").value.trim(), gKey=$("#g_key").value.trim();
+      var err=$("#gateErr");
+      if(!gUrl || !gKey){ err.textContent="Both the URL and the key are needed."; return; }
+      store.cfg={ url:gUrl, key:gKey }; save(LS.cfg, store.cfg);
+      err.textContent=""; $("#gateBtn").disabled=true; $("#gateBtn").textContent="Connecting…";
+      store.sync({quiet:true}).then(function(){
+        if(gateNeeded()){
+          $("#gateBtn").disabled=false; $("#gateBtn").textContent="Try again";
+          err.textContent="Connected, but the Sheet came back empty. Run setup() in the Apps Script editor, or push the content with src/sheet.js.";
+        } else { toast("Trip downloaded"); }
+      }).catch(function(e){
+        $("#gateBtn").disabled=false; $("#gateBtn").textContent="Try again";
+        err.textContent = "Could not reach the Sheet. Check the URL and the key, and that you have a connection.";
+      });
+      return;
+    }
+    case "settings": settingsForm(); return;
+    case "clearq": ui.q=""; save(LS.ui,ui); renderPlaces(); return;
+    case "city": ui.city=t.dataset.v; save(LS.ui,ui); renderPlaces(); return;
+    case "type": ui.type=t.dataset.v; save(LS.ui,ui); renderPlaces(); return;
+    case "bk": t.closest(".bk").classList.toggle("open"); return;
+
+    case "up": case "down": {
+      var list=$("#stopList"); if(!list) return;
+      var card=t.closest(".stop");
+      var sibs=Array.prototype.slice.call(list.children);
+      var i=sibs.indexOf(card), j=act==="up"?i-1:i+1;
+      if(j<0||j>=sibs.length) return;
+      if(act==="up") list.insertBefore(card, sibs[j]); else list.insertBefore(sibs[j], card);
+      var ids=Array.prototype.slice.call(list.children).map(function(c){ return c.dataset.sid; });
+      commitOrder(list.dataset.date, ids).then(render);
+      return;
+    }
+    case "time": {
+      var cur=(store.data.schedule.filter(function(s){return s.id===sid;})[0]||{}).planned_time||"";
+      var v=window.prompt("Planned time (HH:MM, blank to clear)", cur);
+      if(v===null) return;
+      updateStop(sid, { planned_time:v.trim() }).then(render);
+      return;
+    }
+    case "note": {
+      var cur2=(store.data.schedule.filter(function(s){return s.id===sid;})[0]||{}).notes||"";
+      var v2=window.prompt("Note for this stop", cur2);
+      if(v2===null) return;
+      updateStop(sid, { notes:v2.trim() }).then(render);
+      return;
+    }
+    case "remove": case "remove-orphan": {
+      if(!window.confirm("Remove this stop from the day?")) return;
+      removeStop(sid).then(render);
+      return;
+    }
+    case "add-existing": pickLocationForDay(date); return;
+    case "quick-add": quickAddForm(date); return;
+    case "new-location": locationForm(null); return;
+    case "edit-location": locationForm(lid); return;
+    case "add-to-day": pickDayForLocation(lid); return;
+
+    case "pick": {
+      addStop(date, lid, "", "").then(function(){
+        closeSheet(); ui.day=date; save(LS.ui,ui); setView("today");
+        toast("Added to Day "+dayNumber(date));
+      });
+      return;
+    }
+    case "save-quick": {
+      var r=collectLocationForm(null);
+      if(r.error){ toast(r.error); return; }
+      var time=($("#f_time")&&$("#f_time").value.trim())||"";
+      saveLocation(r.value).then(function(){ return addStop(date, r.value.id, time, ""); })
+        .then(function(){ closeSheet(); ui.day=date; save(LS.ui,ui); setView("today"); toast("Added"); });
+      return;
+    }
+    case "save-location": {
+      var r2=collectLocationForm(lid||"");
+      if(r2.error){ toast(r2.error); return; }
+      saveLocation(r2.value).then(function(){
+        closeSheet(); render(); toast("Saved");
+      });
+      return;
+    }
+    case "delete-location": {
+      if(!window.confirm("Delete this place and remove it from every day?")) return;
+      deleteLocation(lid).then(function(){ closeSheet(); render(); toast("Deleted"); });
+      return;
+    }
+
+    case "save-cfg": {
+      store.cfg={ url:$("#s_url").value.trim(), key:$("#s_key").value.trim() };
+      save(LS.cfg, store.cfg);
+      if(!store.configured()){ toast("Saved — still running locally"); closeSheet(); render(); return; }
+      store.sync().then(function(){ closeSheet(); }).catch(function(){});
+      return;
+    }
+    case "test-cfg": {
+      var cfg={ url:$("#s_url").value.trim(), key:$("#s_key").value.trim() };
+      var old=store.cfg; store.cfg=cfg;
+      store.call("ping").then(function(){ toast("Connected"); })
+        .catch(function(e){ store.cfg=old; toast("Could not connect: "+e.message); });
+      return;
+    }
+    case "flush":
+      store.flush().then(function(n){ toast(n?("Sent "+n+" change"+(n===1?"":"s")):"Nothing to send"); updateStatus(); })
+        .catch(function(){ toast("Still offline"); });
+      return;
+    case "reset-local": {
+      if(!window.confirm("Throw away this phone's copy, including anything not yet sent, and pull the trip again from the Sheet?")) return;
+      store.data=JSON.parse(JSON.stringify(EMPTY));
+      store.queue=[]; save(LS.queue, store.queue); store.persist();
+      closeSheet(); render();
+      store.sync().catch(function(){});
+      return;
+    }
+  }
+});
+
+$("#btnSettings").innerHTML = IC.gear;
+$("#sheetBack").innerHTML = IC.back;
+$("#btnSettings").addEventListener("click", settingsForm);
+$("#sheetBack").addEventListener("click", closeSheet);
+document.querySelectorAll("nav.tabs button").forEach(function(b){
+  b.addEventListener("click", function(){ setView(b.dataset.view); });
+});
+window.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSheet(); });
+
+/* ---------- pointer drag to reorder ---------- */
+(function(){
+  var drag=null;
+  document.addEventListener("pointerdown", function(e){
+    var h=e.target.closest('[data-act="drag"]'); if(!h) return;
+    var card=h.closest(".stop"), list=card && card.closest("#stopList");
+    if(!list) return;
+    e.preventDefault();
+    h.setPointerCapture(e.pointerId);
+    var rect=card.getBoundingClientRect();
+    var ghost=card.cloneNode(true);
+    ghost.classList.add("dragghost");
+    ghost.style.width=rect.width+"px"; ghost.style.left=rect.left+"px"; ghost.style.top=rect.top+"px";
+    document.body.appendChild(ghost);
+    card.classList.add("dragging");
+    drag={ card:card, list:list, ghost:ghost, dy:e.clientY-rect.top, h:h, id:e.pointerId };
+    if(navigator.vibrate) try{ navigator.vibrate(8); }catch(x){}
+  }, { passive:false });
+
+  document.addEventListener("pointermove", function(e){
+    if(!drag || e.pointerId!==drag.id) return;
+    e.preventDefault();
+    drag.ghost.style.top=(e.clientY-drag.dy)+"px";
+    var sibs=Array.prototype.slice.call(drag.list.children).filter(function(c){ return c!==drag.card; });
+    var placed=false;
+    for(var i=0;i<sibs.length;i++){
+      var r=sibs[i].getBoundingClientRect();
+      if(e.clientY < r.top + r.height/2){ drag.list.insertBefore(drag.card, sibs[i]); placed=true; break; }
+    }
+    if(!placed) drag.list.appendChild(drag.card);
+  }, { passive:false });
+
+  function end(e){
+    if(!drag || (e && e.pointerId!==drag.id)) return;
+    var d=drag; drag=null;
+    d.ghost.remove();
+    d.card.classList.remove("dragging");
+    var ids=Array.prototype.slice.call(d.list.children).map(function(c){ return c.dataset.sid; });
+    commitOrder(d.list.dataset.date, ids).then(render);
+  }
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
+})();
+
+/* ---------- boot ---------- */
+store.init();
+setView(ui.view||"today");
+if(store.configured()){
+  if(gateNeeded()){ $("#gateBtn").disabled=true; $("#gateBtn").textContent="Connecting…"; }
+  store.sync({quiet:true}).catch(function(){ applyGate(); });
+}
+window.addEventListener("online", function(){ if(store.configured()) store.sync({quiet:true}).catch(function(){}); });
+document.addEventListener("visibilitychange", function(){
+  if(!document.hidden && store.configured() && store.queue.length) store.flush().then(updateStatus).catch(function(){});
+});
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
