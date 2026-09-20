@@ -120,6 +120,24 @@ async function main() {
 
     if (!planned) { console.log('Nothing to do — the Sheet already matches.'); return; }
 
+    // Guard: src/seed.json deliberately has blank confirmation numbers because the
+    // repo is public. Pushing it over a Sheet that holds the real ones would erase
+    // them. Refuse unless explicitly forced.
+    const destructive = plan.filter(p =>
+      p.verb === 'update' && p.fields && p.fields.includes('confirmation_no') &&
+      !String(p.row.confirmation_no || '').trim());
+    if (destructive.length && cmd === 'push' && !process.argv.includes('--allow-blanking')) {
+      console.error('\nREFUSED: this would blank the confirmation number on ' +
+        destructive.length + ' booking(s):');
+      for (const p of destructive) console.error('  ' + p.row.id + '  ' + String(p.row.description || '').slice(0, 55));
+      console.error('\nThose references live only in the Sheet, not in this public repo.');
+      console.error('If you really mean it, re-run with --allow-blanking.\n');
+      process.exit(1);
+    }
+    if (destructive.length && cmd === 'diff') {
+      console.log('\n! ' + destructive.length + ' of these would BLANK a confirmation number.');
+    }
+
     for (const p of plan) {
       const label = p.row.description || [p.row.name_en, p.row.name_zh].filter(Boolean).join(' / ') || p.row.id;
       console.log(`  ${p.verb.padEnd(6)} ${p.tab.padEnd(10)} ${String(label).slice(0, 58)}` +
