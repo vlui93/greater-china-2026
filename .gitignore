@@ -1,2 +1,7 @@
 .DS_Store
 node_modules/
+
+# backend credentials and private booking data — never commit
+.sheet.local.json
+*.local.json
+sheet-backup-*.json
