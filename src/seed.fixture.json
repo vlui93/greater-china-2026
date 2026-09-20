@@ -1,0 +1,74 @@
+{
+ "bookings": [
+  {
+   "id": "fx-bk-01",
+   "type": "flight",
+   "date": "2026-10-26",
+   "time": "08:00",
+   "description": "Fixture outbound flight",
+   "confirmation_no": "",
+   "details": "Invented booking used only by src/test-code.js. It exists so the backend tests have rows to work on without any real trip content living in this public repo."
+  },
+  {
+   "id": "fx-bk-02",
+   "type": "hotel",
+   "date": "2026-10-27",
+   "time": "",
+   "description": "Fixture hotel",
+   "confirmation_no": "",
+   "details": "Second invented booking, so the delete-a-booking test has something left over afterwards."
+  }
+ ],
+ "locations": [
+  {
+   "id": "fx-loc-hk",
+   "name_en": "Fixture Harbour Lookout",
+   "name_zh": "测试海港观景台",
+   "city": "Hong Kong",
+   "type": "sight",
+   "lat": 22.2,
+   "lng": 114.15,
+   "nav_app": "google",
+   "history_blurb": "An invented lookout that exists only in this test fixture. The text is padded out past eighty characters because the test suite checks that every blurb carries real content rather than a stub.",
+   "recommendations": "Go at dusk\nBring a jacket",
+   "dishes_to_order": "",
+   "souvenirs": "",
+   "notes": "Fixture data. Not a real place."
+  },
+  {
+   "id": "fx-loc-mo",
+   "name_en": "Fixture Old Square",
+   "name_zh": "测试旧广场",
+   "city": "Macau",
+   "type": "sight",
+   "lat": 22.19,
+   "lng": 113.54,
+   "nav_app": "google",
+   "history_blurb": "A second invented sight, in Macau so that the nav_app rule for Hong Kong and Macau is exercised by more than one row. Padded past eighty characters for the blurb check.",
+   "recommendations": "Walk the loop\nStart early",
+   "dishes_to_order": "",
+   "souvenirs": "Fixture postcards",
+   "notes": "Fixture data. Not a real place."
+  },
+  {
+   "id": "fx-loc-cd",
+   "name_en": "Fixture Noodle House",
+   "name_zh": "测试面馆",
+   "city": "Chengdu",
+   "type": "restaurant",
+   "lat": 30.65,
+   "lng": 104.07,
+   "nav_app": "amap",
+   "history_blurb": "An invented restaurant on the mainland, so the fixture covers the amap branch of the nav_app rule as well. This blurb is also padded out past the eighty character floor the tests enforce.",
+   "recommendations": "Queue before noon",
+   "dishes_to_order": "Fixture noodles\nFixture dumplings",
+   "souvenirs": "",
+   "notes": "Fixture data. Not a real place."
+  }
+ ],
+ "schedule": [
+  { "id": "fx-sc-001", "date": "2026-10-26", "order_index": 1, "location_id": "fx-loc-hk", "planned_time": "09:00", "notes": "" },
+  { "id": "fx-sc-002", "date": "2026-10-26", "order_index": 2, "location_id": "fx-loc-mo", "planned_time": "13:00", "notes": "" },
+  { "id": "fx-sc-003", "date": "2026-10-27", "order_index": 1, "location_id": "fx-loc-cd", "planned_time": "12:00", "notes": "" }
+ ]
+}

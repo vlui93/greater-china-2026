@@ -6,3 +6,11 @@ node_modules/
 *.local.json
 sheet-backup-*.json
 *.local.gs
+
+# trip content — the itinerary lives in the Google Sheet, not in this public
+# repo. src/seed.fixture.json is the invented stand-in the tests use and IS
+# committed; these are the real thing.
+src/seed.json
+src/seed-bookings.json
+src/seed-loc-*.json
+src/schedule.json

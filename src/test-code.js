@@ -1,6 +1,21 @@
 /* Exercises Code.gs against a mock of the Apps Script runtime, so the backend
    is known to work before anyone spends ten minutes setting it up. */
 const fs = require('fs'), path = require('path'), vm = require('vm');
+const { injectSeed } = require('./seed-inject');
+
+/* The committed Code.gs ships with an empty SEED — this repo is public. The
+ * tests fill it in the same way src/prepare-code.js does, using the real trip
+ * content when it is on this machine and an invented fixture when it is not, so
+ * a fresh clone still exercises every path. */
+const realSeed = path.join(__dirname, 'seed.json');
+const SEED_FILE = fs.existsSync(realSeed) ? realSeed : path.join(__dirname, 'seed.fixture.json');
+const SEED = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8'));
+const NB = SEED.bookings.length, NL = SEED.locations.length, NS = SEED.schedule.length;
+const DAY = SEED.schedule[0].date;
+const DAY_N = SEED.schedule.filter(s => s.date === DAY).length;
+const BK1 = SEED.bookings[0].id;
+console.log('seed: ' + path.basename(SEED_FILE) + '  ' +
+  NB + ' bookings, ' + NL + ' locations, ' + NS + ' schedule rows');
 
 let fails = 0, checks = 0;
 function ok(cond, msg) { checks++; if (!cond) { fails++; console.error("  FAIL: " + msg); } }
@@ -66,7 +81,7 @@ const sandbox = {
   console
 };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8'), sandbox, { filename:'Code.gs' });
+vm.runInContext(injectSeed(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8'), SEED), sandbox, { filename:'Code.gs' });
 
 const post = (body) => JSON.parse(sandbox.doPost({ postData:{ contents: JSON.stringify(body) }, parameter:{} })._t);
 const get  = (p)    => JSON.parse(sandbox.doGet({ parameter: p })._t);
@@ -84,7 +99,7 @@ sandbox.setup();
 ok(SS.getSheetByName("Bookings") && SS.getSheetByName("Locations") && SS.getSheetByName("Schedule"), "three tabs created");
 ok(!SS.getSheetByName("Sheet1"), "empty default tab removed");
 let all = post({key:KEY,action:"all"}).data;
-eq([all.bookings.length, all.locations.length, all.schedule.length], [10,68,71], "seeded row counts");
+eq([all.bookings.length, all.locations.length, all.schedule.length], [NB,NL,NS], "seeded row counts");
 eq(SS.getSheetByName("Locations").getRange(1,1,1,13).getValues()[0], sandbox.TABS.Locations, "Locations headers");
 
 console.log("3. seed integrity through the Sheet");
@@ -100,49 +115,49 @@ ok(all.locations.every(l=>all.schedule.some(s=>s.location_id===l.id)), "every lo
 console.log("4. setup is idempotent");
 sandbox.setup();
 all = post({key:KEY,action:"all"}).data;
-eq([all.bookings.length, all.locations.length, all.schedule.length], [10,68,71], "re-running setup adds nothing");
+eq([all.bookings.length, all.locations.length, all.schedule.length], [NB,NL,NS], "re-running setup adds nothing");
 
 console.log("5. location CRUD");
 let r = post({key:KEY,action:"saveLocation",payload:{name_en:"Test",name_zh:"测试",city:"Chengdu",type:"restaurant",lat:30.1,lng:104.1,nav_app:"amap",history_blurb:"h",recommendations:"a\nb",dishes_to_order:"d",souvenirs:"",notes:""}});
 ok(r.ok && r.data.location.id, "creates with a generated id");
 const newId = r.data.location.id;
-eq(post({key:KEY,action:"all"}).data.locations.length, 69, "location count went up");
+eq(post({key:KEY,action:"all"}).data.locations.length, NL+1, "location count went up");
 r = post({key:KEY,action:"saveLocation",payload:{id:newId,name_en:"Test 2"}});
 let got = post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===newId);
 eq([got.name_en, got.name_zh, got.city], ["Test 2","测试","Chengdu"], "partial update keeps untouched fields");
 eq(got.lat, 30.1, "numeric field survives a partial update");
 
 console.log("6. schedule CRUD + ordering");
-r = post({key:KEY,action:"saveScheduleEntry",payload:{date:"2026-10-26",order_index:99,location_id:newId,planned_time:"09:00",notes:"n"}});
+r = post({key:KEY,action:"saveScheduleEntry",payload:{date:DAY,order_index:99,location_id:newId,planned_time:"09:00",notes:"n"}});
 const sid = r.data.entry.id;
-let day = post({key:KEY,action:"schedule"}).data.schedule.filter(s=>s.date==="2026-10-26");
-eq(day.length, 3, "entry added to the day");
+let day = post({key:KEY,action:"schedule"}).data.schedule.filter(s=>s.date===DAY);
+eq(day.length, DAY_N+1, "entry added to the day");
 const ids = day.sort((a,b)=>a.order_index-b.order_index).map(s=>s.id).reverse();
-r = post({key:KEY,action:"setDayOrder",payload:{date:"2026-10-26",ids:ids}});
-eq(r.data.updated, 3, "setDayOrder touched every row");
-day = post({key:KEY,action:"schedule"}).data.schedule.filter(s=>s.date==="2026-10-26").sort((a,b)=>a.order_index-b.order_index);
+r = post({key:KEY,action:"setDayOrder",payload:{date:DAY,ids:ids}});
+eq(r.data.updated, DAY_N+1, "setDayOrder touched every row");
+day = post({key:KEY,action:"schedule"}).data.schedule.filter(s=>s.date===DAY).sort((a,b)=>a.order_index-b.order_index);
 eq(day.map(s=>s.id), ids, "order actually reversed");
-eq(day.map(s=>s.order_index), [1,2,3], "indices renumbered 1..n");
+eq(day.map(s=>s.order_index), ids.map((_,i)=>i+1), "indices renumbered 1..n");
 
 console.log("7. cascade delete");
 r = post({key:KEY,action:"deleteLocation",payload:{id:newId}});
 eq(r.data.schedule_entries_removed, 1, "its schedule entry went with it");
 all = post({key:KEY,action:"all"}).data;
-eq(all.locations.length, 68, "location gone");
+eq(all.locations.length, NL, "location gone");
 ok(!all.schedule.some(s=>s.id===sid), "schedule entry gone");
 ok(all.schedule.every(s=>all.locations.some(l=>l.id===s.location_id)), "still no orphans");
 
 console.log("8. bookings + GET + errors");
-eq(get({key:KEY,action:"bookings"}).data.bookings.length, 10, "doGet works with query params");
+eq(get({key:KEY,action:"bookings"}).data.bookings.length, NB, "doGet works with query params");
 ok(post({key:KEY,action:"nope"}).error.indexOf("Unknown action")>=0, "unknown action errors cleanly");
 ok(post({key:KEY,action:"deleteLocation",payload:{}}).error.indexOf("No id")>=0, "delete without id errors cleanly");
-eq(post({key:KEY,action:"deleteBooking",payload:{id:"bk-01"}}).data.deleted.removed, true, "booking delete");
-eq(post({key:KEY,action:"all"}).data.bookings.length, 9, "booking count went down");
+eq(post({key:KEY,action:"deleteBooking",payload:{id:BK1}}).data.deleted.removed, true, "booking delete");
+eq(post({key:KEY,action:"all"}).data.bookings.length, NB-1, "booking count went down");
 
 console.log("9. reset and reseed");
 sandbox.resetAndReseed();
 all = post({key:KEY,action:"all"}).data;
-eq([all.bookings.length, all.locations.length, all.schedule.length], [10,68,71], "full reseed restores everything");
+eq([all.bookings.length, all.locations.length, all.schedule.length], [NB,NL,NS], "full reseed restores everything");
 
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));
 process.exit(fails ? 1 : 0);
