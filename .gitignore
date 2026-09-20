@@ -5,3 +5,4 @@ node_modules/
 .sheet.local.json
 *.local.json
 sheet-backup-*.json
+*.local.gs
