@@ -30,6 +30,18 @@ for (const l of locations) {
   if (l.type === 'restaurant' && !l.dishes_to_order) problems.push(`${l.id} restaurant with no dishes`);
   if (typeof l.lat !== 'number' || typeof l.lng !== 'number') problems.push(`${l.id} bad coords`);
 }
+// This repo is public. Real confirmation numbers belong in the Google Sheet,
+// never in seed data — the Sheet is private to the owner's Google account.
+for (const b of bookings) {
+  if (String(b.confirmation_no || '').trim()) {
+    problems.push(`${b.id} has a confirmation_no in seed data — put it in the Sheet, not the repo`);
+  }
+  // case-sensitive on purpose: a real reference is upper-case alnum, prose is not
+  const leak = String(b.details || '')
+    .match(/\b(?:PNR|Booking No\.?|Confirmation No\.?|Ref\.?)\s*:?\s*([A-Z0-9]{6,})\b/);
+  if (leak) problems.push(`${b.id} details look like they contain a booking reference: "${leak[0]}"`);
+}
+
 const dupes = locations.map(l=>l.id).filter((v,i,a)=>a.indexOf(v)!==i);
 if (dupes.length) problems.push('duplicate ids: ' + dupes.join(','));
 
