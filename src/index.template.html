@@ -403,6 +403,11 @@ ul.lst li .cn{font-weight:650}
 .guide ul{margin:0;padding-left:18px}
 .guide li{font-size:14px;line-height:1.55;color:var(--ink-2);margin:0 0 7px}
 .guide li b{color:var(--ink)}
+.linkbox{padding:12px 13px 10px;border:1px dashed color-mix(in srgb,var(--accent) 45%,var(--line));
+  border-radius:var(--radius-sm);background:color-mix(in srgb,var(--accent) 5%,var(--surface));margin-bottom:16px}
+.linkbox textarea{min-height:58px;font-size:14px}
+.linkrow{display:flex;gap:8px;margin-top:8px}
+.linkbox .hint b{color:var(--ink)}
 /* Day briefing */
 .brief{border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));
   background:color-mix(in srgb,var(--accent) 7%,var(--surface));border-radius:var(--radius);padding:11px 14px;margin:0 0 12px}
@@ -1474,7 +1479,7 @@ function locationForm(id){
       return '<option value="'+esc(o)+'"'+(String(val)===String(o)?" selected":"")+'>'+esc(o)+'</option>';
     }).join("")+'</select>';
   }
-  var html =
+  var html = (isNew ? linkBoxHTML() : "")+
     '<div class="field"><label>Name (English)</label><input id="f_name_en" value="'+esc(l.name_en)+'" placeholder="English name"></div>'+
     '<div class="field"><label>名称 (Chinese) — required</label>'+
       '<input id="f_name_zh" class="zh" value="'+esc(l.name_zh)+'" placeholder="中文名" style="font-size:19px">'+
@@ -1505,6 +1510,7 @@ function locationForm(id){
       (isNew?"":'<button class="btn danger" data-act="delete-location" data-lid="'+esc(l.id)+'">Delete</button>')+
     '</div>';
   openSheet(isNew?"New place":"Edit place", html);
+  bindLinkBox();
 
   var citySel=$("#f_city"), navSel=$("#f_nav_app");
   citySel.addEventListener("change", function(){
@@ -1518,14 +1524,11 @@ function collectLocationForm(existingId){
     id: existingId || "",
     name_en:g("name_en"), name_zh:g("name_zh"), city:g("city"), type:g("type"),
     lat:g("lat"), lng:g("lng"), nav_app:g("nav_app"),
-    history_blurb:$("#f_history_blurb").value.trim(),
-    recommendations:$("#f_recommendations").value.trim(),
-    dishes_to_order:$("#f_dishes_to_order").value.trim(),
-    souvenirs:$("#f_souvenirs").value.trim(),
-    notes:$("#f_notes").value.trim(),
-    getting_there:$("#f_getting_there").value.trim(),
-    arrive_by:$("#f_arrive_by").value.trim(),
-    tickets:$("#f_tickets").value.trim()
+    // g() is null-safe on purpose: the day view's quick-add form has only a
+    // few of these fields, and reading .value off a missing one used to throw.
+    history_blurb:g("history_blurb"), recommendations:g("recommendations"),
+    dishes_to_order:g("dishes_to_order"), souvenirs:g("souvenirs"), notes:g("notes"),
+    getting_there:g("getting_there"), arrive_by:g("arrive_by"), tickets:g("tickets")
   };
   if(!o.name_en && !o.name_zh) return { error:"Give the place a name." };
   if(!o.name_zh) return { error:"The Chinese name is required — you will need it on the ground." };
@@ -1534,9 +1537,267 @@ function collectLocationForm(existingId){
   return { value:o };
 }
 
+/* ==========================================================================
+   Adding a place from a map link
+   Paste a Google Maps or Amap link — or the whole text their Share button
+   copies — and the form fills itself in. Full links are read right here;
+   short ones (maps.app.goo.gl, surl.amap.com) redirect to another site,
+   which a page can't follow, so the backend follows them (resolvePlace).
+   ========================================================================== */
+
+/* Coordinates. The app stores plain GPS (WGS-84). Mainland Chinese maps —
+   Amap, and Google's own street map inside the mainland — use GCJ-02, which
+   is shifted 100–700 m, so a pin taken from either has to be shifted back.
+   Hong Kong and Macau don't use GCJ-02 and must be left alone, which is why
+   this doesn't use the usual one-big-box test for "in China". */
+var GCJ_A=6378245.0, GCJ_EE=0.00669342162296594323;
+function gcjDeltaLat(x,y){ var r=-100+2*x+3*y+0.2*y*y+0.1*x*y+0.2*Math.sqrt(Math.abs(x));
+  r+=(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3;
+  r+=(20*Math.sin(y*Math.PI)+40*Math.sin(y/3*Math.PI))*2/3;
+  r+=(160*Math.sin(y/12*Math.PI)+320*Math.sin(y*Math.PI/30))*2/3; return r; }
+function gcjDeltaLng(x,y){ var r=300+x+2*y+0.1*x*x+0.1*x*y+0.1*Math.sqrt(Math.abs(x));
+  r+=(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3;
+  r+=(20*Math.sin(x*Math.PI)+40*Math.sin(x/3*Math.PI))*2/3;
+  r+=(150*Math.sin(x/12*Math.PI)+300*Math.sin(x/30*Math.PI))*2/3; return r; }
+function wgsToGcj(lat,lng){
+  var dLat=gcjDeltaLat(lng-105,lat-35), dLng=gcjDeltaLng(lng-105,lat-35);
+  var rad=lat/180*Math.PI, m=Math.sin(rad); m=1-GCJ_EE*m*m; var sm=Math.sqrt(m);
+  dLat=(dLat*180)/((GCJ_A*(1-GCJ_EE))/(m*sm)*Math.PI);
+  dLng=(dLng*180)/(GCJ_A/sm*Math.cos(rad)*Math.PI);
+  return [lat+dLat, lng+dLng];
+}
+function gcjToWgs(lat,lng){          // the forward shift has no closed-form inverse; iterate
+  var w=[lat,lng];
+  for(var i=0;i<20;i++){
+    var g=wgsToGcj(w[0],w[1]), dy=g[0]-lat, dx=g[1]-lng;
+    w=[w[0]-dy, w[1]-dx];
+    if(Math.abs(dy)<1e-9 && Math.abs(dx)<1e-9) break;
+  }
+  return w;
+}
+function inPoly(lat,lng,poly){        // ray casting; poly is [[lat,lng],...]
+  var inside=false;
+  for(var i=0,j=poly.length-1;i<poly.length;j=i++){
+    var yi=poly[i][0], xi=poly[i][1], yj=poly[j][0], xj=poly[j][1];
+    if(((yi>lat)!==(yj>lat)) && (lng < (xj-xi)*(lat-yi)/(yj-yi)+xi)) inside=!inside;
+  }
+  return inside;
+}
+/* Rough outlines, drawn along the borders with Shenzhen and Zhuhai rather than
+   as boxes: a box around Hong Kong takes in Shekou, and one around Macau
+   takes in Hengqin, and both of those are mainland. */
+var HK_POLY=[[22.14,113.82],[22.43,113.82],[22.46,113.95],[22.51,114.02],[22.535,114.10],[22.56,114.22],[22.56,114.45],[22.14,114.45]];
+var MO_POLY=[[22.217,113.528],[22.217,113.561],[22.17,113.60],[22.10,113.60],[22.10,113.545],[22.17,113.545],[22.185,113.528]];
+function regionOf(lat,lng){
+  if(inPoly(lat,lng,HK_POLY)) return "Hong Kong";
+  if(inPoly(lat,lng,MO_POLY)) return "Macau";
+  if(lat>=21.9 && lat<=25.3 && lng>=119.3 && lng<=122.1) return "Taiwan";
+  if(lat>=18 && lat<=54 && lng>=73 && lng<=135.1) return "mainland";
+  return "";
+}
+var CITY_CENTRES=[["Guangzhou",23.13,113.26],["Foshan",23.02,113.12],["Chongqing",29.56,106.55],["Chengdu",30.66,104.07]];
+function cityFor(lat,lng){
+  var r=regionOf(lat,lng);
+  if(r==="Hong Kong"||r==="Macau") return r;
+  if(r!=="mainland") return "";
+  var best="", bestKm=250;   // day trips (Leshan, Sanxingdui) count as their base city
+  CITY_CENTRES.forEach(function(c){ var k=roadKm({lat:lat,lng:lng},{lat:c[1],lng:c[2]})/ROAD_FACTOR; if(k<bestKm){ bestKm=k; best=c[0]; } });
+  return best;
+}
+function guessType(name){
+  var n=String(name||"");
+  if(/酒店|宾馆|賓館|旅馆|民宿|hotel|hostel|inn\b|suites/i.test(n)) return "hotel";
+  if(/酒家|餐厅|餐廳|饭店|飯店|火锅|火鍋|面馆|麵|面|茶楼|茶樓|大排档|大排檔|冰室|小吃|烧腊|燒臘|restaurant|cafe|café|noodle|dim sum|bakery|kitchen|bar\b/i.test(n)) return "restaurant";
+  if(/商场|商場|广场|廣場|购物|購物|市场|市場|街市|步行街|mall|market|plaza|shop|store|outlet/i.test(n)) return "shopping";
+  return "attraction";
+}
+var CJK=/[㐀-鿿豈-﫿]/;
+/** "Golden Noodle 金面馆(中山路店)" -> { zh:"金面馆(中山路店)", en:"Golden Noodle" } */
+function splitNames(name){
+  name=String(name||"").replace(/\s+/g," ").trim();
+  if(!CJK.test(name)) return { zh:"", en:name };
+  var first=name.search(CJK), last=-1;
+  for(var i=name.length-1;i>=0;i--){ if(CJK.test(name.charAt(i))){ last=i; break; } }
+  var zh=name.slice(first,last+1);
+  var opens=(zh.match(/[(（]/g)||[]).length, closes=(zh.match(/[)）]/g)||[]).length;
+  var tail=name.slice(last+1);
+  while(opens>closes && /^\s*[)）]/.test(tail)){ var m=tail.match(/^\s*([)）])/); zh+=m[1]; tail=tail.slice(m[0].length); closes++; }
+  var en=(name.slice(0,first)+" "+tail).replace(/[\s\-–—·|,，()（）]+$/,"").replace(/^[\s\-–—·|,，()（）]+/,"").replace(/\s+/g," ").trim();
+  if(!/[A-Za-z]/.test(en)) en="";
+  return { zh:zh.trim(), en:en };
+}
+function isShortMapLink(u){ return /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs|surl\.amap\.com|a\.amap\.com|m\.amap\.com\/share)/i.test(u); }
+function mapSource(u){ return /amap\.com|autonavi/i.test(u) ? "amap" : /goo\.gl|google\./i.test(u) ? "google" : ""; }
+function safeDecode(x){ try{ return decodeURIComponent(String(x).replace(/\+/g," ")); }catch(e){ return String(x); } }
+
+/** Coordinates out of a URL or page text. Returns {lat,lng} or null.
+ *  Google puts the pin in !3d…!4d… (the @… pair is only the map's centre).
+ *  Amap writes longitude first. Any other pair is ordered by size: in this
+ *  part of the world longitude (73–135) is always the larger number. */
+function coordsFrom(str){
+  if(!str) return null;
+  var s=safeDecode(str), m;
+  function ok(lat,lng){ lat=+lat; lng=+lng; return (lat>=18&&lat<=54&&lng>=73&&lng<=136) ? {lat:lat,lng:lng} : null; }
+  function ordered(a,b){ a=+a; b=+b; return a>b ? ok(b,a) : ok(a,b); }
+  if((m=s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/))) return ok(m[1],m[2]);
+  if((m=s.match(/[?&](?:position|lnglat|location|to|from|dest)=(-?\d+\.\d+)[,，](-?\d+\.\d+)/i))) return ordered(m[1],m[2]);
+  if((m=s.match(/[?&](?:q|query|ll|center|destination|daddr|sll)=(-?\d+\.\d+)[,，]\s*(-?\d+\.\d+)/i))) return ordered(m[1],m[2]);
+  if((m=s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/))) return ok(m[1],m[2]);
+  var re=/(-?\d{2,3}\.\d{4,})\s*[,，|]\s*(-?\d{2,3}\.\d{4,})/g;
+  while((m=re.exec(s))){ var c=ordered(m[1],m[2]); if(c) return c; }
+  return null;
+}
+/** A place name out of a URL: Google's /place/NAME/, Amap's name= or the name field of p=. */
+function nameFromUrl(u){
+  var m;
+  if((m=u.match(/\/maps\/place\/([^\/@?#]+)/))) return safeDecode(m[1]);
+  if((m=u.match(/[?&]name=([^&#]+)/))) return safeDecode(m[1]);
+  if((m=u.match(/[?&]p=([^&#]+)/))){
+    var parts=safeDecode(m[1]).split(/[,，]/);
+    for(var i=0;i<parts.length;i++) if(CJK.test(parts[i])) return parts[i].trim();
+  }
+  if((m=u.match(/[?&](?:q|query)=([^&#]+)/))){ var q=safeDecode(m[1]); if(!/^-?\d+\.\d+[,，]/.test(q)) return q; }
+  return "";
+}
+function nameFromTitle(t){
+  t=String(t||"").replace(/\s*[-–—|]\s*(Google\s*Maps?|Google 地圖|Google 地图|高德地图|高德地圖|Amap).*$/i,"").trim();
+  return /^(Google\s*Maps?|高德地图|Amap)$/i.test(t) ? "" : t;
+}
+
+/** Everything that can be read from what was pasted, without the network. */
+function parseMapText(text){
+  text=String(text||"");
+  var urls=(text.match(/https?:\/\/[^\s"'<>，。）)]+/g)||[]);
+  var out={ url:urls[0]||"", source:"", name:"", address:"", lat:null, lng:null };
+  out.source=mapSource(out.url);
+  var lines=text.replace(/https?:\/\/\S+/g,"\n").split(/\n+/).map(function(l){ return l.trim(); }).filter(Boolean);
+  lines.forEach(function(l){
+    var a=l.match(/^(?:地址|Address)\s*[:：]\s*(.+)$/i);
+    if(a){ out.address=a[1]; return; }
+    var amapLine=l.match(/【高德地图】\s*(.*)$/);
+    if(amapLine){ if(amapLine[1]) out.name=out.name||amapLine[1]; out.source=out.source||"amap"; return; }
+    if(/^(我在这里|我在這裡|分享|点击链接|點擊鏈接|复制|打开)/.test(l)) return;
+    var looksAddress=/[省市区區县縣路街道号號巷里弄镇鎮]\s*\d|\d+\s*号|\d+號|Road|Street|Rd\b|St\b|Avenue|Ave\b|Lane|Hong Kong$|Macau$|Macao$/i.test(l) && l.length>8;
+    if(!out.name && !looksAddress) out.name=l;
+    else if(!out.address && looksAddress) out.address=l;
+  });
+  var c=coordsFrom(out.url);
+  if(!c && !out.url){
+    // A paste that is only a coordinate pair can be taken at any precision;
+    // inside other text, coordsFrom wants 4+ decimals so prices and street
+    // numbers aren't mistaken for one.
+    var bare=text.match(/^\s*(-?\d{1,3}\.\d+)\s*[,，\s]\s*(-?\d{1,3}\.\d+)\s*$/);
+    c = bare ? coordsFrom("?q="+bare[1]+","+bare[2]) : coordsFrom(text);
+    if(bare) out.name="";
+  }
+  if(c){ out.lat=c.lat; out.lng=c.lng; }
+  if(out.url && !out.name) out.name=nameFromUrl(out.url);
+  return out;
+}
+/** Merges what the backend found at the end of a short link. */
+function mergeResolved(p, r){
+  var q=JSON.parse(JSON.stringify(p));
+  var fin=(r && r.final_url)||"";
+  q.source=q.source||mapSource(fin);
+  var c=coordsFrom(fin);
+  if(!c && r && r.hints) for(var i=0;i<r.hints.length && !c;i++) c=coordsFrom(r.hints[i]);
+  if(c && q.lat==null){ q.lat=c.lat; q.lng=c.lng; }
+  if(!q.name) q.name=nameFromUrl(fin) || nameFromTitle(r && r.title);
+  return q;
+}
+/** The pasted place in the app's terms: GPS coordinates, city, names, type. */
+function placeFromParsed(p){
+  var out={ names:splitNames(p.name), address:p.address, lat:null, lng:null, city:"", shiftedM:0, source:p.source };
+  if(p.lat!=null){
+    var lat=p.lat, lng=p.lng;
+    if(regionOf(lat,lng)==="mainland" && (p.source==="amap"||p.source==="google")){
+      var w=gcjToWgs(lat,lng);
+      out.shiftedM=Math.round(roadKm({lat:lat,lng:lng},{lat:w[0],lng:w[1]})/ROAD_FACTOR*1000);
+      lat=w[0]; lng=w[1];
+    }
+    out.lat=+lat.toFixed(6); out.lng=+lng.toFixed(6);
+    out.city=cityFor(out.lat,out.lng);
+  }
+  out.type=guessType(p.name);
+  return out;
+}
+function nearDuplicate(pl){
+  var hit=null;
+  store.data.locations.forEach(function(l){
+    if(hit) return;
+    if(pl.names.zh && l.name_zh && l.name_zh===pl.names.zh) hit=l;
+    else if(pl.lat!=null && hasXY(l) && roadKm(l,{lat:pl.lat,lng:pl.lng})/ROAD_FACTOR<0.06) hit=l;
+  });
+  return hit;
+}
+
+function linkBoxHTML(){
+  return '<div class="field linkbox"><label for="f_link">From a map link</label>'+
+    '<textarea id="f_link" rows="2" placeholder="Paste a Google Maps or Amap link — or everything the Share button copies"></textarea>'+
+    '<div class="linkrow"><button class="btn sm" data-act="link-paste">Paste</button>'+
+      '<button class="btn sm primary" data-act="link-fill">Fill in</button></div>'+
+    '<div class="hint" id="f_link_status" role="status">On the mainland, share from Amap — it gives you the Chinese name. '+
+      'Pins are moved from the Chinese map grid to GPS for you.</div></div>';
+}
+function setField(id, v, onlyIfEmpty){
+  var e=$("#"+id); if(!e || v==null || v==="") return false;
+  if(onlyIfEmpty && e.value.trim()) return false;
+  if(e.tagName==="SELECT" && ![].some.call(e.options,function(o){ return o.value===v; })){
+    var o=document.createElement("option"); o.value=v; o.textContent=v; e.appendChild(o);
+  }
+  e.value=v; e.dispatchEvent(new Event("change",{bubbles:true})); return true;
+}
+function linkStatus(html){ var s=$("#f_link_status"); if(s) s.innerHTML=html; }
+function applyPlace(pl){
+  setField("f_name_zh", pl.names.zh, true);
+  setField("f_name_en", pl.names.en, true);
+  if(pl.lat!=null){ setField("f_lat", String(pl.lat)); setField("f_lng", String(pl.lng)); }
+  if(pl.city){ setField("f_city", pl.city); setField("f_nav_app", (pl.city==="Hong Kong"||pl.city==="Macau") ? "google" : "amap"); }
+  setField("f_type", pl.type);
+  var n=$("#f_notes");
+  if(pl.address && n && n.value.indexOf(pl.address)<0) n.value=(n.value?n.value+"\n":"")+"Address: "+pl.address;
+  // Describe what the form now holds, not just what this pass changed: a
+  // short link fills the names first and the pin a second later.
+  var zh=$("#f_name_zh").value.trim(), en=$("#f_name_en").value.trim(), hasPin=!!$("#f_lat").value.trim();
+  var msg=[];
+  if(!zh && !en && !hasPin){ linkStatus("Nothing usable in that yet."); return; }
+  msg.push("<b>"+esc(zh||en)+"</b>"+(zh&&en?" · "+esc(en):"")+($("#f_city").value?" · "+esc($("#f_city").value):"")+
+           (hasPin?" · pin set.":"."));
+  if(n && /Address: /.test(n.value)) msg.push("Address added to notes.");
+  if(pl.shiftedM>0) msg.push("Pin moved "+pl.shiftedM+" m from the Chinese map grid to GPS.");
+  if(!$("#f_name_zh").value.trim()) msg.push("<b>Add the Chinese name</b> — "+(pl.source==="google"?"Google only gave the English one.":"it's required."));
+  var dup=nearDuplicate(pl);
+  if(dup) msg.push("<b>Already on your list:</b> "+esc(dup.name_en)+" "+esc(dup.name_zh)+" — to use it, add it from “+ Add a stop” instead.");
+  linkStatus(msg.join(" "));
+}
+function fillFromLink(){
+  var box=$("#f_link"); if(!box) return;
+  var p=parseMapText(box.value);
+  if(!p.url && !p.name && p.lat==null){ linkStatus("Paste a Google Maps or Amap link, or the text their Share button copies."); return; }
+  applyPlace(placeFromParsed(p));
+  if(p.lat!=null || !p.url || !isShortMapLink(p.url)) return;
+  if(!store.configured()){ linkStatus($("#f_link_status").innerHTML+" Short links need the Sheet connected to look up the pin."); return; }
+  var before=$("#f_link_status").innerHTML;
+  linkStatus(before+" <i>Looking up the pin…</i>");
+  store.call("resolvePlace", { url:p.url }).then(function(r){
+    var pl=placeFromParsed(mergeResolved(p, r));
+    applyPlace(pl);
+    if(pl.lat==null) linkStatus($("#f_link_status").innerHTML+" The link didn't include a pin — the map app will search the Chinese name instead, which usually works.");
+  }).catch(function(err){
+    linkStatus(before+" "+(isUnknownAction(err)
+      ? "Short links need the backend update (README §9). Until then paste a full link, or the Chinese name alone is enough to navigate."
+      : "Couldn't look the link up just now — no signal to Google? The Chinese name alone is enough to navigate."));
+  });
+}
+function bindLinkBox(){
+  var box=$("#f_link"); if(!box) return;
+  box.addEventListener("paste", function(){ setTimeout(fillFromLink, 0); });
+}
+
 function quickAddForm(date){
   var html =
     '<p class="blurb muted small" style="margin-bottom:14px">Just enough to navigate to it. Fill in the rest later.</p>'+
+    linkBoxHTML()+
     '<div class="field"><label>Name (English)</label><input id="f_name_en" placeholder="That noodle place"></div>'+
     '<div class="field"><label>名称 (Chinese) — required</label><input id="f_name_zh" class="zh" style="font-size:19px" placeholder="小面馆"></div>'+
     '<div class="grid2">'+
@@ -1556,8 +1817,10 @@ function quickAddForm(date){
       '<option value="amap">amap</option><option value="google">google</option></select>'+
       '<div class="hint">Without coordinates the map app will search the Chinese name instead, which usually works.</div></div>'+
     '<div class="field"><label>Time on this day</label><input id="f_time" placeholder="e.g. 14:30"></div>'+
+    '<div class="field"><label>Notes</label><textarea id="f_notes" style="min-height:60px" placeholder="Optional"></textarea></div>'+
     '<div class="formactions"><button class="btn primary block" data-act="save-quick" data-date="'+esc(date)+'">Add to Day '+dayNumber(date)+'</button></div>';
   openSheet("New place · Day "+dayNumber(date), html);
+  bindLinkBox();
   var c=$("#f_city"), n=$("#f_nav_app");
   function syncNav(){ n.value=(c.value==="Hong Kong"||c.value==="Macau")?"google":"amap"; }
   syncNav(); c.addEventListener("change", syncNav);
@@ -1779,6 +2042,15 @@ document.addEventListener("click", function(ev){
 
   switch(act){
     case "prep-tab": ui.prepTab=t.dataset.v; save(LS.ui,ui); renderPrep(); return;
+    case "link-fill": fillFromLink(); return;
+    case "link-paste": {
+      var lb=$("#f_link");
+      if(navigator.clipboard && navigator.clipboard.readText){
+        navigator.clipboard.readText().then(function(txt){ lb.value=txt; fillFromLink(); })
+          .catch(function(){ lb.focus(); linkStatus("Long-press the box and choose Paste."); });
+      } else { lb.focus(); linkStatus("Long-press the box and choose Paste."); }
+      return;
+    }
     case "ck-toggle": {
       var cid=t.dataset.id;
       if(t.dataset.scope==="mine"){

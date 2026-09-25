@@ -2,9 +2,9 @@
    mainland China, and github.io can be slow or unreachable there too. Once the
    app has been opened on wifi it keeps working with no connection at all. */
 /* Bumped when the shell changes (v2: no trip content baked in; v3: transport
-   legs and ticket notes; v4: Prep tab). Bumping clears the old copy off phones.
+   legs and ticket notes; v4: Prep tab; v5: add a place from a map link).
    */
-var CACHE = "gct-v4";
+var CACHE = "gct-v5";
 var ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./icons/icon-32.png", "./icons/icon-180.png",

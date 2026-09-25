@@ -71,6 +71,12 @@ function handle_(e, req) {
       return json_({ ok: false, error: 'Bad or missing API key.' });
     }
 
+    // Resolving a map link is a slow outbound fetch that touches no rows, so it
+    // runs before the lock is taken rather than holding up everyone's edits.
+    if (String(req.action) === 'resolvePlace') {
+      return json_({ ok: true, action: 'resolvePlace', data: resolvePlace_(req.payload) });
+    }
+
     var lock = LockService.getScriptLock();
     lock.waitLock(20000);
     try {
@@ -112,6 +118,49 @@ function route_(action, req) {
     case 'setupTabs':           return ensureTabs_();
     default: throw new Error('Unknown action: ' + action);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Map links. The phone can't follow a short link itself: the redirect goes to
+// another site, and a browser won't let a page read where it ends up. This
+// follows it server side and hands back the final URL, the page title, and
+// any coordinate-looking text on the page; the phone does the parsing.
+// Only Google Maps and Amap hosts are followed, so this can't be used to fetch
+// arbitrary pages.
+// ---------------------------------------------------------------------------
+var PLACE_HOSTS = /(^|\.)(goo\.gl|google\.[a-z]{2,3}(\.[a-z]{2})?|amap\.com|autonavi\.com)$/i;
+
+function resolvePlace_(payload) {
+  if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch (x) {} }
+  var url = String(payload && payload.url || '').trim();
+  if (!/^https?:\/\//i.test(url)) throw new Error('That is not a link.');
+  var chain = [url], title = '', hints = [];
+  for (var hop = 0; hop < 6; hop++) {
+    var host = url.replace(/^https?:\/\/([^\/?#:]+).*$/i, '$1');
+    if (!PLACE_HOSTS.test(host)) throw new Error('Only Google Maps and Amap links can be looked up.');
+    var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
+    var code = res.getResponseCode(), h = res.getHeaders() || {};
+    var loc = h.Location || h.location;
+    if (code >= 300 && code < 400 && loc) { url = absoluteUrl_(loc, url); chain.push(url); continue; }
+    var body = code === 200 ? String(res.getContentText() || '') : '';
+    var t = body.match(/<title[^>]*>([^<]*)<\/title>/i);
+    if (t) title = t[1].replace(/\s+/g, ' ').trim();
+    // some share pages hop on with a meta refresh or a script instead of a 30x
+    var next = body.match(/http-equiv=["']?refresh["']?[^>]*url=([^"'>\s]+)/i) ||
+               body.match(/location\.(?:href\s*=|replace\()\s*['"](https?:[^'"]+)['"]/i);
+    if (next && next[1] !== url) { url = absoluteUrl_(next[1], url); chain.push(url); continue; }
+    hints = (body.match(/[^\s"'<>]{0,30}\d{2,3}\.\d{4,}\s*[,，|]\s*\d{2,3}\.\d{4,}/g) || []).slice(0, 12);
+    break;
+  }
+  return { final_url: url, chain: chain, title: title, hints: hints };
+}
+
+function absoluteUrl_(loc, base) {
+  loc = String(loc);
+  if (/^https?:\/\//i.test(loc)) return loc;
+  if (loc.indexOf('//') === 0) return 'https:' + loc;
+  var origin = base.replace(/^(https?:\/\/[^\/?#]+).*$/i, '$1');
+  return loc.charAt(0) === '/' ? origin + loc : origin + '/' + loc;
 }
 
 function json_(obj) {

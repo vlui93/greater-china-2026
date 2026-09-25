@@ -129,7 +129,9 @@ If you ever need to re-enable it: **Settings → Pages → Source: Deploy from a
 
 **Reordering.** Each card has a tool strip: drag the `⠿` handle, or use ▲ ▼. **TIME** sets the planned time, **NOTE** sets the one-line summary on the card, **REMOVE** takes it off the day. Every change writes to the Sheet immediately.
 
-**Adding.** *+ Add a stop* picks from the 68 existing places. *+ New place* creates one on the fly — Chinese name and city are enough, you can fill in the rest later. Coordinates are optional; without them the map app searches the Chinese name, which usually finds it.
+**Adding.** *+ Add a stop* picks from the places you already have. *+ New place* creates one — and the quickest way is to paste a map link into the box at the top. In Google Maps or Amap, tap **Share → Copy**, then tap **Paste** in the app. It fills in the name, city, map app, a best guess at the type, the address into notes, and the pin. Pins from the mainland come on the Chinese map grid (GCJ-02) and are moved back to GPS for you — usually 300–700 m. Hong Kong and Macau pins are left as they are. On the mainland, share from Amap rather than Google: Amap gives you the Chinese name, and Google usually only the English one. If the place is already on your list, it says so.
+
+Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the backend, since a page can't follow a redirect to another site; that needs the backend update in §9. Full links, and the Chinese name and address in Amap's share text, work without it — and a place with only a Chinese name still navigates, because the map app searches for it.
 
 **Search.** Works on both names, and on partial Chinese — two or three characters of a name is enough to find it, and the romanised English spelling finds it too. No need to type the whole thing either way.
 
@@ -263,7 +265,7 @@ The content is trip data, so like everything else it is not in this repo. It com
 
 1. Build and paste the new backend, **reusing your existing API key** so the phones keep working:
    `node src/prepare-code.js <your current key>` → `./src/copy-code.sh` → paste into Apps Script.
-2. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment* — that gives you a new URL and every phone would need reconnecting. The Locations tab gains its three new columns on its own the first time the script runs.
+2. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment* — that gives you a new URL and every phone would need reconnecting. The Locations tab gains its three new columns on its own the first time the script runs. The same update adds the Checklist tab (§10) and lets the app look up short map links (§4).
 3. `node src/build-notes.js`, then `node src/sheet.js diff trip-notes.local.json`, then `push`.
 
 Push the notes file, not `src/seed.json`. `push` overwrites every field that differs from the Sheet, and the seed still holds the plan as originally written — pushing it would undo every time, note and reorder you have made in the app since.

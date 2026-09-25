@@ -69,7 +69,22 @@ MockSS.prototype = {
 const SS = new MockSS();
 SS.insertSheet("Sheet1"); // the default tab a new Sheet arrives with
 
+/* A fake network for resolvePlace: url -> [status, headers, body] */
+const NET = {
+  "https://maps.app.goo.gl/abc": [302, {Location:"https://www.google.com/maps/place/Test+Lookout/@22.27,114.14,17z/data=!3d22.2712!4d114.1500"}, ""],
+  "https://www.google.com/maps/place/Test+Lookout/@22.27,114.14,17z/data=!3d22.2712!4d114.1500": [200, {}, "<title>Test Lookout - Google Maps</title>"],
+  "https://surl.amap.com/xyz": [302, {location:"/share?id=1"}, ""],
+  "https://surl.amap.com/share?id=1": [200, {}, "<title>测试祠-高德地图</title><script>var p='B0014,23.1290,113.2450,测试祠';</script>"],
+  "https://surl.amap.com/loop": [302, {Location:"https://surl.amap.com/loop"}, ""],
+  "https://maps.app.goo.gl/evil": [302, {Location:"https://evil.example.com/"}, ""]
+};
+const fetched = [];
 const sandbox = {
+  UrlFetchApp: { fetch(url, opts){
+    fetched.push({url, opts});
+    const r = NET[url] || [404, {}, ""];
+    return { getResponseCode:()=>r[0], getHeaders:()=>r[1], getContentText:()=>r[2] };
+  }},
   SpreadsheetApp: { getActive: () => SS },
   ContentService: {
     MimeType: { JSON: "application/json" },
@@ -198,6 +213,25 @@ console.log("11. shared checklist");
   eq(post({key:KEY,action:"checklist"}).data.checklist.length, 2, "resetAndReseed leaves the checklist alone");
   eq(post({key:KEY,action:"deleteChecklistItem",payload:{id:cid}}).data.deleted.removed, true, "delete");
   eq(post({key:KEY,action:"checklist"}).data.checklist.length, 1, "one left");
+}
+
+console.log("12. resolving map links");
+{
+  let r = post({key:KEY,action:"resolvePlace",payload:{url:"https://maps.app.goo.gl/abc"}});
+  ok(r.ok && /!3d22\.2712!4d114\.1500/.test(r.data.final_url), "Google short link -> full URL");
+  eq(r.data.title, "Test Lookout - Google Maps", "page title comes back");
+  ok(fetched.every(f=>f.opts.followRedirects===false), "redirects are followed by hand, one hop at a time");
+  r = post({key:KEY,action:"resolvePlace",payload:{url:"https://surl.amap.com/xyz"}});
+  eq(r.data.final_url, "https://surl.amap.com/share?id=1", "relative Location resolved against the host");
+  ok(r.data.hints.some(h=>/23\.1290,113\.2450/.test(h)), "coordinates in the page body come back as hints");
+  eq(r.data.title, "测试祠-高德地图", "Chinese title intact");
+  r = post({key:KEY,action:"resolvePlace",payload:{url:"https://surl.amap.com/loop"}});
+  ok(r.ok && r.data.chain.length === 7, "a redirect loop stops after 6 hops");
+  r = post({key:KEY,action:"resolvePlace",payload:{url:"https://maps.app.goo.gl/evil"}});
+  ok(!r.ok && /Only Google Maps and Amap/.test(r.error), "refuses to follow a redirect off Google/Amap");
+  r = post({key:KEY,action:"resolvePlace",payload:{url:"https://example.com/x"}});
+  ok(!r.ok, "refuses a non-map host outright");
+  ok(!post({action:"resolvePlace",payload:{url:"https://maps.app.goo.gl/abc"}}).ok, "still needs the API key");
 }
 
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));
