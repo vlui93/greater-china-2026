@@ -138,7 +138,10 @@ function resolvePlace_(payload) {
   for (var hop = 0; hop < 6; hop++) {
     var host = url.replace(/^https?:\/\/([^\/?#:]+).*$/i, '$1');
     if (!PLACE_HOSTS.test(host)) throw new Error('Only Google Maps and Amap links can be looked up.');
-    var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
+    // Ask for Chinese: an app set to English shares an English name, and the
+    // Chinese one — which the app needs — is what the landing page can supply.
+    var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true,
+                                       headers: { 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' } });
     var code = res.getResponseCode(), h = res.getHeaders() || {};
     var loc = h.Location || h.location;
     if (code >= 300 && code < 400 && loc) { url = absoluteUrl_(loc, url); chain.push(url); continue; }
@@ -355,6 +358,13 @@ function setup() {
  * Use only if you want to throw away in-app edits and start again.
  */
 function resetAndReseed() {
+  // The public Code.gs — the one to paste when upgrading an existing Sheet —
+  // carries no seed. Resetting with it would empty every tab and put nothing
+  // back, so refuse.
+  if (!SEED.locations.length) {
+    throw new Error('This copy of the script has no trip data in it, so resetting would leave every tab ' +
+                    'empty. Nothing was changed. To reset, use the copy prepare-code.js builds.');
+  }
   ensureTabs_();
   // The trip plan only. The checklist is not part of the seed, so wiping it
   // here would lose every tick with nothing to put back.

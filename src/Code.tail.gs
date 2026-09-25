@@ -20,6 +20,13 @@ function setup() {
  * Use only if you want to throw away in-app edits and start again.
  */
 function resetAndReseed() {
+  // The public Code.gs — the one to paste when upgrading an existing Sheet —
+  // carries no seed. Resetting with it would empty every tab and put nothing
+  // back, so refuse.
+  if (!SEED.locations.length) {
+    throw new Error('This copy of the script has no trip data in it, so resetting would leave every tab ' +
+                    'empty. Nothing was changed. To reset, use the copy prepare-code.js builds.');
+  }
   ensureTabs_();
   // The trip plan only. The checklist is not part of the seed, so wiping it
   // here would lose every tick with nothing to put back.

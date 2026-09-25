@@ -215,6 +215,17 @@ console.log("11. shared checklist");
   eq(post({key:KEY,action:"checklist"}).data.checklist.length, 1, "one left");
 }
 
+console.log("12a. the public copy (no seed) refuses to reset");
+{
+  const bare = {}; Object.assign(bare, sandbox);
+  vm.createContext(bare);
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8'), bare);
+  let threw = "";
+  try { bare.resetAndReseed(); } catch (e) { threw = String(e.message); }
+  ok(/no trip data/.test(threw), "resetAndReseed() throws instead of emptying the tabs");
+  eq(post({key:KEY,action:"all"}).data.locations.length, NL, "and the Sheet is untouched");
+}
+
 console.log("12. resolving map links");
 {
   let r = post({key:KEY,action:"resolvePlace",payload:{url:"https://maps.app.goo.gl/abc"}});
