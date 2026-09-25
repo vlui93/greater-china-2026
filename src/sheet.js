@@ -118,6 +118,10 @@ async function main() {
         continue;
       }
       for (const row of incoming[tab] || []) {
+        // A row that names its place instead of giving an id is for a phone to
+        // match by name. Sent from here it would be added as a new, duplicate
+        // place, so skip it.
+        if (!row.id) { console.log(`skipping a ${tab} row with no id (phone import only): ${row.name_zh || row.name_en || row.text || '?'}`); continue; }
         const existing = row.id && live[tab].find(r => r.id === row.id);
         const changed = existing
           ? Object.keys(row).filter(k => String(row[k] ?? '') !== String(existing[k] ?? ''))

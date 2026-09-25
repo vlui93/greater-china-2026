@@ -127,6 +127,8 @@ If you ever need to re-enable it: **Settings → Pages → Source: Deploy from a
 
 **Today / All Days.** Today opens on whichever day matches the real date, or Day 1 if you are outside the trip window. Each stop is a card: tap the body for the full guide entry, tap the blue or red arrow to navigate.
 
+**Without the Sheet.** A phone that isn't connected works fully: everything is saved on it, and every add, edit and reorder is queued. The badge says how many — *Local only · 3 to upload* — and they're sent, in order, the first time the phone connects. Before this, a place added on an unconnected phone wasn't queued, and the first sync replaced the phone's list with the Sheet's, so it vanished. Such places are now found by their phone-made ids and queued once when the app opens.
+
 **Reordering.** Each card has a tool strip: drag the `⠿` handle, or use ▲ ▼. **TIME** sets the planned time, **NOTE** sets the one-line summary on the card, **REMOVE** takes it off the day. Every change writes to the Sheet immediately.
 
 **Adding.** *+ Add a stop* picks from the places you already have. *+ New place* creates one — and the quickest way is to paste a map link into the box at the top. In Google Maps or Amap, tap **Share → Copy**, then tap **Paste** in the app. It fills in the name, city, map app, a best guess at the type, the address into notes, and the pin. Pins from the mainland come on the Chinese map grid (GCJ-02) and are moved back to GPS for you — usually 300–700 m. Hong Kong and Macau pins are left as they are. On the mainland, share from Amap rather than Google: Amap gives you the Chinese name, and Google usually only the English one. If the place is already on your list, it says so.
@@ -259,7 +261,7 @@ Three fields on each location, editable in the app:
 
 The content is trip data, so like everything else it is not in this repo. It comes as a notes file holding only `id` plus those three fields.
 
-**On a phone:** ⚙ → **Import trip notes** → pick the file. Do it once per phone. The notes are kept on that phone, and a sync never blanks them — even against a backend that does not have the columns yet.
+**On a phone:** ⚙ → **Import trip notes** → pick the file. A row can name its place (`name_zh` or `name_en`) instead of giving an `id` — that's how details reach a place someone added on their phone, whose id nobody else knows. Background, what to do, dishes and souvenirs only ever fill an empty field, and they're queued for the Sheet; an import never overwrites what someone wrote. Do it once per phone. The notes are kept on that phone, and a sync never blanks them — even against a backend that does not have the columns yet.
 
 **Into the Sheet**, from a laptop, so every phone gets them on sync:
 
