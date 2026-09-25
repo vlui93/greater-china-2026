@@ -29,7 +29,15 @@ var TABS = {
   Locations: ['id', 'name_en', 'name_zh', 'city', 'type', 'lat', 'lng', 'nav_app',
               'history_blurb', 'recommendations', 'dishes_to_order', 'souvenirs', 'notes',
               'getting_there', 'arrive_by', 'tickets'],
-  Schedule: ['id', 'date', 'order_index', 'location_id', 'planned_time', 'notes']
+  Schedule: ['id', 'date', 'order_index', 'location_id', 'planned_time', 'notes'],
+  // Pre-trip tasks and the shared packing list. kind is 'task' or 'pack';
+  // location_id optionally ties a task to a place, so the day briefing can
+  // say "not booked yet". Personal packing never comes here — it stays on
+  // each phone. Phones merge by `updated` (newest copy wins), and deleting
+  // sets `removed` rather than dropping the row, so a phone that still has
+  // the item cannot bring it back.
+  Checklist: ['id', 'kind', 'section', 'text', 'due', 'location_id', 'done', 'done_by', 'order_index',
+              'updated', 'removed']
 };
 
 var NUMERIC = { lat: true, lng: true, order_index: true };
@@ -95,6 +103,10 @@ function route_(action, req) {
     case 'saveScheduleEntry':   return { entry: upsert_('Schedule', payload, 'sc') };
     case 'deleteScheduleEntry': return { deleted: remove_('Schedule', payload && payload.id) };
     case 'setDayOrder':         return setDayOrder_(payload);
+
+    case 'checklist':           return { checklist: readTab_('Checklist') };
+    case 'saveChecklistItem':   return { item: upsert_('Checklist', payload, 'ck') };
+    case 'deleteChecklistItem': return { deleted: remove_('Checklist', payload && payload.id) };
 
     case 'reseed':              return seedAll_(true);
     case 'setupTabs':           return ensureTabs_();
@@ -170,6 +182,7 @@ function readAll_() {
     bookings: readTab_('Bookings'),
     locations: readTab_('Locations'),
     schedule: readTab_('Schedule'),
+    checklist: readTab_('Checklist'),
     fetched_at: new Date().toISOString()
   };
 }
@@ -294,7 +307,9 @@ function setup() {
  */
 function resetAndReseed() {
   ensureTabs_();
-  Object.keys(TABS).forEach(function (name) {
+  // The trip plan only. The checklist is not part of the seed, so wiping it
+  // here would lose every tick with nothing to put back.
+  ['Bookings', 'Locations', 'Schedule'].forEach(function (name) {
     var sh = sheet_(name);
     if (sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
   });

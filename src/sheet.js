@@ -48,7 +48,8 @@ async function call(action, payload) {
   return j.data;
 }
 
-const ACTION = { bookings: 'saveBooking', locations: 'saveLocation', schedule: 'saveScheduleEntry' };
+const ACTION = { bookings: 'saveBooking', locations: 'saveLocation', schedule: 'saveScheduleEntry',
+                 checklist: 'saveChecklistItem' };
 
 async function main() {
   const [cmd, ...args] = process.argv.slice(2);
@@ -106,7 +107,16 @@ async function main() {
 
     let planned = 0;
     const plan = [];
-    for (const tab of ['bookings', 'locations', 'schedule']) {
+    for (const tab of ['bookings', 'locations', 'schedule', 'checklist']) {
+      if (!live[tab]) {
+        // A backend from before this tab existed returns nothing for it, and
+        // would silently drop every row sent. Stop before sending anything.
+        if ((incoming[tab] || []).length) {
+          die(`The Sheet backend has no ${tab} tab yet. Paste the new Code.gs and deploy a new ` +
+              `version first (README §9), then run this again.`);
+        }
+        continue;
+      }
       for (const row of incoming[tab] || []) {
         const existing = row.id && live[tab].find(r => r.id === row.id);
         const changed = existing

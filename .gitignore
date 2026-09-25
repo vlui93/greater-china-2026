@@ -11,6 +11,5 @@ sheet-backup-*.json
 # repo. src/seed.fixture.json is the invented stand-in the tests use and IS
 # committed; these are the real thing.
 src/seed.json
-src/seed-bookings.json
-src/seed-loc-*.json
+src/seed-*.json
 src/schedule.json

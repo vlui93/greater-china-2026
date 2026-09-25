@@ -98,7 +98,7 @@ main{padding:14px 16px 8px; max-width:720px; margin:0 auto}
 
 nav.tabs{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
-  display:grid; grid-template-columns:repeat(4,1fr);
+  display:grid; grid-template-columns:repeat(5,1fr);
   background:color-mix(in srgb, var(--surface) 92%, transparent);
   -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px);
   border-top:1px solid var(--line);
@@ -369,6 +369,50 @@ ul.lst li .cn{font-weight:650}
 .banner .bi{flex:none;color:var(--warn);margin-top:1px}
 .banner button{text-decoration:underline;font-weight:650;color:var(--ink)}
 
+/* Prep: checklist, packing, guide */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;margin:2px 0 14px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.seg button{min-height:40px;border-radius:8px;font-size:14px;font-weight:600;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.ckgroup{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.ckhead{display:flex;justify-content:space-between;align-items:baseline;padding:11px 14px 4px;
+  font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.ckrow{display:flex;align-items:flex-start;border-top:1px solid var(--line)}
+.ckhead + .ckrow{border-top:0}
+.ckbox{flex:none;width:48px;min-height:48px;display:grid;place-items:center}
+.ckbox .svgic{width:22px;height:22px;padding:2px;border-radius:7px;border:1.6px solid var(--line-strong);
+  color:transparent;box-sizing:border-box}
+.ckbox[aria-checked="true"] .svgic{background:var(--accent);border-color:var(--accent);color:var(--on-brand)}
+.cktext{flex:1;min-width:0;text-align:left;padding:13px 14px 12px 0;display:flex;flex-direction:column;gap:5px}
+.cktext .t{font-size:15px;line-height:1.38;color:var(--ink)}
+.ckrow.done .cktext .t{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line-strong)}
+.cktext .m{display:flex;flex-wrap:wrap;gap:6px}
+.cktext .m span{font-size:12px;line-height:1.3;padding:2px 7px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2)}
+.cktext .m .due.soon{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+.cktext .m .due.over{color:#c2352f;border-color:color-mix(in srgb,#c2352f 40%,var(--line));font-weight:650}
+.ckadd{display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;border-top:1px solid var(--line);
+  color:var(--accent);font-weight:600;font-size:14px}
+.ckadd .svgic{width:18px;height:18px}
+.prog{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:4px 0 14px}
+.prog > i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.nextup{margin-bottom:14px}
+.guide h3{font-size:15.5px;margin:0 0 8px;letter-spacing:-.01em}
+.guide .card{padding:14px 15px;margin-bottom:12px}
+.guide ul{margin:0;padding-left:18px}
+.guide li{font-size:14px;line-height:1.55;color:var(--ink-2);margin:0 0 7px}
+.guide li b{color:var(--ink)}
+/* Day briefing */
+.brief{border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));
+  background:color-mix(in srgb,var(--accent) 7%,var(--surface));border-radius:var(--radius);padding:11px 14px;margin:0 0 12px}
+.brief .bt{font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.brief ul{margin:0;padding:0;list-style:none}
+.brief li{font-size:13.6px;line-height:1.45;color:var(--ink);padding:3px 0;display:flex;gap:8px}
+.brief li .k{flex:none;min-width:44px;font-weight:650;color:var(--ink-2)}
+.brief li.warn .k{color:#c2352f}
+.brief.tomorrow{border-style:dashed}
+
 /* First-run gate. The page ships with no trip content, so until the Sheet has
    been reached once there is nothing to show — this is the whole app. */
 #gate{position:fixed;inset:0;z-index:60;overflow-y:auto;background:var(--bg);
@@ -400,6 +444,7 @@ ul.lst li .cn{font-weight:650}
     <section id="view-days" hidden></section>
     <section id="view-places" hidden></section>
     <section id="view-bookings" hidden></section>
+    <section id="view-prep" hidden></section>
   </main>
 </div>
 
@@ -429,6 +474,7 @@ ul.lst li .cn{font-weight:650}
   <button role="tab" data-view="days" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5" width="16.8" height="15.2" rx="2.6"/><path d="M3.6 9.6h16.8M8.4 3.4v3.4M15.6 3.4v3.4"/></svg>All Days</button>
   <button role="tab" data-view="places" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.2s6.6-6 6.6-10.7a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.2 12 21.2Z"/><circle cx="12" cy="10.3" r="2.5"/></svg>Locations</button>
   <button role="tab" data-view="bookings" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.8" y="5.6" width="18.4" height="12.8" rx="2.4"/><path d="M2.8 10.2h18.4M7 14.6h4"/></svg>Bookings</button>
+  <button role="tab" data-view="prep" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.6" y="3.8" width="14.8" height="17" rx="2.4"/><path d="m8.2 9.4 1.6 1.6 3-3M8.2 15.4l1.6 1.6 3-3M14.6 10h1.6M14.6 16h1.6"/></svg>Prep</button>
 </nav>
 
 <div class="sheet" id="sheet" role="dialog" aria-modal="true">
@@ -477,7 +523,7 @@ var DAY_LABELS = {
 /* Nothing about the trip ships in this file. The repo is public, so the
    locations, bookings and schedule live only in the Sheet; the app pulls
    them on first connect and caches them on the phone from then on. */
-var EMPTY = { bookings: [], locations: [], schedule: [] };
+var EMPTY = { bookings: [], locations: [], schedule: [], checklist: [] };
 
 /* ==========================================================================
    Getting between stops
@@ -585,6 +631,7 @@ var IC = {
   close: ic('<path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6"/>'),
   info:  ic('<circle cx="12" cy="12" r="8.6"/><path d="M12 11.3v5M12 7.9h.01"/>'),
   plus:  ic('<path d="M12 5.6v12.8M5.6 12h12.8"/>'),
+  check: ic('<path d="m5.8 12.4 4 4 8.4-8.6"/>'),
   mag:   ic('<circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/>'),
   pen:   ic('<path d="M4.5 19.5h3.2L18.9 8.3a2.2 2.2 0 0 0-3.2-3.2L4.5 16.3z"/><path d="m14.6 6.2 3.2 3.2"/>'),
   nav:   ic('<path d="M20.6 3.4 3.9 10.6a.55.55 0 0 0 .04 1.02l6.6 2.2 2.2 6.6a.55.55 0 0 0 1.02.04z"/>', 'fill'),
@@ -595,7 +642,8 @@ var IC = {
   hotel:      ic('<path d="M3.8 20.3V8.7L12 3.6l8.2 5.1v11.6"/><path d="M9.5 20.3v-5.8h5v5.8"/>')
 };
 function typeIcon(t){ return IC[t] || IC.attraction; }
-var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui" };
+var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui",
+           packing:"gct.packing", me:"gct.me" };
 /* Location fields added after the first release. A blank from the Sheet never
    overwrites a value this phone already has for them, so notes imported on a
    phone survive until the backend has the columns to hold them. The cost: to
@@ -654,6 +702,7 @@ var store = {
   init: function(){
     var cached = load(LS.cache, null);
     this.data = (cached && cached.locations) ? cached : JSON.parse(JSON.stringify(EMPTY));
+    if(!Array.isArray(this.data.checklist)) this.data.checklist = [];
   },
   configured: function(){ return !!(this.cfg.url && this.cfg.key); },
   hasData: function(){ return !!(this.data && this.data.locations && this.data.locations.length); },
@@ -700,6 +749,12 @@ var store = {
       var job=self.queue[0];
       return self.call(job.action, job.payload).then(function(){
         self.queue.shift(); save(LS.queue, self.queue); sent++; return step();
+      }, function(err){
+        // An action this backend predates would sit at the head of the queue
+        // forever and hold up everything behind it. Drop it; the phone keeps
+        // the change and the next sync against an upgraded backend uploads it.
+        if(!isUnknownAction(err)) throw err;
+        self.queue.shift(); save(LS.queue, self.queue); return step();
       });
     }
     return step();
@@ -713,7 +768,8 @@ var store = {
     var self=this;
     return this.call(action,payload).then(function(){
       updateStatus();
-    }).catch(function(){
+    }).catch(function(err){
+      if(isUnknownAction(err)) return;   // kept on this phone; uploaded once the backend knows it
       self.enqueue(action,payload);
     });
   },
@@ -732,8 +788,14 @@ var store = {
             var local=mine[l.id]; if(!local) return;
             LOCAL_FIRST.forEach(function(k){ if(!l[k] && local[k]) l[k]=local[k]; });
           });
-          self.data = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[] };
+          var ck = mergeChecklist(self.data.checklist||[], d.checklist);
+          self.data = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[],
+                        checklist:ck.items };
           self.persist();
+          if(ck.upload.length){
+            ck.upload.forEach(function(i){ self.enqueue("saveChecklistItem", i); });
+            self.flush().then(updateStatus).catch(function(){});
+          }
         }
         self.syncing=false; self.online=true; updateStatus();
         if(!opts.quiet) toast("Synced with the Sheet");
@@ -745,6 +807,41 @@ var store = {
         throw err;
       });
   }
+};
+
+function isUnknownAction(err){ return /Unknown action/.test(String(err && err.message || err)); }
+
+/** Checklist sync. Each copy of an item carries `updated`; the newer one wins,
+ *  in either direction. An item only this phone has is kept and uploaded.
+ *  `server` is undefined when the backend has no Checklist tab yet — then the
+ *  phone's copy is all there is, and nothing is uploaded. */
+function mergeChecklist(local, server){
+  if(!Array.isArray(server)) return { items: local, upload: [] };
+  var byId={}, out=[], up=[];
+  server.forEach(function(i){ byId[i.id]=i; });
+  var seen={};
+  local.forEach(function(l){
+    seen[l.id]=1;
+    var s=byId[l.id];
+    if(!s || String(l.updated||"") > String(s.updated||"")){ out.push(l); up.push(l); }
+    else out.push(s);
+  });
+  server.forEach(function(s){ if(!seen[s.id]) out.push(s); });
+  return { items: out, upload: up };
+}
+function nowISO(){ return new Date().toISOString(); }
+function saveChecklistItem(item){
+  item.updated = nowISO();
+  return store.write("saveChecklistItem", item, function(){
+    var found=false;
+    store.data.checklist = store.data.checklist.map(function(i){
+      if(i.id===item.id){ found=true; return item; } return i; });
+    if(!found) store.data.checklist.push(item);
+  });
+}
+var packing = {
+  items: load(LS.packing, []),
+  persist: function(){ save(LS.packing, this.items); }
 };
 
 /* ==========================================================================
@@ -828,7 +925,7 @@ function updateStatus(){
 
 function setView(v){
   ui.view=v; save(LS.ui,ui);
-  ["today","days","places","bookings"].forEach(function(name){
+  ["today","days","places","bookings","prep"].forEach(function(name){
     $("#view-"+name).hidden = (name!==v);
   });
   document.querySelectorAll("nav.tabs button").forEach(function(b){
@@ -861,6 +958,7 @@ function render(){
   if(ui.view==="days")     renderDays();
   if(ui.view==="places")   renderPlaces();
   if(ui.view==="bookings") renderBookings();
+  if(ui.view==="prep")     renderPrep();
   updateStatus();
 }
 
@@ -905,6 +1003,44 @@ function stopCard(entry, loc, idx, total, next){
   '</div>';
 }
 
+/* ==========================================================================
+   Day briefing — what to have sorted before setting out, from data the app
+   already holds: that day's bookings (and any overnight departure before
+   06:00 the next morning, which belongs to tonight), bookings still marked
+   TO BOOK, unticked checklist tasks tied to the day's stops, and passports.
+   ========================================================================== */
+function addDaysISO(iso, n){
+  var d=parseISO(iso); d.setDate(d.getDate()+n);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function dayBrief(date, title, cls){
+  var next=addDaysISO(date,1), lines=[];
+  var bks=store.data.bookings.filter(function(b){
+    return b.date===date || (b.date===next && /^0[0-5]:/.test(b.time||""));
+  }).sort(function(a,b){ return (a.date+(a.time||"")) < (b.date+(b.time||"")) ? -1 : 1; });
+  bks.forEach(function(b){
+    var tonight=b.date!==date, time=(b.time||"").slice(0,5);
+    lines.push({ k: time || "—", t: esc(b.description)+(tonight?" — <b>tonight</b>, after midnight":"") });
+    if(/TO BOOK/.test(b.details||"")) lines.push({ warn:true, k:"Book", t:"Not booked yet: "+esc(b.description) });
+  });
+  var stops=store.dayStops(date), here={};
+  stops.forEach(function(s){ here[s.location_id]=1; });
+  store.data.checklist.filter(function(i){
+    return i.kind==="task" && !i.removed && !i.done && i.location_id && here[i.location_id];
+  }).forEach(function(i){ lines.push({ warn:true, k:"To do", t:esc(i.text) }); });
+  var need=[];
+  if(bks.some(function(b){ return b.date===date && /flight|train|ferry/.test(b.type); })) need.push("today's travel");
+  stops.forEach(function(s){
+    var l=store.loc(s.location_id);
+    if(l && /passport/i.test(l.tickets||"") && need.indexOf(l.name_en)<0) need.push(l.name_en);
+  });
+  if(need.length) lines.push({ k:"Bring", t:"Passports — for "+need.map(esc).join(", ") });
+  if(!lines.length) return "";
+  return '<div class="brief'+(cls?" "+cls:"")+'"><div class="bt">'+esc(title)+'</div><ul>'+lines.map(function(x){
+    return '<li'+(x.warn?' class="warn"':'')+'><span class="k">'+esc(x.k)+'</span><span>'+x.t+'</span></li>';
+  }).join("")+'</ul></div>';
+}
+
 function renderDayInto(el, date, withStrip){
   var stops = store.dayStops(date);
   var n = dayNumber(date);
@@ -944,7 +1080,13 @@ function renderDayInto(el, date, withStrip){
       (hLast ? hotelLine(last, hLast, 'Back to <b>'+esc(hLast.name_en)+'</b>', "after") : "");
   }
 
-  el.innerHTML = statusBar()+strip+body+
+  // In the evening the Today tab also looks ahead: what tomorrow needs sorting tonight.
+  var ahead="", tmr=addDaysISO(todayISO(),1);
+  if(ui.view==="today" && new Date().getHours()>=16 && DAYS.indexOf(tmr)>=0 && tmr!==date){
+    ahead = dayBrief(tmr, "Tomorrow · "+fmtDate(tmr,true), "tomorrow");
+  }
+  var brief = dayBrief(date, date===todayISO() ? "Today" : "Before you set out");
+  el.innerHTML = statusBar()+strip+ahead+brief+body+
     '<div class="formactions" style="margin-top:16px">'+
       '<button class="btn primary" data-act="add-existing" data-date="'+date+'">+ Add a stop</button>'+
       '<button class="btn" data-act="quick-add" data-date="'+date+'">+ New place</button>'+
@@ -1047,6 +1189,178 @@ var BK_ICON={
   ferry:  svgIc('<path d="M3.4 15.6 5 10.8h14l1.6 4.8"/><path d="M6.8 10.8V6.6h10.4v4.2M12 3.2v3.4"/><path d="M2.6 18.2c1.6 0 1.6 1.6 3.1 1.6s1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.1-1.6"/>'),
   hotel:  svgIc('<path d="M3.6 20.4V8.6L12 3.4l8.4 5.2v11.8"/><path d="M9.4 20.4v-6h5.2v6"/>')
 };
+/* General advice for Hong Kong, Macau and the mainland. Nothing here is about
+   this particular trip, so it can live in the public repo. Static HTML only. */
+var GUIDE = [
+  { t:"Install before you fly", items:[
+    "<b>Alipay</b> — the one that matters most. Sign up with your own mobile number, verify your passport in the app and link a Visa or Mastercard. It pays almost everywhere on the mainland, and DiDi and the metro QR codes run inside it.",
+    "<b>WeChat</b> — optional, but hotels and restaurants often message through it and some museums take bookings through WeChat accounts. WeChat Pay takes foreign cards too.",
+    "<b>Amap 高德地图</b> — maps on the mainland. Google Maps is blocked there and its streets sit hundreds of metres off; this app opens Amap for mainland places on its own.",
+    "<b>Trip.com</b> — trains, and the attraction tickets whose own booking channels need a Chinese phone number. Book with names exactly as they appear on your passports.",
+    "<b>A translator with Chinese downloaded for offline use</b> — Apple Translate (download Chinese in its settings) or similar. Camera mode reads menus.",
+    "<b>Octopus in Apple Wallet</b> for Hong Kong — optional, since MTR gates take contactless cards, but Octopus also covers buses, trams, ferries and convenience stores."
+  ]},
+  { t:"Staying connected", items:[
+    "On mainland networks and hotel wifi, <b>Google (Search, Maps, Gmail), WhatsApp, Instagram and Facebook are blocked</b>. Hong Kong and Macau are not affected.",
+    "A <b>roaming eSIM</b> — from your own carrier, or a travel eSIM that covers mainland China, Hong Kong and Macau — routes your data out of the country, so those apps keep working. Buy and install it before you fly; switch it on when you land.",
+    "Hotel wifi on the mainland will not get around the block, so stay on the eSIM for anything Google.",
+    "This app works offline. Edits made on the mainland wait on the phone and send themselves once Google is reachable — the badge at the top of each screen says how many are waiting."
+  ]},
+  { t:"Paying", items:[
+    "<b>Mainland:</b> nearly everything is Alipay or WeChat Pay — scan the shop's code or show yours. Small stalls often can't take a card at all. Keep a few hundred yuan in cash as a backup.",
+    "<b>Hong Kong:</b> contactless cards almost everywhere, Octopus for transport and small shops, cash for markets and dai pai dong.",
+    "<b>Macau:</b> Hong Kong dollars are accepted at par, with change in patacas. Cards in hotels and bigger shops, cash elsewhere.",
+    "Tell your bank you're travelling and check its foreign-transaction fee — every Alipay payment goes through your card."
+  ]},
+  { t:"Getting around", items:[
+    "<b>Metro:</b> Hong Kong's MTR gates take contactless Visa and Mastercard. On the mainland, add each city's transport QR code in Alipay (search “Transport”); Guangzhou and Chengdu also take foreign contactless cards at the gate.",
+    "<b>Cars:</b> open DiDi inside Alipay — it's in English and charges your linked card. Choose the destination by its Chinese name or on the map. If the driver messages you, the messages are translated.",
+    "<b>Taxis:</b> show the driver the Chinese name — every place in this app has a “Show this to someone” card for exactly this.",
+    "<b>High-speed rail:</b> your passport is your ticket. Foreign passports often need the staffed gate rather than the automatic ones, so arrive 45 minutes early for security and ID checks."
+  ]},
+  { t:"Power banks", items:[
+    "On <b>domestic flights within China</b>, a power bank needs a clearly printed <b>3C (CCC) mark</b> or security will take it. Power banks sold in Australia almost never have one.",
+    "Either buy a 3C-marked one once you're on the mainland, or <b>rent</b> one: shared power-bank stations are in nearly every restaurant, mall and station. Scan one with Alipay and return it to any station.",
+    "Whatever you carry goes in hand luggage, under 100 Wh (about 27,000 mAh), and stays unused during the flight."
+  ]},
+  { t:"Small things that help", items:[
+    "Carry <b>tissues and hand sanitiser</b> — many public toilets have no paper.",
+    "Mainland <b>tap water</b> isn't for drinking; bottled water is everywhere.",
+    "Carry your <b>passport</b> on the mainland: hotels, trains, museums and many ticketed sights check it."
+  ]}
+];
+
+/* ==========================================================================
+   Prep — the shared checklist, packing lists and a guide.
+   Shared items live in the Sheet's Checklist tab; "Just me" packing lives
+   only in this phone's storage and never syncs.
+   ========================================================================== */
+function getMe(){ return load(LS.me, ""); }
+function shortDate(iso){
+  var d=parseISO(iso); return d.getDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+}
+function dueInfo(due){
+  if(!due) return null;
+  var days=Math.round((parseISO(due)-parseISO(todayISO()))/86400000);
+  var label = days<0 ? (-days===1?"1 day overdue":(-days)+" days overdue")
+            : days===0 ? "due today" : days===1 ? "due tomorrow"
+            : days<7 ? "due in "+days+" days" : "due "+shortDate(due);
+  return { days:days, label:label, cls: days<0 ? "over" : days<=3 ? "soon" : "" };
+}
+function sharedItems(kind){
+  return store.data.checklist.filter(function(i){ return i.kind===kind && !i.removed; });
+}
+function byOrder(a,b){ return (+a.order_index||0)-(+b.order_index||0); }
+function taskSort(a,b){
+  if(!!a.done !== !!b.done) return a.done ? 1 : -1;
+  var da=a.due||"9999", db=b.due||"9999";
+  if(da!==db) return da<db ? -1 : 1;
+  return byOrder(a,b);
+}
+function groupBySection(items, sortFn){
+  var order=[], map={};
+  items.slice().sort(byOrder).forEach(function(i){
+    var k=i.section||"Other"; if(!map[k]){ map[k]=[]; order.push(k); } map[k].push(i);
+  });
+  return order.map(function(k){ return { name:k, items: map[k].sort(sortFn||byOrder) }; });
+}
+function ckRow(it, scope){
+  var done=!!it.done, meta=[];
+  if(it.kind==="task" && !done){ var di=dueInfo(it.due); if(di) meta.push('<span class="due '+di.cls+'">'+esc(di.label)+'</span>'); }
+  if(it.location_id){ var l=store.loc(it.location_id); if(l) meta.push('<span>'+esc(l.name_en)+'</span>'); }
+  if(done && it.done_by) meta.push('<span>'+esc(it.done_by)+'</span>');
+  return '<div class="ckrow'+(done?" done":"")+'">'+
+    '<button class="ckbox" data-act="ck-toggle" data-scope="'+scope+'" data-id="'+esc(it.id)+'" role="checkbox" '+
+      'aria-checked="'+done+'" aria-label="'+esc(it.text)+'">'+IC.check+'</button>'+
+    '<button class="cktext" data-act="ck-edit" data-scope="'+scope+'" data-id="'+esc(it.id)+'">'+
+      '<span class="t">'+esc(it.text)+'</span>'+(meta.length?'<span class="m">'+meta.join("")+'</span>':'')+'</button>'+
+  '</div>';
+}
+function ckGroupHTML(title, rows, addScope, addKind, count){
+  return '<div class="ckgroup"><div class="ckhead"><span>'+esc(title)+'</span>'+(count?'<span>'+count+'</span>':'')+'</div>'+
+    rows+
+    (addScope ? '<button class="ckadd" data-act="ck-add" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(title)+'">'+
+      IC.plus+'Add</button>' : '')+'</div>';
+}
+function countDone(items){ return items.filter(function(i){ return i.done; }).length+" / "+items.length; }
+
+function renderPrep(){
+  var tab = ui.prepTab || "checklist";
+  var toGo = Math.round((parseISO(TRIP_START)-parseISO(todayISO()))/86400000);
+  $("#viewTitle").textContent="Prep";
+  $("#viewSub").textContent = toGo>1 ? toGo+" days until you fly" : toGo===1 ? "You fly tomorrow" : toGo===0 ? "You fly today" : "On the trip";
+  var seg='<div class="seg" role="tablist">'+[["checklist","Checklist"],["packing","Packing"],["guide","Guide"]].map(function(x){
+    return '<button data-act="prep-tab" data-v="'+x[0]+'" aria-pressed="'+(tab===x[0])+'">'+x[1]+'</button>';
+  }).join("")+'</div>';
+  var body = tab==="packing" ? prepPacking() : tab==="guide" ? prepGuide() : prepChecklist();
+  $("#view-prep").innerHTML = statusBar()+seg+body;
+  updateStatus();   // renderPrep is also called on its own (segment switches), not only via render()
+}
+
+function prepChecklist(){
+  var tasks=sharedItems("task");
+  if(!tasks.length) return '<div class="card empty">No checklist yet. Import the trip notes file from ⚙ Settings, '+
+    'or add your own.</div>'+ckGroupHTML("To do", "", "shared", "task");
+  var open=tasks.filter(function(t){ return !t.done; }).sort(taskSort);
+  var done=tasks.length-open.length;
+  var urgent=open.filter(function(t){ var d=dueInfo(t.due); return d && d.days<=7; }).slice(0,4);
+  return '<div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="'+tasks.length+'" aria-valuenow="'+done+'">'+
+      '<i style="width:'+Math.round(done/tasks.length*100)+'%"></i></div>'+
+    (urgent.length ? '<div class="nextup">'+ckGroupHTML("Next up", urgent.map(function(t){ return ckRow(t,"shared"); }).join(""))+'</div>' : '')+
+    groupBySection(tasks, taskSort).map(function(g){
+      return ckGroupHTML(g.name, g.items.map(function(t){ return ckRow(t,"shared"); }).join(""), "shared", "task", countDone(g.items));
+    }).join("");
+}
+
+function prepPacking(){
+  var mine=packing.items.filter(function(i){ return !i.removed; });
+  var shared=sharedItems("pack");
+  var me=getMe();
+  var packed=mine.filter(function(i){ return i.done; }).length;
+  var html = (mine.length ? '<div class="prog"><i style="width:'+Math.round(packed/mine.length*100)+'%"></i></div>' : '');
+  html += '<div class="section-title" style="margin-top:0">Just me</div>';
+  if(!mine.length) html += '<div class="card empty small">Nothing on your list yet — import the trip notes file from ⚙ Settings, or add your own.</div>';
+  html += groupBySection(mine).map(function(g){
+    return ckGroupHTML(g.name, g.items.map(function(i){ return ckRow(i,"mine"); }).join(""), "mine", "pack", countDone(g.items));
+  }).join("") || ckGroupHTML("Mine", "", "mine", "pack");
+  html += '<div class="section-title">Shared — one of us brings it</div>'+
+    (me ? '' : '<p class="blurb muted small" style="margin:-2px 0 10px">Add your name in ⚙ Settings so the others can see who is bringing what.</p>');
+  html += groupBySection(shared).map(function(g){
+    return ckGroupHTML(g.name, g.items.map(function(i){ return ckRow(i,"shared"); }).join(""), "shared", "pack", countDone(g.items));
+  }).join("") || ckGroupHTML("Shared", "", "shared", "pack");
+  return html;
+}
+
+function prepGuide(){
+  return '<div class="guide">'+GUIDE.map(function(sec){
+    return '<div class="card"><h3>'+esc(sec.t)+'</h3><ul>'+sec.items.map(function(x){ return '<li>'+x+'</li>'; }).join("")+'</ul></div>';
+  }).join("")+'</div>';
+}
+
+function findItem(scope, id){
+  var list = scope==="mine" ? packing.items : store.data.checklist;
+  return list.filter(function(i){ return i.id===id; })[0] || null;
+}
+function checklistForm(scope, id, kind, section){
+  var it = id ? findItem(scope, id) : null;
+  var isNew=!it; kind = it ? it.kind : kind;
+  it = it || { id:"", kind:kind, section:section||"", text:"", due:"" };
+  var sections={};
+  (scope==="mine" ? packing.items : store.data.checklist).forEach(function(i){ if(i.section && i.kind===kind) sections[i.section]=1; });
+  var html=
+    '<div class="field"><label>'+(kind==="task"?"Task":"Item")+'</label><textarea id="c_text" style="min-height:70px">'+esc(it.text)+'</textarea></div>'+
+    '<div class="field"><label>Section</label><input id="c_section" list="c_sections" value="'+esc(it.section)+'">'+
+      '<datalist id="c_sections">'+Object.keys(sections).map(function(k){ return '<option value="'+esc(k)+'">'; }).join("")+'</datalist></div>'+
+    (kind==="task" ? '<div class="field"><label>Due</label><input id="c_due" type="date" value="'+esc(it.due||"")+'"></div>' : '')+
+    (scope==="shared" ? '<p class="hint small muted">Shared with the others'+(kind==="pack"?" — tick it when you have packed it.":".")+'</p>'
+                      : '<p class="hint small muted">Only on this phone.</p>')+
+    '<div class="formactions">'+
+      '<button class="btn primary" data-act="ck-save" data-scope="'+scope+'" data-kind="'+kind+'" data-id="'+esc(it.id)+'">Save</button>'+
+      (isNew ? '' : '<button class="btn danger" data-act="ck-delete" data-scope="'+scope+'" data-id="'+esc(it.id)+'">Delete</button>')+
+    '</div>';
+  openSheet(isNew ? (kind==="task"?"New task":"New item") : "Edit", html);
+}
+
 function renderBookings(){
   $("#viewTitle").textContent="Bookings";
   var bs=store.data.bookings.slice().sort(function(a,b){
@@ -1307,6 +1621,9 @@ function settingsForm(){
     '<p class="blurb small muted" style="margin:12px 0 16px">The trip lives in the Google Sheet — nothing about it is in the '+
     'public repo. This phone holds a cached copy, so the app keeps working with no signal, which you will need in '+
     'mainland China where Google is blocked. Every edit is saved to the Sheet and shared across devices.</p>'+
+    '<div class="field"><label>Your name</label>'+
+      '<input id="s_me" autocomplete="given-name" value="'+esc(getMe())+'" placeholder="Optional">'+
+      '<div class="hint">Shown on shared items you tick, so the others know who is bringing what. Saved on this phone.</div></div>'+
     '<div class="field"><label>Web App URL</label>'+
       '<input id="s_url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="https://script.google.com/macros/s/.../exec" value="'+esc(c.url)+'"></div>'+
     '<div class="field"><label>API key</label>'+
@@ -1339,6 +1656,8 @@ function settingsForm(){
   openSheet("Settings", html);
   var fi=$("#importFile");
   if(fi) fi.addEventListener("change", function(){ importNotes(this.files && this.files[0]); });
+  var meIn=$("#s_me");
+  if(meIn) meIn.addEventListener("change", function(){ save(LS.me, this.value.trim()); toast("Saved"); });
 }
 
 /* Merges getting_there / arrive_by / tickets into places this phone already
@@ -1351,7 +1670,7 @@ function importNotes(file){
   r.onload=function(){
     var j; try{ j=JSON.parse(r.result); }catch(e){ toast("That file is not valid JSON"); return; }
     var rows=(j && j.locations) || [];
-    if(!rows.length){ toast("No places in that file"); return; }
+    if(!rows.length && !(j && (j.checklist||j.packing))){ toast("Nothing to import in that file"); return; }
     var byId={}; store.data.locations.forEach(function(l){ byId[l.id]=l; });
     var n=0, miss=0;
     rows.forEach(function(x){
@@ -1362,9 +1681,40 @@ function importNotes(file){
       });
       if(changed) n++;
     });
+    // Checklist and packing: add what is new, update wording and dates, and
+    // never touch whether something has been ticked — importing a newer file
+    // must not undo anyone's progress.
+    var ckN=0, pkN=0;
+    ((j && j.checklist) || []).forEach(function(x){
+      if(!x || !x.id || !x.text) return;
+      var cur=findItem("shared", x.id);
+      if(!cur){
+        store.data.checklist.push({ id:x.id, kind:x.kind||"task", section:x.section||"", text:x.text,
+          due:x.due||"", location_id:x.location_id||"", done:"", done_by:"", order_index:x.order_index||0,
+          updated:"", removed:"" });
+        ckN++; return;
+      }
+      var changed=false;
+      ["kind","section","text","due","location_id","order_index"].forEach(function(k){
+        if(x[k]!==undefined && String(x[k])!==String(cur[k]==null?"":cur[k])){ cur[k]=x[k]; changed=true; }
+      });
+      if(changed){ cur.updated=nowISO(); ckN++; }
+    });
+    ((j && j.packing) || []).forEach(function(x){
+      if(!x || !x.id || !x.text || findItem("mine", x.id)) return;
+      packing.items.push({ id:x.id, kind:"pack", section:x.section||"", text:x.text, done:"", removed:"",
+                           order_index:x.order_index||packing.items.length+1 });
+      pkN++;
+    });
+    packing.persist();
     store.persist(); closeSheet(); render();
-    toast(n ? "Updated "+n+" place"+(n===1?"":"s")+(miss?" · "+miss+" not on this phone":"")
-            : "Nothing new in that file", 3200);
+    var parts=[];
+    if(n) parts.push(n+" place"+(n===1?"":"s"));
+    if(ckN) parts.push(ckN+" checklist item"+(ckN===1?"":"s"));
+    if(pkN) parts.push(pkN+" packing item"+(pkN===1?"":"s"));
+    toast(parts.length ? "Updated "+parts.join(" · ")+(miss?" · "+miss+" places not on this phone":"")
+                       : "Nothing new in that file", 3400);
+    if(ckN && store.configured()) store.sync({quiet:true}).catch(function(){});
   };
   r.onerror=function(){ toast("Could not read that file"); };
   r.readAsText(file);
@@ -1428,6 +1778,51 @@ document.addEventListener("click", function(ev){
   var date=t.dataset.date;
 
   switch(act){
+    case "prep-tab": ui.prepTab=t.dataset.v; save(LS.ui,ui); renderPrep(); return;
+    case "ck-toggle": {
+      var cid=t.dataset.id;
+      if(t.dataset.scope==="mine"){
+        var pi=findItem("mine", cid); if(!pi) return;
+        pi.done = pi.done ? "" : nowISO(); packing.persist(); renderPrep(); return;
+      }
+      var cur=findItem("shared", cid); if(!cur) return;
+      var upd=JSON.parse(JSON.stringify(cur));
+      upd.done = upd.done ? "" : nowISO();
+      upd.done_by = upd.done ? getMe() : "";
+      saveChecklistItem(upd); render();
+      return;
+    }
+    case "ck-edit": checklistForm(t.dataset.scope, t.dataset.id); return;
+    case "ck-add":  checklistForm(t.dataset.scope, "", t.dataset.kind, t.dataset.section==="Mine"||t.dataset.section==="Shared"||t.dataset.section==="To do" ? "" : t.dataset.section); return;
+    case "ck-save": {
+      var text=$("#c_text").value.trim(); if(!text){ toast("Write something first"); return; }
+      var section=$("#c_section").value.trim(), due=$("#c_due") ? $("#c_due").value : "";
+      var scope=t.dataset.scope, kind=t.dataset.kind, eid=t.dataset.id;
+      if(scope==="mine"){
+        var mi=eid ? findItem("mine", eid) : null;
+        if(!mi){ mi={ id:uid("my"), kind:"pack", done:"", order_index:packing.items.length+1 }; packing.items.push(mi); }
+        mi.text=text; mi.section=section; packing.persist();
+      } else {
+        var base=eid ? findItem("shared", eid) : null;
+        var item=base ? JSON.parse(JSON.stringify(base))
+                      : { id:uid("ck"), kind:kind, done:"", done_by:"", location_id:"", removed:"",
+                          order_index:store.data.checklist.length+1 };
+        item.text=text; item.section=section; if(kind==="task") item.due=due;
+        saveChecklistItem(item);
+      }
+      closeSheet(); render(); return;
+    }
+    case "ck-delete": {
+      if(!window.confirm("Delete this item?")) return;
+      if(t.dataset.scope==="mine"){
+        // soft delete, so importing the notes file again does not bring it back
+        var gm=findItem("mine", t.dataset.id); if(gm){ gm.removed="1"; packing.persist(); }
+      } else {
+        var gone=findItem("shared", t.dataset.id);
+        if(gone){ var g2=JSON.parse(JSON.stringify(gone)); g2.removed="1"; saveChecklistItem(g2); }
+      }
+      closeSheet(); render(); return;
+    }
     case "open": ev.preventDefault(); locationDetail(lid); return;
     case "nav": {
       ev.preventDefault();
@@ -1546,8 +1941,10 @@ document.addEventListener("click", function(ev){
         .catch(function(){ toast("Still offline"); });
       return;
     case "reset-local": {
-      if(!window.confirm("Throw away this phone's copy, including anything not yet sent, and pull the trip again from the Sheet?")) return;
+      if(!window.confirm("Throw away this phone's copy, including anything not yet sent, and pull the trip again from the Sheet? Your checklist and packing ticks are kept.")) return;
+      var keepCk=store.data.checklist||[];
       store.data=JSON.parse(JSON.stringify(EMPTY));
+      store.data.checklist=keepCk;   // the Sheet may not have a Checklist tab to restore it from
       store.queue=[]; save(LS.queue, store.queue); store.persist();
       closeSheet(); render();
       store.sync().catch(function(){});

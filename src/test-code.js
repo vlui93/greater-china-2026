@@ -183,5 +183,22 @@ console.log("10. an older Sheet upgrades itself in place");
   eq([after.name_en, after.name_zh, after.lat], [got.name_en, got.name_zh, got.lat], "and the old fields are untouched");
 }
 
+console.log("11. shared checklist");
+{
+  ok(Array.isArray(post({key:KEY,action:"all"}).data.checklist), "all includes a checklist array");
+  let r = post({key:KEY,action:"saveChecklistItem",payload:{kind:"task",section:"Bookings",text:"Book the train",due:"2026-10-12"}});
+  ok(r.ok && /^ck-/.test(r.data.item.id), "creates with a ck- id");
+  const cid = r.data.item.id;
+  r = post({key:KEY,action:"saveChecklistItem",payload:{id:cid, done:"2026-10-01T10:00:00Z", done_by:"Sam"}});
+  const got = post({key:KEY,action:"checklist"}).data.checklist.find(x=>x.id===cid);
+  eq([got.text, got.due, got.done_by], ["Book the train","2026-10-12","Sam"], "ticking keeps the text and due date");
+  post({key:KEY,action:"saveChecklistItem",payload:{kind:"pack",section:"Shared",text:"Adapter"}});
+  eq(post({key:KEY,action:"checklist"}).data.checklist.length, 2, "two items");
+  sandbox.resetAndReseed();
+  eq(post({key:KEY,action:"checklist"}).data.checklist.length, 2, "resetAndReseed leaves the checklist alone");
+  eq(post({key:KEY,action:"deleteChecklistItem",payload:{id:cid}}).data.deleted.removed, true, "delete");
+  eq(post({key:KEY,action:"checklist"}).data.checklist.length, 1, "one left");
+}
+
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));
 process.exit(fails ? 1 : 0);

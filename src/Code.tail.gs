@@ -21,7 +21,9 @@ function setup() {
  */
 function resetAndReseed() {
   ensureTabs_();
-  Object.keys(TABS).forEach(function (name) {
+  // The trip plan only. The checklist is not part of the seed, so wiping it
+  // here would lose every tick with nothing to put back.
+  ['Bookings', 'Locations', 'Schedule'].forEach(function (name) {
     var sh = sheet_(name);
     if (sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
   });

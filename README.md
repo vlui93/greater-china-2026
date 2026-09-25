@@ -6,7 +6,7 @@ A single-page trip app for **16 Oct – 1 Nov 2026**: Sydney → Hong Kong → M
 
 Vanilla HTML/CSS/JS, no build step, no framework. Data lives in a Google Sheet behind an Apps Script web app. Everything is cached on the phone, so the app works with no signal at all.
 
-**Nothing about the trip is in this repo.** This repository is public and GitHub Pages serves it to anyone who finds the URL, so the page ships empty: no places, no bookings, no schedule. Open it without the API key and all you get is a connect screen. The content lives in the Google Sheet, and on the phones that have connected to it. See [What is and is not in this repo](#9-what-is-and-is-not-in-this-repo).
+**Nothing about the trip is in this repo.** This repository is public and GitHub Pages serves it to anyone who finds the URL, so the page ships empty: no places, no bookings, no schedule. Open it without the API key and all you get is a connect screen. The content lives in the Google Sheet, and on the phones that have connected to it. See [What is and is not in this repo](#11-what-is-and-is-not-in-this-repo).
 
 - 68 locations, every one with both an English and a Chinese name
 - Per-day schedule you can reorder, add to and edit on the phone
@@ -42,7 +42,7 @@ Vanilla HTML/CSS/JS, no build step, no framework. Data lives in a Google Sheet b
 
    If `src/seed.json` is not on this machine, pull it back out of the Sheet with
    `node src/sheet.js backup src/seed.json` — see
-   [§9](#9-what-is-and-is-not-in-this-repo).
+   [§11](#11-what-is-and-is-not-in-this-repo).
 
 5. In the Apps Script editor: click into `Code.gs`, **⌘A**, **⌘V**, **⌘S**.
 
@@ -174,7 +174,9 @@ The only control under 44px is the inline "Set up the backend" text link inside 
 | `manifest.json`, `icons/` | Home-screen icon and standalone display | committed |
 | `src/index.template.html` | What `index.html` is built from | committed |
 | `src/seed.fixture.json` | Invented stand-in content, so the tests pass on a fresh clone | committed |
-| `src/seed.json`, `src/seed-*.json`, `src/schedule.json` | The real trip content, authored split by city | **gitignored** |
+| `src/seed.json`, `src/seed-*.json`, `src/schedule.json` | The real trip content, authored split by city, plus `seed-checklist.json` for the checklist and packing lists | **gitignored** |
+| `src/build-notes.js` | Builds the file phones import: place notes, checklist, packing | committed |
+| `trip-notes.local.json` | Its output | **gitignored** |
 | `Code.READY.local.gs` | Code.gs with your key and your content filled in — the file you paste | **gitignored** |
 | `.sheet.local.json` | Web app URL + key for the CLI | **gitignored** |
 
@@ -218,7 +220,7 @@ Responses are `{ok:true, data:...}` or `{ok:false, error:"..."}`.
 
 ---
 
-## 10. Getting around, and tickets
+## 9. Getting around, and tickets
 
 ### On the day view
 
@@ -262,13 +264,35 @@ The content is trip data, so like everything else it is not in this repo. It com
 1. Build and paste the new backend, **reusing your existing API key** so the phones keep working:
    `node src/prepare-code.js <your current key>` → `./src/copy-code.sh` → paste into Apps Script.
 2. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment* — that gives you a new URL and every phone would need reconnecting. The Locations tab gains its three new columns on its own the first time the script runs.
-3. `node src/sheet.js diff greater-china-trip-notes.json`, then `push`.
+3. `node src/build-notes.js`, then `node src/sheet.js diff trip-notes.local.json`, then `push`.
 
 Push the notes file, not `src/seed.json`. `push` overwrites every field that differs from the Sheet, and the seed still holds the plan as originally written — pushing it would undo every time, note and reorder you have made in the app since.
 
 ---
 
-## 9. What is and is not in this repo
+## 10. Prep: checklist, packing and a guide
+
+The **Prep** tab has three parts.
+
+- **Checklist** — dated tasks for before and during the trip, grouped by section, with the most urgent under *Next up*. Tasks can point at a place; if one isn't ticked by that day, the day's briefing flags it.
+- **Packing** — two lists. *Just me* is kept only on that phone and never syncs, since everyone packs differently. *Shared — one of us brings it* is for things the group needs once (adapters, first-aid kit); ticking one records your name, so the others can see it's covered. Set your name in ⚙ Settings.
+- **Guide** — general advice for Hong Kong, Macau and the mainland: apps to install, staying connected, paying, getting around, power banks. Nothing in it is specific to this trip, so it ships in the page.
+
+Each day also opens with a short **briefing**: that day's bookings, including any overnight departure before 06:00 the next morning; anything still marked TO BOOK; unticked tasks for that day's stops; and a passport reminder. From 16:00 the Today tab also shows **tomorrow's** briefing, so there's time to sort things out the night before.
+
+### How the shared checklist syncs
+
+It lives in the Sheet's **Checklist** tab. Every item carries an `updated` time, and when two phones disagree, the newer copy wins in either direction. Deleting marks an item `removed` rather than dropping the row, so a phone that still has it can't bring it back.
+
+Until the backend is upgraded (§9), the Sheet has no Checklist tab. Each phone keeps its own copy, and edits the backend doesn't recognise are not queued, so they can't block other edits. On the first sync after the upgrade, each phone uploads what it has — so ticks made in the meantime aren't lost, and there's no need to push the checklist from a laptop.
+
+### The content
+
+The tasks and packing lists are trip data, so they're not in this repo. They're authored in `src/seed-checklist.json` (gitignored), and `node src/build-notes.js` writes them into `trip-notes.local.json` along with the place notes from §9. That's the file phones import. Importing a newer version adds items and updates wording and dates, but never changes whether something is ticked.
+
+---
+
+## 11. What is and is not in this repo
 
 This repository is public and GitHub Pages serves it to anyone who has the URL, so the trip is kept out of it entirely. The split is:
 
@@ -277,6 +301,7 @@ This repository is public and GitHub Pages serves it to anyone who has the URL, 
 - Every location, with its names, coordinates, blurb and recommendations
 - Every booking, and the confirmation numbers (those were never committed)
 - The day-by-day schedule
+- Getting-there and ticket notes, the checklist and the packing lists
 - The API key, and the web app URL
 
 All of that lives in the Google Sheet, which is private to your Google account, and in the cached copy on each phone that has connected.
