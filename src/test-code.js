@@ -100,7 +100,7 @@ ok(SS.getSheetByName("Bookings") && SS.getSheetByName("Locations") && SS.getShee
 ok(!SS.getSheetByName("Sheet1"), "empty default tab removed");
 let all = post({key:KEY,action:"all"}).data;
 eq([all.bookings.length, all.locations.length, all.schedule.length], [NB,NL,NS], "seeded row counts");
-eq(SS.getSheetByName("Locations").getRange(1,1,1,13).getValues()[0], sandbox.TABS.Locations, "Locations headers");
+eq(SS.getSheetByName("Locations").getRange(1,1,1,sandbox.TABS.Locations.length).getValues()[0], sandbox.TABS.Locations, "Locations headers");
 
 console.log("3. seed integrity through the Sheet");
 ok(all.locations.every(l=>l.name_en && l.name_zh), "every location has both names");
@@ -158,6 +158,30 @@ console.log("9. reset and reseed");
 sandbox.resetAndReseed();
 all = post({key:KEY,action:"all"}).data;
 eq([all.bookings.length, all.locations.length, all.schedule.length], [NB,NL,NS], "full reseed restores everything");
+
+console.log("10. an older Sheet upgrades itself in place");
+{
+  // A Locations tab as the previous version of this script left it: 13 columns.
+  const OLD = sandbox.TABS.Locations.slice(0, 13);
+  const loc = SS.getSheetByName("Locations");
+  const before = loc.getRange(2, 1, 1, 13).getValues()[0];
+  loc.d = loc.d.map(r => r.slice(0, 13));
+  eq(loc.getLastColumn(), 13, "simulated old tab has 13 columns");
+  loc.getRange(1, 1, 1, 13).setValues([OLD]);
+
+  const firstId = before[0];
+  const got = post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===firstId);
+  eq(loc.getRange(1,1,1,sandbox.TABS.Locations.length).getValues()[0], sandbox.TABS.Locations,
+     "first request writes the full header row");
+  eq(loc.getRange(2, 1, 1, 13).getValues()[0], before, "existing row did not move");
+  eq([got.name_en, got.getting_there, got.tickets], [before[1], "", ""], "old rows read back with the new fields blank");
+
+  const r = post({key:KEY,action:"saveLocation",payload:{id:firstId, getting_there:"MTR exit A", arrive_by:"Walk", tickets:"Free"}});
+  ok(r.ok, "partial save of only the new fields succeeds");
+  const after = post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===firstId);
+  eq([after.getting_there, after.arrive_by, after.tickets], ["MTR exit A","Walk","Free"], "new fields persist");
+  eq([after.name_en, after.name_zh, after.lat], [got.name_en, got.name_zh, got.lat], "and the old fields are untouched");
+}
 
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));
 process.exit(fails ? 1 : 0);

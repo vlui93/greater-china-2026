@@ -218,6 +218,56 @@ Responses are `{ok:true, data:...}` or `{ok:false, error:"..."}`.
 
 ---
 
+## 10. Getting around, and tickets
+
+### On the day view
+
+Under each stop, a line says how to get to the next one. Before the first stop and after the last, there is one from and back to your hotel:
+
+> Then **‹next stop›** · 300 m · walk ~5 min
+> Then **‹next stop›** · 3.7 km · DiDi ≈ ¥11–15
+> Back to **‹your hotel›** · 4.3 km · MTR, or taxi ≈ HK$50–70 + tunnel toll
+
+These are worked out on the phone from the two places' coordinates, not stored, so they stay right when you reorder a day. The distance is the straight line × 1.35 for streets. The fare is each city's published meter tariff, with a range on top for traffic and waiting time:
+
+| City | Meter | Suggested |
+|---|---|---|
+| Hong Kong | HK$29 first 2 km, then HK$2.10 per 200 m (HK$1.40 once past HK$102.50) | walk ≤ 1 km, MTR beyond 2 km; harbour tunnels add a toll |
+| Macau | MOP 21 first 1.6 km, then MOP 2 per 220 m | walk ≤ 2 km in the old town; taxis are scarce |
+| Guangzhou | ¥12 first 3 km, then ¥2.60/km | DiDi up to 5 km, metro beyond |
+| Foshan | ¥10 first 2.5 km, then ¥2.80/km | same |
+| Chongqing | ¥10 first 3 km, then ¥2/km | same |
+| Chengdu | ¥9 first 2 km, then ¥1.90/km | same |
+
+Mainland estimates are shaped for DiDi, which has no "return empty" surcharge; a street taxi on a long ride comes in 20–50% higher. Night surcharges (roughly 23:00–05:00) are not included. Legs over 60 km — the way home from a day trip — point at that place's Getting there instead of quoting a fare.
+
+### Per place
+
+Three fields on each location, editable in the app:
+
+- **Getting there** — nearest station and exit, and when a taxi is better. On every place.
+- **Best way to arrive** (`arrive_by`) — one line, only for places reached one particular way: a funicular, a cable car, a train out to a day trip. It replaces the worked-out line on the day view for any leg arriving there.
+- **Tickets** — price, where to buy, booking rules, closing days. On every attraction.
+
+`build-seed.js` refuses to build if a place has no Getting there or an attraction has no Tickets.
+
+### Getting the notes onto phones and into the Sheet
+
+The content is trip data, so like everything else it is not in this repo. It comes as a notes file holding only `id` plus those three fields.
+
+**On a phone:** ⚙ → **Import trip notes** → pick the file. Do it once per phone. The notes are kept on that phone, and a sync never blanks them — even against a backend that does not have the columns yet.
+
+**Into the Sheet**, from a laptop, so every phone gets them on sync:
+
+1. Build and paste the new backend, **reusing your existing API key** so the phones keep working:
+   `node src/prepare-code.js <your current key>` → `./src/copy-code.sh` → paste into Apps Script.
+2. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment* — that gives you a new URL and every phone would need reconnecting. The Locations tab gains its three new columns on its own the first time the script runs.
+3. `node src/sheet.js diff greater-china-trip-notes.json`, then `push`.
+
+Push the notes file, not `src/seed.json`. `push` overwrites every field that differs from the Sheet, and the seed still holds the plan as originally written — pushing it would undo every time, note and reorder you have made in the app since.
+
+---
+
 ## 9. What is and is not in this repo
 
 This repository is public and GitHub Pages serves it to anyone who has the URL, so the trip is kept out of it entirely. The split is:

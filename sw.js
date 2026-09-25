@@ -1,9 +1,10 @@
 /* Offline shell. Matters more than usual here: Google services are blocked in
    mainland China, and github.io can be slow or unreachable there too. Once the
    app has been opened on wifi it keeps working with no connection at all. */
-/* Bumped when the shell changes. v2 is the first build with no trip content
-   baked in — bumping it clears the old cached copy off phones that have it. */
-var CACHE = "gct-v2";
+/* Bumped when the shell changes (v2: no trip content baked in; v3: transport
+   legs and ticket notes). Bumping clears the old copy off phones that have it.
+   */
+var CACHE = "gct-v3";
 var ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./icons/icon-32.png", "./icons/icon-180.png",

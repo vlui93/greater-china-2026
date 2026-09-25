@@ -189,6 +189,18 @@ nav.tabs button[aria-selected="true"]{color:var(--brand)}
 .stop-sum{font-size:13px;color:var(--ink-2);margin-top:5px;line-height:1.42;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .stop-meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+/* How to get to the next stop. Sits inside the card, not between cards, because
+   drag-to-reorder and the up/down buttons treat every child of #stopList as a stop. */
+.stop-leg{display:flex;gap:7px;align-items:flex-start;padding:8px 13px 9px;
+  border-top:1px dashed var(--line);font-size:12.8px;line-height:1.45;color:var(--ink-2)}
+.stop-leg .svgic{width:15px;height:15px;flex:none;margin-top:1.5px;color:var(--accent)}
+.stop-leg b{color:var(--ink);font-weight:650}
+.hotelleg{display:flex;gap:7px;align-items:flex-start;padding:2px 2px 0;margin:2px 0 10px;
+  font-size:12.8px;line-height:1.45;color:var(--ink-2)}
+.hotelleg.after{margin:12px 0 0}
+.hotelleg .svgic{width:15px;height:15px;flex:none;margin-top:1.5px;color:var(--accent)}
+.hotelleg b{color:var(--ink);font-weight:650}
+.faremuted{color:var(--ink-3)}
 .stop-side{flex:none;display:flex;flex-direction:column;gap:6px;align-items:center}
 .navbtn{
   width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
@@ -467,6 +479,101 @@ var DAY_LABELS = {
    them on first connect and caches them on the phone from then on. */
 var EMPTY = { bookings: [], locations: [], schedule: [] };
 
+/* ==========================================================================
+   Getting between stops
+   Worked out from the coordinates rather than stored, so it stays right when a
+   day is reordered. Meter tariffs as published by each city (checked Sep 2026);
+   the range on top allows for traffic and waiting time, which meters also charge.
+   Night surcharges (roughly 23:00–05:00 on the mainland) are not included.
+   ========================================================================== */
+var TAXI = {
+  "Hong Kong": { cur:"HK$", step:5, flag:29, flagKm:2, perKm:10.5, highAt:102.5, perKmHigh:7,
+                 transit:"MTR", car:"taxi" },
+  "Macau":     { cur:"MOP ", step:5, flag:21, flagKm:1.6, perKm:9.1, transit:"bus", car:"taxi" },
+  // Mainland meters add a "return empty" surcharge on long rides (Guangzhou
+  // past 15 km, Chengdu past 10 km...). DiDi does not, and DiDi is what these
+  // lines recommend, so the estimate leaves it out — a street taxi on a long
+  // ride will come in 20–50% higher.
+  "Guangzhou": { cur:"¥", step:1, flag:12, flagKm:3,   perKm:2.6, transit:"metro", car:"DiDi" },
+  "Foshan":    { cur:"¥", step:1, flag:10, flagKm:2.5, perKm:2.8, transit:"metro", car:"DiDi" },
+  "Chongqing": { cur:"¥", step:1, flag:10, flagKm:3,   perKm:2,   transit:"metro", car:"DiDi" },
+  "Chengdu":   { cur:"¥", step:1, flag:9,  flagKm:2,   perKm:1.9, transit:"metro", car:"DiDi" }
+};
+var ROAD_FACTOR = 1.35;   // streets are longer than the crow flies
+var WALK_KMH = 4.5;
+
+function hasXY(l){ var a=Number(l&&l.lat), b=Number(l&&l.lng); return isFinite(a)&&isFinite(b)&&(a!==0||b!==0); }
+function roadKm(a,b){
+  var R=6371, t=function(x){ return x*Math.PI/180; };
+  var dLa=t(b.lat-a.lat), dLo=t(b.lng-a.lng);
+  var h=Math.pow(Math.sin(dLa/2),2)+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.pow(Math.sin(dLo/2),2);
+  return 2*R*Math.asin(Math.sqrt(h))*ROAD_FACTOR;
+}
+function meter(t, km){
+  var rest=Math.max(0, km-t.flagKm);
+  if(t.highAt){                                   // Hong Kong: cheaper per-km once the fare passes a threshold
+    var lowKm=Math.min(rest, (t.highAt-t.flag)/t.perKm);
+    return t.flag + lowKm*t.perKm + (rest-lowKm)*t.perKmHigh;
+  }
+  return t.flag + rest*t.perKm;
+}
+function fareText(t, km){
+  var lo=meter(t,km), hi=lo*1.3;
+  lo=Math.max(t.flag, Math.floor(lo/t.step)*t.step); hi=Math.ceil(hi/t.step)*t.step;
+  return "≈ "+t.cur+lo+(hi>lo?"–"+hi:"");
+}
+function walkText(km){ return "walk ~"+Math.max(1,Math.round(km/WALK_KMH*60))+" min"; }
+function distText(km){ return km<1 ? Math.max(100,Math.round(km*10)*100)+" m" : km.toFixed(1)+" km"; }
+function crossesHarbour(a,b){
+  var lantau=function(l){ return Number(l.lng)<114.05; };
+  if(lantau(a)||lantau(b)) return false;
+  return (Number(a.lat)<22.29) !== (Number(b.lat)<22.29);
+}
+
+/** One line on how to get from a to b: a place's own arrive_by wins, since
+ *  some are reached one way regardless of distance (a cable car, a funicular). */
+function legText(a, b){
+  if(b.arrive_by) return esc(b.arrive_by);
+  if(!hasXY(a)||!hasXY(b)) return "";
+  var km=roadKm(a,b), t=TAXI[a.city]||TAXI[b.city];
+  if(km<0.05) return "next door";
+  if(km<=1) return distText(km)+" · "+walkText(km);
+  if(!t) return distText(km);
+  // A day trip's way home mirrors the way out, which that place's Getting there
+  // describes; quoting a 170 km taxi fare helps no one.
+  if(km>60) return distText(km)+" · head back the way you came — see "+esc(a.name_en)+"'s Getting there";
+  var fare=t.car+' <span class="faremuted">'+fareText(t,km)+'</span>';
+  var mainland=t.cur==="¥";
+  if(km>25 || a.city!==b.city){
+    // Somewhere reached one particular way (a cable car up a mountain) has to
+    // be left the same way before the metro or a car is any use.
+    var out = a.arrive_by ? "leave the way you came in, then " : "long ride — ";
+    return distText(km)+" · "+out+(mainland?"metro or train":t.transit)+", or "+fare;
+  }
+  if(a.city==="Hong Kong" || b.city==="Hong Kong"){
+    var toll=crossesHarbour(a,b) ? " + tunnel toll" : "";
+    return km<=2 ? distText(km)+" · "+walkText(km)+", or "+fare
+                 : distText(km)+" · MTR, or "+fare+toll;
+  }
+  if(a.city==="Macau"){
+    return km<=2 ? distText(km)+" · "+walkText(km)+" — taxis are hard to flag in the old town"
+                 : distText(km)+" · "+fare+", or bus (taxis are scarce — wait at a rank or a hotel)";
+  }
+  // Short mainland hops: a DiDi is a few yuan and door to door, so only
+  // suggest the metro once the distance makes it worth the stairs.
+  if(km<=5) return distText(km)+" · "+fare+(km<=1.6?", or "+walkText(km):"");
+  return distText(km)+" · metro, or "+fare;
+}
+/** The nearest hotel in the same city, for the first and last legs of a day. */
+function hotelFor(loc){
+  var best=null, bestKm=1e9;
+  store.data.locations.forEach(function(h){
+    if(h.type!=="hotel" || h.city!==loc.city || h.id===loc.id || !hasXY(h) || !hasXY(loc)) return;
+    var km=roadKm(h,loc); if(km<bestKm){ best=h; bestKm=km; }
+  });
+  return best;
+}
+
 /* One icon family: 24x24 box, 1.8 stroke, currentColor. No emoji, no font glyphs. */
 function ic(d, cls){ return '<svg class="svgic'+(cls?" "+cls:"")+'" viewBox="0 0 24 24" aria-hidden="true">'+d+'</svg>'; }
 var IC = {
@@ -489,6 +596,11 @@ var IC = {
 };
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui" };
+/* Location fields added after the first release. A blank from the Sheet never
+   overwrites a value this phone already has for them, so notes imported on a
+   phone survive until the backend has the columns to hold them. The cost: to
+   clear one of these, clear it in the app, not by deleting it in the Sheet. */
+var LOCAL_FIRST = ["getting_there", "arrive_by", "tickets"];
 
 /* ---------- tiny utils ---------- */
 function $(s,r){ return (r||document).querySelector(s); }
@@ -615,6 +727,11 @@ var store = {
       .then(function(){ return self.call("all"); })
       .then(function(d){
         if(d && d.locations){
+          var mine={}; (self.data.locations||[]).forEach(function(l){ mine[l.id]=l; });
+          (d.locations||[]).forEach(function(l){
+            var local=mine[l.id]; if(!local) return;
+            LOCAL_FIRST.forEach(function(k){ if(!l[k] && local[k]) l[k]=local[k]; });
+          });
           self.data = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[] };
           self.persist();
         }
@@ -753,8 +870,9 @@ function statusBar(){
     '<span class="syncbadge row" style="gap:6px"></span>'+
     '<button class="btn sm ghost" data-act="sync">Sync</button></div>';
 }
-function stopCard(entry, loc, idx, total){
+function stopCard(entry, loc, idx, total, next){
   var u = navUrls(loc);
+  var leg = next ? legText(loc, next) : "";
   var summary = entry.notes || firstSentence(loc.history_blurb, 120) || (loc.type+" in "+loc.city);
   return ''+
   '<div class="stop" data-sid="'+esc(entry.id)+'" data-lid="'+esc(loc.id)+'">'+
@@ -770,6 +888,7 @@ function stopCard(entry, loc, idx, total){
         '</div>'+
       '</div>'+
     '</button>'+
+    (leg ? '<div class="stop-leg">'+IC.down+'<div>Then <b>'+esc(next.name_en)+'</b> · '+leg+'</div></div>' : '')+
     '<div class="stop-side" style="position:absolute;right:12px;top:12px">'+
       '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(loc.id)+'" aria-label="Navigate with '+esc(u.app)+'">'+IC.nav+'</button>'+
     '</div>'+
@@ -806,12 +925,23 @@ function renderDayInto(el, date, withStrip){
   if(!stops.length){
     body = '<div class="card empty">Nothing planned for this day yet.</div>';
   } else {
-    body = '<div class="stops" id="stopList" data-date="'+date+'">'+stops.map(function(s,i){
-      var loc = store.loc(s.location_id);
+    var locs = stops.map(function(s){ return store.loc(s.location_id); });
+    var first = locs[0], last = locs[locs.length-1];
+    // Kept outside #stopList so drag and the up/down buttons only ever see stop cards.
+    var hotelLine = function(from, to, label, cls){
+      var t = legText(from, to); if(!t) return "";
+      return '<div class="hotelleg'+(cls?" "+cls:"")+'">'+IC.down+'<div>'+label+' · '+t+'</div></div>';
+    };
+    var hFirst = first && first.type!=="hotel" ? hotelFor(first) : null;
+    var hLast  = last && last.type!=="hotel" ? hotelFor(last) : null;
+    body = (hFirst ? hotelLine(hFirst, first, 'From <b>'+esc(hFirst.name_en)+'</b> to <b>'+esc(first.name_en)+'</b>') : "")+
+      '<div class="stops" id="stopList" data-date="'+date+'">'+stops.map(function(s,i){
+      var loc = locs[i];
       if(!loc) return '<div class="card empty small">Missing location <code>'+esc(s.location_id)+'</code> '+
         '<button class="btn sm danger" data-act="remove-orphan" data-sid="'+esc(s.id)+'">Remove</button></div>';
-      return stopCard(s, loc, i, stops.length);
-    }).join("")+'</div>';
+      return stopCard(s, loc, i, stops.length, locs[i+1]||null);
+    }).join("")+'</div>'+
+      (hLast ? hotelLine(last, hLast, 'Back to <b>'+esc(hLast.name_en)+'</b>', "after") : "");
   }
 
   el.innerHTML = statusBar()+strip+body+
@@ -988,6 +1118,11 @@ function locationDetail(id){
       '<div class="big zh">'+esc(l.name_zh)+'</div>'+
       '<div class="en2">'+esc(l.name_en)+(l.city?" · "+esc(l.city):"")+'</div>'+
     '</div>'+
+    ((l.arrive_by||l.getting_there) ? '<div class="section-title">Getting there</div>'+
+      (l.arrive_by ? '<p class="blurb"><b>'+esc(l.arrive_by)+'</b></p>' : "")+
+      paras(l.getting_there).map(function(p){ return '<p class="blurb">'+esc(p)+'</p>'; }).join("") : "")+
+    (l.tickets ? '<div class="section-title">Tickets</div>'+
+      paras(l.tickets).map(function(p){ return '<p class="blurb">'+esc(p)+'</p>'; }).join("") : "")+
     (l.history_blurb ? '<div class="section-title">Background</div>'+
       paras(l.history_blurb).map(function(p){ return '<p class="blurb">'+esc(p)+'</p>'; }).join("") : "")+
     (recs.length ? '<div class="section-title">What to do here</div><ul class="lst">'+listItems(recs)+'</ul>' : "")+
@@ -1016,7 +1151,7 @@ function locationForm(id){
   var isNew = !l;
   l = l || { id:"", name_en:"", name_zh:"", city:"Hong Kong", type:"attraction",
              lat:"", lng:"", nav_app:"google", history_blurb:"", recommendations:"",
-             dishes_to_order:"", souvenirs:"", notes:"" };
+             dishes_to_order:"", souvenirs:"", notes:"", getting_there:"", arrive_by:"", tickets:"" };
   var cities=["Hong Kong","Macau","Guangzhou","Foshan","Chongqing","Chengdu"];
   store.data.locations.forEach(function(x){ if(cities.indexOf(x.city)<0) cities.push(x.city); });
 
@@ -1040,6 +1175,10 @@ function locationForm(id){
     '</div>'+
     '<div class="field"><label>Map app</label>'+sel("nav_app",l.nav_app,["amap","google"])+
       '<div class="hint">Amap 高德 for the mainland, Google Maps for Hong Kong and Macau. Set automatically when you pick a city, unless you change it.</div></div>'+
+    '<div class="field"><label>Getting there</label><textarea id="f_getting_there" style="min-height:80px" placeholder="Nearest station and exit, and when a taxi is better.">'+esc(l.getting_there||"")+'</textarea></div>'+
+    '<div class="field"><label>Best way to arrive</label><input id="f_arrive_by" value="'+esc(l.arrive_by||"")+'" placeholder="Optional — e.g. Peak Tram from Central">'+
+      '<div class="hint">Only for places reached one particular way. It replaces the worked-out walk / taxi line on the day view, so leave it blank for anywhere a taxi or the metro is fine.</div></div>'+
+    '<div class="field"><label>Tickets</label><textarea id="f_tickets" style="min-height:80px" placeholder="Price, where to buy, booking rules, closing days.">'+esc(l.tickets||"")+'</textarea></div>'+
     '<div class="field"><label>Background / history</label><textarea id="f_history_blurb" placeholder="A couple of paragraphs you would happily read out loud.">'+esc(l.history_blurb)+'</textarea></div>'+
     '<div class="field"><label>What to do here</label><textarea id="f_recommendations" placeholder="One per line.">'+esc(l.recommendations)+'</textarea>'+
       '<div class="hint">One item per line.</div></div>'+
@@ -1069,7 +1208,10 @@ function collectLocationForm(existingId){
     recommendations:$("#f_recommendations").value.trim(),
     dishes_to_order:$("#f_dishes_to_order").value.trim(),
     souvenirs:$("#f_souvenirs").value.trim(),
-    notes:$("#f_notes").value.trim()
+    notes:$("#f_notes").value.trim(),
+    getting_there:$("#f_getting_there").value.trim(),
+    arrive_by:$("#f_arrive_by").value.trim(),
+    tickets:$("#f_tickets").value.trim()
   };
   if(!o.name_en && !o.name_zh) return { error:"Give the place a name." };
   if(!o.name_zh) return { error:"The Chinese name is required — you will need it on the ground." };
@@ -1182,6 +1324,10 @@ function settingsForm(){
       '<div class="locrow"><div class="lb"><div class="en">Pull from the Sheet</div>'+
         '<div class="mt">Replace this phone’s copy with what is in the Sheet</div></div>'+
         '<button class="btn sm" data-act="sync">Pull</button></div>'+
+      '<div class="locrow"><div class="lb"><div class="en">Import trip notes</div>'+
+        '<div class="mt">Getting there, tickets and arrival notes from a .json file — kept on this phone</div></div>'+
+        '<button class="btn sm" data-act="import-notes">Import</button></div>'+
+      '<input type="file" id="importFile" accept="application/json,.json,text/plain" hidden>'+
       '<div class="locrow"><div class="lb"><div class="en">Reset this phone</div>'+
         '<div class="mt">Discards the local copy and downloads the trip again</div></div>'+
         '<button class="btn sm danger" data-act="reset-local">Reset</button></div>'+
@@ -1191,6 +1337,37 @@ function settingsForm(){
       store.data.schedule.length+' scheduled stops across '+DAYS.length+' days.<br>'+
       'Trip: 16 Oct – 1 Nov 2026.</p>';
   openSheet("Settings", html);
+  var fi=$("#importFile");
+  if(fi) fi.addEventListener("change", function(){ importNotes(this.files && this.files[0]); });
+}
+
+/* Merges getting_there / arrive_by / tickets into places this phone already
+ * has, matched by id. Local only: the Sheet gets them from a laptop, with
+ * sheet.js push, once the backend has the columns (see README). A full
+ * seed.json works here too — only these three fields are read from it. */
+function importNotes(file){
+  if(!file) return;
+  var r=new FileReader();
+  r.onload=function(){
+    var j; try{ j=JSON.parse(r.result); }catch(e){ toast("That file is not valid JSON"); return; }
+    var rows=(j && j.locations) || [];
+    if(!rows.length){ toast("No places in that file"); return; }
+    var byId={}; store.data.locations.forEach(function(l){ byId[l.id]=l; });
+    var n=0, miss=0;
+    rows.forEach(function(x){
+      var l=x && byId[x.id]; if(!l){ miss++; return; }
+      var changed=false;
+      LOCAL_FIRST.forEach(function(k){
+        if(typeof x[k]==="string" && x[k]!==(l[k]||"")){ l[k]=x[k]; changed=true; }
+      });
+      if(changed) n++;
+    });
+    store.persist(); closeSheet(); render();
+    toast(n ? "Updated "+n+" place"+(n===1?"":"s")+(miss?" · "+miss+" not on this phone":"")
+            : "Nothing new in that file", 3200);
+  };
+  r.onerror=function(){ toast("Could not read that file"); };
+  r.readAsText(file);
 }
 
 /* ==========================================================================
@@ -1278,6 +1455,7 @@ document.addEventListener("click", function(ev){
       });
       return;
     }
+    case "import-notes": { var fi=$("#importFile"); if(fi) fi.click(); return; }
     case "settings": settingsForm(); return;
     case "clearq": ui.q=""; save(LS.ui,ui); renderPlaces(); return;
     case "city": ui.city=t.dataset.v; save(LS.ui,ui); renderPlaces(); return;

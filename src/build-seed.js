@@ -29,6 +29,11 @@ for (const l of locations) {
   if (!l.recommendations) problems.push(`${l.id} no recommendations`);
   if (l.type === 'restaurant' && !l.dishes_to_order) problems.push(`${l.id} restaurant with no dishes`);
   if (typeof l.lat !== 'number' || typeof l.lng !== 'number') problems.push(`${l.id} bad coords`);
+  // Transport and tickets. arrive_by is optional: it is only for places reached
+  // one particular way, and it overrides the worked-out leg on the day view.
+  if (!l.getting_there || l.getting_there.length < 30) problems.push(`${l.id} missing getting_there`);
+  if (l.type === 'attraction' && !l.tickets) problems.push(`${l.id} attraction with no tickets`);
+  if (l.arrive_by && l.arrive_by.length > 140) problems.push(`${l.id} arrive_by is too long for the day view (${l.arrive_by.length} chars)`);
 }
 // This repo is public. Real confirmation numbers belong in the Google Sheet,
 // never in seed data — the Sheet is private to the owner's Google account.

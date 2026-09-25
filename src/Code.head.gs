@@ -23,8 +23,12 @@ var API_KEY = 'CHANGE-ME-to-a-long-random-string';
 
 var TABS = {
   Bookings: ['id', 'type', 'date', 'time', 'description', 'confirmation_no', 'details'],
+  // New columns only ever go on the end: rows already in a Sheet keep their
+  // positions, and sheet_() writes the longer header row the first time it
+  // meets an older tab, so upgrading is paste-and-redeploy with no data move.
   Locations: ['id', 'name_en', 'name_zh', 'city', 'type', 'lat', 'lng', 'nav_app',
-              'history_blurb', 'recommendations', 'dishes_to_order', 'souvenirs', 'notes'],
+              'history_blurb', 'recommendations', 'dishes_to_order', 'souvenirs', 'notes',
+              'getting_there', 'arrive_by', 'tickets'],
   Schedule: ['id', 'date', 'order_index', 'location_id', 'planned_time', 'notes']
 };
 
@@ -131,6 +135,10 @@ function sheet_(name) {
   var sh = ss_().getSheetByName(name);
   if (!sh) { ensureTabs_(); sh = ss_().getSheetByName(name); }
   if (!sh) throw new Error('Missing tab: ' + name);
+  var headers = TABS[name];
+  if (sh.getLastColumn() < headers.length) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  }
   return sh;
 }
 
