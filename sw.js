@@ -4,7 +4,7 @@
 /* Bumped when the shell changes (v2: no trip content baked in; v3: transport
    legs and ticket notes; v4: Prep tab; v5: add a place from a map link; v6: offline adds survive the first sync; v7: map-link names in both languages).
    */
-var CACHE = "gct-v7";
+var CACHE = "gct-v8";
 var ASSETS = [
   "./", "./index.html", "./manifest.json",
   "./icons/icon-32.png", "./icons/icon-180.png",

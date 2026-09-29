@@ -1163,10 +1163,6 @@ function renderPlaces(){
   var types=["All","attraction","restaurant","shopping","hotel"];
   var q=ui.q||"";
 
-  var list=all.filter(function(l){
-    return matches(l,q) && (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type);
-  });
-
   $("#view-places").innerHTML =
     '<div class="searchwrap'+(q?" has":"")+'">'+
       '<span class="mag"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></span>'+
@@ -1181,7 +1177,27 @@ function renderPlaces(){
       return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
         (t==="All"?"All types":esc(t))+'</button>';
     }).join("")+'</div>'+
-    '<div class="spread small muted" style="margin:4px 0 10px">'+
+    '<div id="placeResults">'+placeResults(q)+'</div>';
+
+  var input=$("#q");
+  if(input){
+    input.addEventListener("input", function(){
+      ui.q=this.value; save(LS.ui,ui);
+      // Redraw only the results, never the box being typed in. Replacing a
+      // focused input mid-typing makes iOS commit its pending letter a second
+      // time into the new box (doubled letters), and it breaks pinyin input.
+      var r=$("#placeResults"); if(r) r.innerHTML=placeResults(ui.q);
+      var w=this.closest(".searchwrap"); if(w) w.classList.toggle("has", !!ui.q);
+    });
+  }
+}
+
+function placeResults(q){
+  var all=store.data.locations;
+  var list=all.filter(function(l){
+    return matches(l,q) && (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type);
+  });
+  return '<div class="spread small muted" style="margin:4px 0 10px">'+
       '<span>'+list.length+" of "+all.length+'</span>'+
       '<button class="btn sm ghost" data-act="new-location">+ New place</button></div>'+
     (list.length ? '<div class="loclist">'+list.map(function(l){
@@ -1196,16 +1212,6 @@ function renderPlaces(){
         '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(l.id)+'" aria-label="Navigate">'+IC.nav+'</button>'+
       '</div>';
     }).join("")+'</div>' : '<div class="card empty">No match for &ldquo;'+esc(q)+'&rdquo;.<br><span class="small">Try part of the Chinese name — two or three characters is enough</span></div>');
-
-  var input=$("#q");
-  if(input){
-    input.addEventListener("input", function(){
-      ui.q=this.value; save(LS.ui,ui);
-      var sel=this.selectionStart;
-      renderPlaces();
-      var ni=$("#q"); if(ni){ ni.focus(); try{ ni.setSelectionRange(sel,sel); }catch(e){} }
-    });
-  }
 }
 
 function svgIc(d){ return '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true">'+d+'</svg>'; }
@@ -1875,15 +1881,10 @@ function guessCity(date){
 }
 
 function pickLocationForDay(date){
-  var q="";
-  function body(){
+  function results(q){
     var list=store.data.locations.filter(function(l){ return matches(l,q); });
     var already={}; store.dayStops(date).forEach(function(s){ already[s.location_id]=1; });
-    return '<div class="searchwrap'+(q?" has":"")+'" style="margin-top:12px">'+
-        '<span class="mag"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></span>'+
-        '<input id="pq" type="search" placeholder="Search — English or 中文" value="'+esc(q)+'" autocomplete="off">'+
-      '</div>'+
-      '<div class="loclist">'+list.map(function(l){
+    return '<div class="loclist">'+list.map(function(l){
         return '<button class="locrow" data-act="pick" data-lid="'+esc(l.id)+'" data-date="'+esc(date)+'">'+
           '<div class="thumb">'+typeIcon(l.type)+'</div>'+
           '<div class="lb"><div class="en">'+hilite(l.name_en,q)+'</div>'+
@@ -1893,16 +1894,18 @@ function pickLocationForDay(date){
       }).join("")+'</div>'+
       (list.length?"":'<div class="card empty">No match.</div>');
   }
-  openSheet("Add to Day "+dayNumber(date), body());
-  function wire(){
-    var i=$("#pq"); if(!i) return;
-    i.addEventListener("input", function(){
-      q=this.value; var pos=this.selectionStart;
-      $("#sheetBody").innerHTML=body(); wire();
-      var ni=$("#pq"); if(ni){ ni.focus(); try{ ni.setSelectionRange(pos,pos); }catch(e){} }
-    });
-  }
-  wire();
+  openSheet("Add to Day "+dayNumber(date),
+    '<div class="searchwrap" style="margin-top:12px">'+
+      '<span class="mag"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></span>'+
+      '<input id="pq" type="search" placeholder="Search — English or 中文" autocomplete="off">'+
+    '</div>'+
+    '<div id="pickResults">'+results("")+'</div>');
+  var i=$("#pq");
+  if(i) i.addEventListener("input", function(){
+    // Only the list is redrawn — see renderPlaces for why the box must stay put.
+    var r=$("#pickResults"); if(r) r.innerHTML=results(this.value);
+    var w=this.closest(".searchwrap"); if(w) w.classList.toggle("has", !!this.value);
+  });
 }
 
 function pickDayForLocation(lid){
@@ -2026,10 +2029,21 @@ function importNotes(file){
       if(changed){ cur.updated=nowISO(); ckN++; }
     });
     ((j && j.packing) || []).forEach(function(x){
-      if(!x || !x.id || !x.text || findItem("mine", x.id)) return;
-      packing.items.push({ id:x.id, kind:"pack", section:x.section||"", text:x.text, done:"", removed:"",
-                           order_index:x.order_index||packing.items.length+1 });
-      pkN++;
+      if(!x || !x.id || !x.text) return;
+      var mine=findItem("mine", x.id);
+      if(!mine){
+        packing.items.push({ id:x.id, kind:"pack", section:x.section||"", text:x.text, done:"", removed:"",
+                             order_index:x.order_index||packing.items.length+1 });
+        pkN++; return;
+      }
+      // Same rule as the shared list: a newer file can reword or regroup an
+      // item, but never untick it, and never bring back one you deleted.
+      if(mine.removed) return;
+      var moved=false;
+      ["section","text","order_index"].forEach(function(k){
+        if(x[k]!==undefined && String(x[k])!==String(mine[k]==null?"":mine[k])){ mine[k]=x[k]; moved=true; }
+      });
+      if(moved) pkN++;
     });
     packing.persist();
     store.persist(); closeSheet(); render();
