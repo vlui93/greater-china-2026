@@ -654,6 +654,8 @@ var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui",
    phone survive until the backend has the columns to hold them. The cost: to
    clear one of these, clear it in the app, not by deleting it in the Sheet. */
 var LOCAL_FIRST = ["getting_there", "arrive_by", "tickets"];
+var LOC_FIELDS = ["id","name_en","name_zh","city","type","lat","lng","nav_app","history_blurb",
+                  "recommendations","dishes_to_order","souvenirs","notes"].concat(LOCAL_FIRST);
 
 /* ---------- tiny utils ---------- */
 function $(s,r){ return (r||document).querySelector(s); }
@@ -1975,7 +1977,7 @@ function importNotes(file){
   r.onload=function(){
     var j; try{ j=JSON.parse(r.result); }catch(e){ toast("That file is not valid JSON"); return; }
     var rows=(j && j.locations) || [];
-    if(!rows.length && !(j && (j.checklist||j.packing))){ toast("Nothing to import in that file"); return; }
+    if(!rows.length && !(j && (j.checklist||j.packing||j.schedule||j.schedule_remove))){ toast("Nothing to import in that file"); return; }
     // Places added on a phone have ids nobody else knows, so a row can also
     // name its place. Long-form details only ever fill an empty field — an
     // import never overwrites what someone has written.
@@ -1984,10 +1986,20 @@ function importNotes(file){
       byId[l.id]=l; if(l.name_zh) byZh[l.name_zh]=l; if(l.name_en) byEn[l.name_en.toLowerCase()]=l;
     });
     var DETAILS=["history_blurb","recommendations","dishes_to_order","souvenirs"];
-    var n=0, miss=0, sent=0;
+    var n=0, miss=0, sent=0, added=0;
     rows.forEach(function(x){
       if(!x) return;
       var l=(x.id && byId[x.id]) || (x.name_zh && byZh[x.name_zh]) || (x.name_en && byEn[String(x.name_en).toLowerCase()]);
+      // A row marked "add" is a new place: created here with the file's id, so
+      // an itinerary in the same file can point at it.
+      if(!l && x.add && x.id && x.name_en && x.city){
+        var fresh={};
+        LOC_FIELDS.forEach(function(k){ fresh[k]=(x[k]==null ? "" : x[k]); });
+        store.data.locations.push(fresh);
+        byId[fresh.id]=fresh; if(fresh.name_zh) byZh[fresh.name_zh]=fresh; byEn[fresh.name_en.toLowerCase()]=fresh;
+        store.enqueue("saveLocation", fresh); added++; sent++;
+        return;
+      }
       if(!l){ miss++; return; }
       var changed=false, part={ id:l.id }, detail=false;
       LOCAL_FIRST.forEach(function(k){
@@ -2009,6 +2021,39 @@ function importNotes(file){
       // and queueing all 68 places on every import would stall the first sync.
       if(detail){ store.enqueue("saveLocation", part); sent++; }
     });
+    // Itinerary: stops in the file are added or updated by id, and listed ids
+    // are removed. This rewrites the plan everyone sees, so ask first.
+    var sc=(j && j.schedule) || [], scGone=(j && j.schedule_remove) || [], scN=0;
+    if(sc.length || scGone.length){
+      var have={}; store.data.schedule.forEach(function(s){ have[s.id]=s; });
+      var SCF=["date","order_index","location_id","planned_time","notes"];
+      // Only what would actually change counts, so importing the same file on
+      // a phone that already has the new plan asks nothing and does nothing.
+      sc=sc.filter(function(x){
+        if(!x || !x.id || !store.loc(x.location_id)) return false;
+        var e=have[x.id]; if(!e) return true;
+        return SCF.some(function(k){ return x[k]!==undefined && String(x[k])!==String(e[k]==null?"":e[k]); });
+      });
+      scGone=scGone.filter(function(id){ return have[id]; });
+      var upd=sc.filter(function(x){ return have[x.id]; }).length;
+      var msg="This file also updates the itinerary:\n"+
+        (sc.length-upd ? "• "+(sc.length-upd)+" stops added\n" : "")+
+        (upd ? "• "+upd+" stops moved or retimed\n" : "")+
+        (scGone.length ? "• "+scGone.length+" stops removed\n" : "")+
+        "\nApply it? It changes the plan for everyone once synced.";
+      if((sc.length || scGone.length) && confirm(msg)){
+        sc.forEach(function(x){
+          var e=have[x.id];
+          if(!e){ e={ id:x.id, date:"", order_index:0, location_id:"", planned_time:"", notes:"" }; store.data.schedule.push(e); have[x.id]=e; }
+          SCF.forEach(function(k){ if(x[k]!==undefined) e[k]=x[k]; });
+          store.enqueue("saveScheduleEntry", e); scN++;
+        });
+        scGone.forEach(function(id){
+          store.data.schedule=store.data.schedule.filter(function(s){ return s.id!==id; });
+          store.enqueue("deleteScheduleEntry", { id:id }); scN++;
+        });
+      }
+    }
     // Checklist and packing: add what is new, update wording and dates, and
     // never touch whether something has been ticked — importing a newer file
     // must not undo anyone's progress.
@@ -2048,12 +2093,14 @@ function importNotes(file){
     packing.persist();
     store.persist(); closeSheet(); render();
     var parts=[];
+    if(added) parts.push(added+" new place"+(added===1?"":"s"));
     if(n) parts.push(n+" place"+(n===1?"":"s"));
+    if(scN) parts.push(scN+" itinerary change"+(scN===1?"":"s"));
     if(ckN) parts.push(ckN+" checklist item"+(ckN===1?"":"s"));
     if(pkN) parts.push(pkN+" packing item"+(pkN===1?"":"s"));
     toast(parts.length ? "Updated "+parts.join(" · ")+(miss?" · "+miss+" places not on this phone":"")
                        : "Nothing new in that file", 3400);
-    if((ckN || sent) && store.configured()) store.sync({quiet:true}).catch(function(){});
+    if((ckN || sent || scN) && store.configured()) store.sync({quiet:true}).catch(function(){});
   };
   r.onerror=function(){ toast("Could not read that file"); };
   r.readAsText(file);

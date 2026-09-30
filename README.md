@@ -263,6 +263,13 @@ The content is trip data, so like everything else it is not in this repo. It com
 
 **On a phone:** ⚙ → **Import trip notes** → pick the file. A row can name its place (`name_zh` or `name_en`) instead of giving an `id` — that's how details reach a place someone added on their phone, whose id nobody else knows. Background, what to do, dishes and souvenirs only ever fill an empty field, and they're queued for the Sheet; an import never overwrites what someone wrote. Do it once per phone. The notes are kept on that phone, and a sync never blanks them — even against a backend that does not have the columns yet.
 
+A notes file can also carry new places and itinerary changes, which works on any backend version:
+
+- a `locations` row with `"add": true` and its own `id` (`loc-` plus letters and digits) creates that place, unless one with the same id or name is already there;
+- `schedule` rows add or update stops by `id` (`date`, `order_index`, `location_id`, `planned_time`, `notes`), and `schedule_remove` lists stop ids to delete.
+
+Itinerary changes affect everyone, so the phone lists what would change and asks before applying anything. Import it on one phone, then sync the others. Importing the same file again on a phone that already has the new plan asks nothing and changes nothing.
+
 **Into the Sheet**, from a laptop, so every phone gets them on sync:
 
 1. Build and paste the new backend, **reusing your existing API key** so the phones keep working:
