@@ -125,7 +125,11 @@ If you ever need to re-enable it: **Settings → Pages → Source: Deploy from a
 
 ## 4. Using it
 
-**Today / All Days.** Today opens on whichever day matches the real date, or Day 1 if you are outside the trip window. Each stop is a card: tap the body for the full guide entry, tap the blue or red arrow to navigate.
+**Home.** Before and after the trip, Home opens on the **trip overview**: the cities, a countdown to departure and to the next booking, the route between hotel stays (worked out from the hotels on the schedule, with the train or flight between them from Bookings), counts of hotels, transport and things still to book, and checklist and packing progress. During the trip it opens on today. The chips along the top switch between the overview (*Trip 总览*) and any day.
+
+**Days.** Each stop is a card: tap the body for the full guide entry, tap the arrow to navigate. Stops are grouped into Morning, Afternoon, Evening and Any time by their planned time. A stop shows **Booked · 已订** or **To book · 待订** when the Prep checklist has a task for that place starting "Book", "Reserve" or "Arrange" — ticked or not. A place's page has **Nearby** buttons for coffee, food and toilets, which search around its pin in the same map app as its directions.
+
+**Chinese.** Labels are in English and Chinese side by side, and Chinese text shows in Simplified everywhere, Hong Kong and Macau included. Only the display changes: the Sheet keeps names as entered, edit forms show them as stored, and map searches use the original. Search accepts either form. The conversion table (`t2s.js`) is generated from OpenCC's dictionaries by `src/gen-t2s.mjs`; without it the app shows the original characters.
 
 **Without the Sheet.** A phone that isn't connected works fully: everything is saved on it, and every add, edit and reorder is queued. The badge says how many — *Local only · 3 to upload* — and they're sent, in order, the first time the phone connects. Before this, a place added on an unconnected phone wasn't queued, and the first sync replaced the phone's list with the Sheet's, so it vanished. Such places are now found by their phone-made ids and queued once when the app opens.
 
@@ -162,7 +166,7 @@ Audited against the UX guideline catalogue in [ui-ux-pro-max-skill](https://gith
 - Visible keyboard focus ring on every control via `:focus-visible`, which does not fire on touch
 - `prefers-reduced-motion` respected — the sheet slide, chevron rotation, toast and press transitions all collapse
 - Body and muted text clear 4.5:1 in **both** themes; input borders clear 3:1 as control boundaries
-- Dark mode uses a dark ink on the light brand fills rather than white, which failed at 3.29:1
+- Dark mode uses a dark ink on the light copper fills rather than white; the copper on the dark hero cards is a lighter shade so it clears 4.5:1 in the light theme too
 - Pressed feedback on every tappable surface, including the large cards that previously had none
 - One icon family throughout: inline SVG, 24px box, 1.8 stroke. No emoji and no font glyphs as icons
 
@@ -175,6 +179,8 @@ The only control under 44px is the inline "Set up the backend" text link inside 
 | `index.html` | The whole app — markup, styles and logic, and no trip content | committed |
 | `Code.gs` | Apps Script backend: `doGet`/`doPost` JSON API, `setup()`, `resetAndReseed()`. Empty `SEED`, placeholder key | committed |
 | `sw.js` | Service worker, caches the app shell so it runs with no connection | committed |
+| `t2s.js` | Traditional → Simplified character table (generated from OpenCC, Apache-2.0) | committed |
+| `src/gen-t2s.mjs` | Regenerates `t2s.js`: `npm i --no-save opencc-js@1.4.2 && node src/gen-t2s.mjs` | committed |
 | `manifest.json`, `icons/` | Home-screen icon and standalone display | committed |
 | `src/index.template.html` | What `index.html` is built from | committed |
 | `src/seed.fixture.json` | Invented stand-in content, so the tests pass on a fresh clone | committed |
