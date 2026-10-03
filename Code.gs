@@ -22,13 +22,16 @@ var API_KEY = 'CHANGE-ME-to-a-long-random-string';
 // ---------------------------------------------------------------------------
 
 var TABS = {
-  Bookings: ['id', 'type', 'date', 'time', 'description', 'confirmation_no', 'details'],
   // New columns only ever go on the end: rows already in a Sheet keep their
   // positions, and sheet_() writes the longer header row the first time it
   // meets an older tab, so upgrading is paste-and-redeploy with no data move.
+  // ticket_url / photo_url are links only (an e-ticket page, an image) —
+  // never the ticket or its QR code itself.
+  Bookings: ['id', 'type', 'date', 'time', 'description', 'confirmation_no', 'details',
+             'ticket_url'],
   Locations: ['id', 'name_en', 'name_zh', 'city', 'type', 'lat', 'lng', 'nav_app',
               'history_blurb', 'recommendations', 'dishes_to_order', 'souvenirs', 'notes',
-              'getting_there', 'arrive_by', 'tickets'],
+              'getting_there', 'arrive_by', 'tickets', 'photo_url', 'ticket_url'],
   Schedule: ['id', 'date', 'order_index', 'location_id', 'planned_time', 'notes'],
   // Pre-trip tasks and the shared packing list. kind is 'task' or 'pack';
   // location_id optionally ties a task to a place, so the day briefing can

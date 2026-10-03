@@ -280,10 +280,24 @@ Itinerary changes affect everyone, so the phone lists what would change and asks
 
 1. Build and paste the new backend, **reusing your existing API key** so the phones keep working:
    `node src/prepare-code.js <your current key>` → `./src/copy-code.sh` → paste into Apps Script.
-2. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment* — that gives you a new URL and every phone would need reconnecting. The Locations tab gains its three new columns on its own the first time the script runs. The same update adds the Checklist tab (§10) and lets the app look up short map links (§4).
+2. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment* — that gives you a new URL and every phone would need reconnecting. The Locations tab gains its new columns (`getting_there`, `arrive_by`, `tickets`, `photo_url`, `ticket_url`) and Bookings its `ticket_url` on their own the first time the script runs. The same update adds the Checklist tab (§10) and lets the app look up short map links (§4).
 3. `node src/build-notes.js`, then `node src/sheet.js diff trip-notes.local.json`, then `push`.
 
 Push the notes file, not `src/seed.json`. `push` overwrites every field that differs from the Sheet, and the seed still holds the plan as originally written — pushing it would undo every time, note and reorder you have made in the app since.
+
+### Photos
+
+Each phone finds photos for itself. For every place without one it asks Wikipedia — English first, then Chinese — for the article's lead image, and only takes it when the article's coordinates are within 3 km of the place's pin (or near its city when the place has no pin), so a shared name can't put the wrong building on a card. Disambiguation pages are skipped. The photo shows on the stop card, the place page (with a credit linking the image's file page) and the Locations list.
+
+Photos are saved on the phone for offline use — Wikipedia is blocked on the mainland — in their own cache, capped at 30 MB, which outlasts app updates. They are looked up after each sync and when the phone comes back online, at most once a fortnight per place; ⚙ → **Photos → Find** looks again now and shows how many are saved. Lookups send place names to Wikipedia, and nothing else.
+
+To choose a photo yourself, paste an `https` image link into **Photo link** on Edit place; type `none` for no photo, which also stops the lookup. Photos found automatically stay on each phone; a link you set is saved to the Sheet like any other field, once the backend has the column.
+
+### Ticket links
+
+A booking or a place can carry a link to its ticket — a Trip.com order, a PDF in Google Drive, the airline's page. Only the link is kept, never the ticket or its QR code. Add one from the booking (Bookings → open it → **+ Add ticket link**), from the overview's **Tickets 票夹** row, or from Edit place → **Ticket link**. Links have to be `https`.
+
+They open from the overview's Tickets row (which lists every upcoming flight, train and ferry, so the missing ones are easy to spot), from the booking or place page, and from that day's briefing. Until the backend is upgraded, a link stays on the phone that added it and survives syncs; afterwards it is saved to the Sheet and reaches every phone.
 
 ---
 

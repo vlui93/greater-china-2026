@@ -198,6 +198,25 @@ console.log("10. an older Sheet upgrades itself in place");
   eq([after.name_en, after.name_zh, after.lat], [got.name_en, got.name_zh, got.lat], "and the old fields are untouched");
 }
 
+console.log("10b. link columns: a booking's ticket, a place's photo and ticket");
+{
+  // A Bookings tab as the deployed version left it: 7 columns.
+  const bk = SS.getSheetByName("Bookings");
+  bk.d = bk.d.map(r => r.slice(0, 7));
+  bk.getRange(1, 1, 1, 7).setValues([sandbox.TABS.Bookings.slice(0, 7)]);
+  const b0 = post({key:KEY,action:"bookings"}).data.bookings[0];
+  eq(bk.getRange(1,1,1,sandbox.TABS.Bookings.length).getValues()[0], sandbox.TABS.Bookings, "Bookings header grows to include ticket_url");
+  eq(b0.ticket_url, "", "old bookings read back with no ticket link");
+  ok(post({key:KEY,action:"saveBooking",payload:{id:b0.id, ticket_url:"https://example.com/order/1"}}).ok, "saving only the link succeeds");
+  const b1 = post({key:KEY,action:"bookings"}).data.bookings.find(b=>b.id===b0.id);
+  eq([b1.ticket_url, b1.description, b1.date], ["https://example.com/order/1", b0.description, b0.date], "link stored, booking untouched");
+
+  const L0 = post({key:KEY,action:"locations"}).data.locations[0];
+  ok(post({key:KEY,action:"saveLocation",payload:{id:L0.id, photo_url:"https://upload.example.org/a.jpg", ticket_url:"https://example.com/t"}}).ok, "place links save");
+  const L1 = post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===L0.id);
+  eq([L1.photo_url, L1.ticket_url, L1.name_en], ["https://upload.example.org/a.jpg","https://example.com/t",L0.name_en], "place links persist");
+}
+
 console.log("11. shared checklist");
 {
   ok(Array.isArray(post({key:KEY,action:"all"}).data.checklist), "all includes a checklist array");
