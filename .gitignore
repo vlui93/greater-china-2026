@@ -13,3 +13,6 @@ sheet-backup-*.json
 src/seed.json
 src/seed-*.json
 src/schedule.json
+
+# Sheet backups made before bulk edits (hold booking details)
+src/*backup*.json
