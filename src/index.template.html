@@ -3169,7 +3169,9 @@ var TYPE_COLOR = { attraction:"#c2410c", restaurant:"#b7791f", shopping:"#7c3aed
 var maps = {};   // the map on the Locations tab, and the one in a sheet
 function dropMap(which){
   var m=maps[which]; if(!m) return;
-  if(which==="places"){ try{ var c=m.getCenter(); ui.mapView={ lat:c.lat, lng:c.lng, zoom:m.getZoom(), trip:TRIP.id }; }catch(e){} }
+  // Where the Locations map was left, and for which filter: kept only while
+  // the filter stays the same (a sync redraws it), never across a change
+  if(which==="places"){ try{ var c=m.getCenter(); ui.mapView={ lat:c.lat, lng:c.lng, zoom:m.getZoom(), key:m._filterKey }; }catch(e){} }
   try{ m.remove(); }catch(e){}
   maps[which]=null;
 }
@@ -3212,11 +3214,14 @@ function renderPlacesMap(head){
     '<div class="maplegend">'+["attraction","restaurant","shopping","hotel"].map(function(t){
       return '<span><i style="background:'+TYPE_COLOR[t]+'"></i>'+t+'</span>'; }).join("")+
       '<span class="muted">'+pinned.length+' on the map'+(missing?' · '+missing+' without a pin':'')+'</span></div>';
-  var v=ui.mapView && ui.mapView.trip===TRIP.id ? ui.mapView : null;
+  var key=TRIP.id+"|"+ui.city+"|"+ui.type;
+  var v=ui.mapView && ui.mapView.key===key ? ui.mapView : null;
   var ctr=cityInfo(ui.city!=="All" ? ui.city : (cityOptions()[0]||""));
   showMap("places", $("#placesMap"), pinned.map(function(l){
     return { lat:+l.lat, lng:+l.lng, kind:"place", color:TYPE_COLOR[l.type]||TYPE_COLOR.attraction, title:l.name_en, popup:mapPopup(l) };
-  }), { view: v, centre: ctr && hasXY(ctr) ? [+ctr.lat, +ctr.lng] : null });
+  }), { view: v, centre: ctr && hasXY(ctr) ? [+ctr.lat, +ctr.lng] : null }).then(function(){
+    if(maps.places) maps.places._filterKey=key;
+  });
 }
 /** The day's stops in order, numbered, with the way from and back to the hotel. */
 function dayMap(date){
