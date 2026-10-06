@@ -27,12 +27,15 @@ var TABS = {
   // meets an older tab, so upgrading is paste-and-redeploy with no data move.
   // ticket_url / photo_url are links only (an e-ticket page, an image) —
   // never the ticket or its QR code itself.
+  // trip_id ties a row to a trip in Trips; blank means the default trip, so
+  // every row written before trips existed stays where it was. tz is the time
+  // zone a booking's time is in (blank: the trip's).
   Bookings: ['id', 'type', 'date', 'time', 'description', 'confirmation_no', 'details',
-             'ticket_url'],
+             'ticket_url', 'trip_id', 'tz'],
   Locations: ['id', 'name_en', 'name_zh', 'city', 'type', 'lat', 'lng', 'nav_app',
               'history_blurb', 'recommendations', 'dishes_to_order', 'souvenirs', 'notes',
-              'getting_there', 'arrive_by', 'tickets', 'photo_url', 'ticket_url'],
-  Schedule: ['id', 'date', 'order_index', 'location_id', 'planned_time', 'notes'],
+              'getting_there', 'arrive_by', 'tickets', 'photo_url', 'ticket_url', 'trip_id'],
+  Schedule: ['id', 'date', 'order_index', 'location_id', 'planned_time', 'notes', 'trip_id'],
   // Pre-trip tasks and the shared packing list. kind is 'task' or 'pack';
   // location_id optionally ties a task to a place, so the day briefing can
   // say "not booked yet". Personal packing never comes here — it stays on
@@ -40,7 +43,19 @@ var TABS = {
   // sets `removed` rather than dropping the row, so a phone that still has
   // the item cannot bring it back.
   Checklist: ['id', 'kind', 'section', 'text', 'due', 'location_id', 'done', 'done_by', 'order_index',
-              'updated', 'removed']
+              'updated', 'removed', 'trip_id'],
+  // One row per trip. zh_script: 'simplified' shows Chinese in Simplified,
+  // 'original' as written. is_default marks the trip that rows with no
+  // trip_id belong to.
+  Trips: ['id', 'name', 'name_zh', 'start', 'end', 'tz', 'zh_script', 'is_default', 'notes', 'updated'],
+  // Shared by every trip, matched to places by name. region is cn (mainland
+  // China: Amap, shifted map grid), hk, mo or blank. The fare columns are the
+  // taxi meter, in the local currency, for the getting-around estimates.
+  Cities: ['id', 'name', 'name_zh', 'lat', 'lng', 'tz', 'region', 'map_app',
+           'currency', 'round', 'flag', 'flag_km', 'per_km', 'high_at', 'per_km_high', 'transit', 'car'],
+  // An optional label per day ("Macau day trip"); without one the app names
+  // the day after its cities.
+  Days: ['id', 'trip_id', 'date', 'label']
 };
 
 var NUMERIC = { lat: true, lng: true, order_index: true };
@@ -116,6 +131,14 @@ function route_(action, req) {
     case 'checklist':           return { checklist: readTab_('Checklist') };
     case 'saveChecklistItem':   return { item: upsert_('Checklist', payload, 'ck') };
     case 'deleteChecklistItem': return { deleted: remove_('Checklist', payload && payload.id) };
+
+    case 'trips':               return { trips: readTab_('Trips') };
+    case 'saveTrip':            return { trip: upsert_('Trips', payload, 'trip') };
+    case 'deleteTrip':          return deleteTrip_(payload);
+    case 'saveCity':            return { city: upsert_('Cities', payload, 'city') };
+    case 'deleteCity':          return { deleted: remove_('Cities', payload && payload.id) };
+    case 'saveDay':             return { day: upsert_('Days', payload, 'day') };
+    case 'deleteDay':           return { deleted: remove_('Days', payload && payload.id) };
 
     case 'reseed':              return seedAll_(true);
     case 'setupTabs':           return ensureTabs_();
@@ -238,6 +261,9 @@ function readAll_() {
     locations: readTab_('Locations'),
     schedule: readTab_('Schedule'),
     checklist: readTab_('Checklist'),
+    trips: readTab_('Trips'),
+    cities: readTab_('Cities'),
+    days: readTab_('Days'),
     fetched_at: new Date().toISOString()
   };
 }
@@ -327,6 +353,30 @@ function setDayOrder_(payload) {
     if (pos[id]) { sh.getRange(i + 2, 3).setValue(pos[id]); updated++; }
   }
   return { date: payload.date, updated: updated };
+}
+
+/** Deletes a trip and every row that belongs to it. The default trip can't
+ *  be deleted: rows with no trip_id belong to it, and there would be nowhere
+ *  for them to go. */
+function deleteTrip_(payload) {
+  var id = String(payload && payload.id || '');
+  if (!id) throw new Error('No id supplied.');
+  var r = rowIndexById_('Trips', id);
+  if (r < 0) return { id: id, removed: false };
+  var t = sheet_('Trips').getRange(r, 1, 1, TABS.Trips.length).getValues()[0];
+  var dflt = String(t[TABS.Trips.indexOf('is_default')]).trim().toLowerCase();
+  if (dflt && dflt !== '0' && dflt !== 'false') throw new Error('The default trip cannot be deleted.');
+  var counts = {};
+  ['Bookings', 'Locations', 'Schedule', 'Checklist', 'Days'].forEach(function (name) {
+    var sh = sheet_(name), col = TABS[name].indexOf('trip_id') + 1, last = sh.getLastRow(), n = 0;
+    if (last >= 2) {
+      var v = sh.getRange(2, col, last - 1, 1).getValues();
+      for (var i = v.length - 1; i >= 0; i--) if (String(v[i][0]) === id) { sh.deleteRow(i + 2); n++; }
+    }
+    counts[name] = n;
+  });
+  sheet_('Trips').deleteRow(r);
+  return { id: id, removed: true, rows_removed: counts };
 }
 
 // ===========================================================================

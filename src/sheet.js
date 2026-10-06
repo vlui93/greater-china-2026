@@ -48,7 +48,8 @@ async function call(action, payload) {
   return j.data;
 }
 
-const ACTION = { bookings: 'saveBooking', locations: 'saveLocation', schedule: 'saveScheduleEntry',
+const ACTION = { trips: 'saveTrip', cities: 'saveCity', days: 'saveDay',
+                 bookings: 'saveBooking', locations: 'saveLocation', schedule: 'saveScheduleEntry',
                  checklist: 'saveChecklistItem' };
 
 async function main() {
@@ -107,7 +108,7 @@ async function main() {
 
     let planned = 0;
     const plan = [];
-    for (const tab of ['bookings', 'locations', 'schedule', 'checklist']) {
+    for (const tab of Object.keys(ACTION)) {
       if (!live[tab]) {
         // A backend from before this tab existed returns nothing for it, and
         // would silently drop every row sent. Stop before sending anything.

@@ -211,6 +211,7 @@ nav.tabs .tz{font-size:10px;font-weight:500;line-height:1;opacity:.85;margin-top
   background:var(--brand);color:var(--on-brand);flex:none;
 }
 .navbtn.g{background:var(--nav-g);color:var(--on-nav-g)}
+.navbtn.p{background:var(--ink);color:var(--bg)}
 .navbtn:active{filter:brightness(.92)}
 .stop-tools{
   display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);
@@ -553,8 +554,8 @@ a.btn{text-decoration:none}
 
 <div id="gate" hidden>
   <div class="gatebox">
-    <h1>Greater China</h1>
-    <p class="gsub">16 Oct – 1 Nov 2026</p>
+    <h1>Trip Companion</h1>
+    <p class="gsub">Your trips, on your phone</p>
     <p class="gblurb">This page ships empty on purpose — the repo it is served from is
       public. Every place, booking and day lives in your Google Sheet. Paste the web app
       URL and the API key once and the trip downloads to this phone, where it stays and
@@ -602,9 +603,17 @@ a.btn{text-decoration:none}
    matters because Google services are not reachable from mainland China.
    ========================================================================== */
 
-var TRIP_START = "2026-10-16";
-var TRIP_END   = "2026-11-01";
+/* Trips. The Sheet's Trips tab lists them, with rows in the other tabs
+   tagged by trip_id (blank = the default trip). Before the backend has that
+   tab, this is the one trip there is. TRIP is whichever one is open. */
+var LEGACY_TRIP = { id:"gc2026", name:"Greater China", name_zh:"", start:"2026-10-16", end:"2026-11-01",
+                    tz:"Asia/Shanghai", zh_script:"", is_default:"1", notes:"" };
+var TRIP = LEGACY_TRIP;
+var TRIP_START = TRIP.start;
+var TRIP_END   = TRIP.end;
 
+/* Day names for that first trip, from before days could be renamed in the
+   app. A Days row in the Sheet wins over these. */
 var DAY_LABELS = {
   "2026-10-16":"Sydney → Hong Kong",
   "2026-10-17":"Hong Kong",
@@ -628,7 +637,8 @@ var DAY_LABELS = {
 /* Nothing about the trip ships in this file. The repo is public, so the
    locations, bookings and schedule live only in the Sheet; the app pulls
    them on first connect and caches them on the phone from then on. */
-var EMPTY = { bookings: [], locations: [], schedule: [], checklist: [] };
+var EMPTY = { bookings: [], locations: [], schedule: [], checklist: [], trips: [], cities: [], days: [] };
+var TRIP_TABS = ["bookings", "locations", "schedule", "checklist"];   // rows that belong to one trip
 
 /* ==========================================================================
    Getting between stops
@@ -650,6 +660,62 @@ var TAXI = {
   "Chongqing": { cur:"¥", step:1, flag:10, flagKm:3,   perKm:2,   transit:"metro", car:"DiDi" },
   "Chengdu":   { cur:"¥", step:1, flag:9,  flagKm:2,   perKm:1.9, transit:"metro", car:"DiDi" }
 };
+/* Cities: a centre, a time zone, a region, the map app that works there and,
+   when known, taxi fares. The Sheet's Cities tab adds cities and overrides any
+   field of these, which are the first trip's, kept so the app works before the
+   backend has that tab. Regions: cn (mainland China), hk, mo, tw, or blank. */
+var LEGACY_CITIES = [
+  ["Hong Kong","香港",22.30,114.17,"Asia/Hong_Kong","hk"],
+  ["Macau","澳门",22.17,113.55,"Asia/Macau","mo"],
+  ["Guangzhou","广州",23.13,113.26,"Asia/Shanghai","cn"],
+  ["Foshan","佛山",23.02,113.12,"Asia/Shanghai","cn"],
+  ["Chongqing","重庆",29.56,106.55,"Asia/Shanghai","cn"],
+  ["Chengdu","成都",30.66,104.07,"Asia/Shanghai","cn"],
+  ["Sydney","悉尼",-33.87,151.21,"Australia/Sydney",""]
+].map(function(c){
+  return { id:"", name:c[0], name_zh:c[1], lat:c[2], lng:c[3], tz:c[4], region:c[5], map_app:"", taxi:TAXI[c[0]]||null };
+});
+var CHINA_REGIONS = { cn:1, hk:1, mo:1 };
+var _cities=null, _citiesSrc=null;
+function cityList(){
+  var src=store.raw && store.raw.cities;
+  if(_cities && _citiesSrc===src) return _cities;
+  var by={}, out=[];
+  LEGACY_CITIES.forEach(function(c){ var o=Object.assign({}, c); by[c.name.toLowerCase()]=o; out.push(o); });
+  (src||[]).forEach(function(r){
+    var name=String(r && r.name || "").trim(); if(!name) return;
+    var o=by[name.toLowerCase()];
+    if(!o){ o={ id:"", name:name, name_zh:"", lat:"", lng:"", tz:"", region:"", map_app:"", taxi:null }; by[name.toLowerCase()]=o; out.push(o); }
+    o.id=r.id||o.id;
+    ["name_zh","tz","region","map_app"].forEach(function(f){ var v=String(r[f]==null?"":r[f]).trim(); if(v) o[f]=v; });
+    if(r.lat!=="" && r.lng!=="" && isFinite(parseFloat(r.lat)) && isFinite(parseFloat(r.lng))){ o.lat=+r.lat; o.lng=+r.lng; }
+    var flag=parseFloat(r.flag), per=parseFloat(r.per_km);
+    if(isFinite(flag) && isFinite(per)){
+      o.taxi={ cur:String(r.currency||""), step:parseFloat(r.round)||1, flag:flag, flagKm:parseFloat(r.flag_km)||0,
+               perKm:per, transit:r.transit||"public transport", car:r.car||"taxi" };
+      var ha=parseFloat(r.high_at), ph=parseFloat(r.per_km_high);
+      if(isFinite(ha) && isFinite(ph)){ o.taxi.highAt=ha; o.taxi.perKmHigh=ph; }
+    } else if(o.taxi && (r.transit || r.car)){
+      o.taxi=Object.assign({}, o.taxi, r.transit?{transit:r.transit}:{}, r.car?{car:r.car}:{});
+    }
+    if(!String(r.region||"").trim() && o.region==="" && hasXY(o)) o.region=regionCode(o.lat,o.lng);
+  });
+  _citiesSrc=src;
+  return (_cities=out);
+}
+function cityInfo(name){
+  var k=String(name||"").toLowerCase(), l=cityList();
+  for(var i=0;i<l.length;i++) if(l[i].name.toLowerCase()===k) return l[i];
+  return null;
+}
+function taxiFor(city){ var c=cityInfo(city); return c ? c.taxi : null; }
+function cityRegion(city){ var c=cityInfo(city); return c ? c.region||"" : ""; }
+/** The map app a new place in this city opens in: Amap on the mainland, where
+ *  Google is blocked and its map sits off; Google Maps anywhere else. */
+function mapAppFor(city){
+  var c=cityInfo(city);
+  return c && c.map_app ? c.map_app : (c && c.region==="cn" ? "amap" : "google");
+}
 var ROAD_FACTOR = 1.35;   // streets are longer than the crow flies
 var WALK_KMH = 4.5;
 
@@ -686,7 +752,8 @@ function crossesHarbour(a,b){
 function legText(a, b){
   if(b.arrive_by) return escz(b.arrive_by);
   if(!hasXY(a)||!hasXY(b)) return "";
-  var km=roadKm(a,b), t=TAXI[a.city]||TAXI[b.city];
+  var km=roadKm(a,b), t=taxiFor(a.city)||taxiFor(b.city);
+  var ra=cityRegion(a.city), rb=cityRegion(b.city);
   if(km<0.05) return "next door";
   if(km<=1) return distText(km)+" · "+walkText(km);
   if(!t) return distText(km);
@@ -694,26 +761,29 @@ function legText(a, b){
   // describes; quoting a 170 km taxi fare helps no one.
   if(km>60) return distText(km)+" · head back the way you came — see "+esc(a.name_en)+"'s Getting there";
   var fare=t.car+' <span class="faremuted">'+fareText(t,km)+'</span>';
-  var mainland=t.cur==="¥";
+  var mainland=(taxiFor(a.city) ? ra : rb)==="cn";
   if(km>25 || a.city!==b.city){
     // Somewhere reached one particular way (a cable car up a mountain) has to
     // be left the same way before the metro or a car is any use.
     var out = a.arrive_by ? "leave the way you came in, then " : "long ride — ";
     return distText(km)+" · "+out+(mainland?"metro or train":t.transit)+", or "+fare;
   }
-  if(a.city==="Hong Kong" || b.city==="Hong Kong"){
+  if(ra==="hk" || rb==="hk"){
     var toll=crossesHarbour(a,b) ? " + tunnel toll" : "";
     return km<=2 ? distText(km)+" · "+walkText(km)+", or "+fare
                  : distText(km)+" · MTR, or "+fare+toll;
   }
-  if(a.city==="Macau"){
+  if(ra==="mo"){
     return km<=2 ? distText(km)+" · "+walkText(km)+" — taxis are hard to flag in the old town"
                  : distText(km)+" · "+fare+", or bus (taxis are scarce — wait at a rank or a hotel)";
   }
+  // Elsewhere, taxis cost real money: walk, or public transport first
+  if(!mainland) return km<=2 ? distText(km)+" · "+walkText(km)+", or "+fare
+                             : distText(km)+" · "+t.transit+", or "+fare;
   // Short mainland hops: a DiDi is a few yuan and door to door, so only
   // suggest the metro once the distance makes it worth the stairs.
   if(km<=5) return distText(km)+" · "+fare+(km<=1.6?", or "+walkText(km):"");
-  return distText(km)+" · metro, or "+fare;
+  return distText(km)+" · "+(t.transit||"metro")+", or "+fare;
 }
 /** The nearest hotel in the same city, for the first and last legs of a day. */
 function hotelFor(loc){
@@ -748,7 +818,7 @@ var IC = {
 };
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
-           packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1" };
+           packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips" };
 /* Location fields added after the first release. A blank from the Sheet never
    overwrites a value this phone already has for them, so notes imported on a
    phone survive until the backend has the columns to hold them. The cost: to
@@ -769,16 +839,18 @@ var T2S_MAP=(function(){
   if(t && t[0] && t[0].length===t[1].length) for(var i=0;i<t[0].length;i++) m[t[0][i]]=t[1][i];
   return m;
 })();
-function zhs(s){
+function toSimp(s){
   s=String(s==null?"":s);
   if(!/[\u4e00-\u9fff]/.test(s)) return s;
   var o=""; for(var i=0;i<s.length;i++){ var c=s[i]; o+=T2S_MAP[c]||c; } return o;
 }
+/* Shown in Simplified on trips that take in China (the trip's zh_script can
+   say otherwise); anywhere else Chinese is shown as written. */
+var ZH_SIMPLIFY = true;
+function zhs(s){ return ZH_SIMPLIFY ? toSimp(s) : String(s==null?"":s); }
 function escz(s){ return esc(zhs(s)); }
 var TYPE_ZH={ attraction:"景点", restaurant:"餐厅", shopping:"购物", hotel:"酒店" };
-var CITY_ZH={ "Hong Kong":"香港", "Macau":"澳门", "Guangzhou":"广州", "Foshan":"佛山",
-              "Chongqing":"重庆", "Chengdu":"成都", "Sydney":"悉尼" };
-function cityZh(c){ return CITY_ZH[c]||""; }
+function cityZh(c){ var i=cityInfo(c); return i ? i.name_zh||"" : ""; }
 function lines(s){ return String(s||"").split(/\r?\n/).map(function(x){return x.trim();}).filter(Boolean); }
 function paras(s){ return String(s||"").split(/\n\s*\n/).map(function(x){return x.trim();}).filter(Boolean); }
 function load(k,d){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }
@@ -819,16 +891,19 @@ function toast(msg,ms){
    ========================================================================== */
 var store = {
   cfg: load(LS.cfg, { url:"", key:"" }),
-  data: null,
+  raw: null,     // every trip's rows, plus trips, cities and day names: what is cached
+  data: null,    // the open trip's bookings, places, stops and checklist: what is shown
+  supportsTrips: !!load(LS.trips, false),   // the backend has the Trips, Cities and Days tabs
   queue: load(LS.queue, []),
   online: false,
   syncing: false,
 
   init: function(){
     var cached = load(LS.cache, null);
-    this.data = (cached && cached.locations) ? cached : JSON.parse(JSON.stringify(EMPTY));
-    if(!Array.isArray(this.data.checklist)) this.data.checklist = [];
+    this.raw = (cached && cached.locations) ? cached : JSON.parse(JSON.stringify(EMPTY));
+    Object.keys(EMPTY).forEach(function(k){ if(!Array.isArray(store.raw[k])) store.raw[k]=[]; });
     this.rescueLocalOnly();
+    applyTrip();
   },
   /* Before writes were queued while not connected, places and stops added on
      an unconnected phone were never queued, and the first sync would have
@@ -839,17 +914,26 @@ var store = {
     if(this.configured() || load(LS.rescued, false)) return;
     var queued={}, self=this, n=0, made=/^(loc|sc)-(?=[0-9a-z]*[a-z])[0-9a-z]{6,}$/;
     this.queue.forEach(function(j){ if(j.payload && j.payload.id) queued[j.payload.id]=1; });
-    this.data.locations.forEach(function(l){
+    this.raw.locations.forEach(function(l){
       if(made.test(l.id) && !queued[l.id]){ self.queue.push({ action:"saveLocation", payload:l, ts:Date.now() }); n++; }
     });
-    this.data.schedule.forEach(function(e){
+    this.raw.schedule.forEach(function(e){
       if(made.test(e.id) && !queued[e.id]){ self.queue.push({ action:"saveScheduleEntry", payload:e, ts:Date.now() }); n++; }
     });
     save(LS.queue, this.queue); save(LS.rescued, true);
   },
   configured: function(){ return !!(this.cfg.url && this.cfg.key); },
-  hasData: function(){ return !!(this.data && this.data.locations && this.data.locations.length); },
-  persist: function(){ save(LS.cache, this.data); },
+  hasData: function(){ return !!(this.raw && this.raw.locations && this.raw.locations.length); },
+  /* The open trip's rows go back into the full set; anything new in them is
+     tagged with the trip first, so it can't drift into another one. */
+  persist: function(){
+    var raw=this.raw, data=this.data, cur=TRIP.id, dflt=defaultTripId();
+    if(data) TRIP_TABS.forEach(function(k){
+      (data[k]||[]).forEach(function(r){ if(!r.trip_id && cur!==dflt) r.trip_id=cur; });
+      raw[k]=raw[k].filter(function(r){ return tripOf(r)!==cur; }).concat(data[k]||[]);
+    });
+    save(LS.cache, raw);
+  },
 
   loc: function(id){
     for(var i=0;i<this.data.locations.length;i++) if(this.data.locations[i].id===id) return this.data.locations[i];
@@ -878,6 +962,7 @@ var store = {
   },
 
   enqueue: function(action,payload){
+    tagTrip(action,payload);
     this.queue.push({ action:action, payload:payload, ts:Date.now() });
     save(LS.queue, this.queue);
     updateStatus();
@@ -905,6 +990,7 @@ var store = {
 
   /* write-through: apply locally, then send (or queue if offline) */
   write: function(action, payload, applyLocal){
+    tagTrip(action,payload);
     applyLocal();
     this.persist();
     // Not connected: queue it anyway. The first sync after connecting takes
@@ -929,17 +1015,28 @@ var store = {
       .then(function(){ return self.call("all"); })
       .then(function(d){
         if(d && d.locations){
-          var mine={}; (self.data.locations||[]).forEach(function(l){ mine[l.id]=l; });
+          self.persist();
+          var raw=self.raw;
+          var mine={}; (raw.locations||[]).forEach(function(l){ mine[l.id]=l; });
           (d.locations||[]).forEach(function(l){
             var local=mine[l.id]; if(!local) return;
             LOCAL_FIRST.forEach(function(k){ if(!l[k] && local[k]) l[k]=local[k]; });
           });
           // Same for a booking's ticket link, which an older backend can't store
-          var myBk={}; (self.data.bookings||[]).forEach(function(b){ myBk[b.id]=b; });
-          (d.bookings||[]).forEach(function(b){ var m=myBk[b.id]; if(m && !b.ticket_url && m.ticket_url) b.ticket_url=m.ticket_url; });
-          var ck = mergeChecklist(self.data.checklist||[], d.checklist);
-          self.data = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[],
-                        checklist:ck.items };
+          var myBk={}; (raw.bookings||[]).forEach(function(b){ myBk[b.id]=b; });
+          (d.bookings||[]).forEach(function(b){ var m=myBk[b.id]; if(!m) return;
+            if(!b.ticket_url && m.ticket_url) b.ticket_url=m.ticket_url;
+            if(!b.tz && m.tz) b.tz=m.tz; });
+          var ck = mergeChecklist(raw.checklist||[], d.checklist);
+          // An older backend sends no trips, cities or day names: keep this phone's
+          self.supportsTrips = Array.isArray(d.trips); save(LS.trips, self.supportsTrips);
+          self.raw = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[],
+                       checklist:ck.items,
+                       trips:  self.supportsTrips ? d.trips : raw.trips||[],
+                       cities: Array.isArray(d.cities) ? d.cities : raw.cities||[],
+                       days:   Array.isArray(d.days) ? d.days : raw.days||[] };
+          self.data = null;   // rebuilt from raw: persist must not fold the old copy back in
+          applyTrip();
           self.persist();
           if(ck.upload.length){
             ck.upload.forEach(function(i){ self.enqueue("saveChecklistItem", i); });
@@ -989,10 +1086,83 @@ function saveChecklistItem(item){
     if(!found) store.data.checklist.push(item);
   });
 }
+/* Each trip has its own packing list on this phone; the first trip keeps the
+   original key, so a list made before trips existed stays where it was. */
 var packing = {
+  key: LS.packing,
   items: load(LS.packing, []),
-  persist: function(){ save(LS.packing, this.items); }
+  load: function(){
+    this.key = TRIP.id===defaultTripId() ? LS.packing : LS.packing+"."+TRIP.id;
+    this.items = load(this.key, []);
+  },
+  persist: function(){ save(this.key, this.items); }
 };
+
+/* ==========================================================================
+   Trips
+   One trip is open at a time. store.data holds its rows; store.raw holds all.
+   A row's trip_id says which trip it belongs to, and a blank one means the
+   default trip, which is how every row written before trips existed reads.
+   ========================================================================== */
+function allTrips(){
+  var list=((store.raw && store.raw.trips) || []).filter(function(t){ return t && t.id; }).map(function(t){
+    var o=Object.assign({}, t.id===LEGACY_TRIP.id ? LEGACY_TRIP : {});
+    Object.keys(t).forEach(function(k){ var v=t[k]==null?"":String(t[k]).trim(); if(v || !(k in o)) o[k]=v; });
+    return o;
+  }).filter(function(t){ return /^\d{4}-\d{2}-\d{2}$/.test(t.start) && /^\d{4}-\d{2}-\d{2}$/.test(t.end); });
+  return list.length ? list : [LEGACY_TRIP];
+}
+function defaultTripId(){
+  var t=allTrips(), d=t.filter(function(x){ return x.is_default && !/^(0|false)$/i.test(x.is_default); })[0];
+  return (d||t[0]).id;
+}
+function tripOf(row){ return (row && row.trip_id) || defaultTripId(); }
+function curTrip(){
+  var t=allTrips(), want=(typeof ui!=="undefined" && ui && ui.trip) || "";
+  return t.filter(function(x){ return x.id===want; })[0] || t.filter(function(x){ return x.id===defaultTripId(); })[0];
+}
+var TRIP_ACTIONS = { saveBooking:1, saveLocation:1, saveScheduleEntry:1, saveChecklistItem:1 };
+/** New rows go into the open trip. The default trip's stay untagged, as before. */
+function tagTrip(action, p){
+  if(p && TRIP_ACTIONS[action] && !p.trip_id && TRIP.id!==defaultTripId()) p.trip_id=TRIP.id;
+}
+/** Regions the open trip takes in, read off its places' cities (or, with no
+ *  places yet, its time zone). China ones switch on the China guide and
+ *  Simplified Chinese. */
+function tripRegions(){
+  var seen={};
+  (store.data ? store.data.locations : []).forEach(function(l){ var r=cityRegion(l.city); if(r) seen[r]=1; });
+  if(!Object.keys(seen).length && /^Asia\/(Shanghai|Chongqing|Urumqi|Hong_Kong|Macau)$/.test(TRIP.tz||"")) seen.cn=1;
+  return seen;
+}
+function tripHasChina(){ var r=tripRegions(); return Object.keys(r).some(function(k){ return CHINA_REGIONS[k]; }); }
+function tripTz(){
+  if(TRIP.tz) return TRIP.tz;
+  try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }catch(e){ return "UTC"; }
+}
+/** Opens the trip in ui.trip: its dates, its rows, its packing list, its script. */
+function applyTrip(){
+  TRIP = curTrip();
+  TRIP_START = TRIP.start;
+  TRIP_END = TRIP.end>=TRIP.start ? TRIP.end : TRIP.start;
+  DAYS = tripDays();
+  var cur=TRIP.id;
+  store.data = {};
+  TRIP_TABS.forEach(function(k){ store.data[k]=store.raw[k].filter(function(r){ return tripOf(r)===cur; }); });
+  packing.load();
+  var script = TRIP.zh_script || (tripHasChina() ? "simplified" : "original");
+  ZH_SIMPLIFY = script==="simplified";
+  if(!ui.day || DAYS.indexOf(ui.day)<0) ui.day = defaultDay();
+  if(applyTrip.open!==cur){ applyTrip.open=cur; homeMode = tripPhase()==="during" ? "day" : "trip"; }
+  document.title = TRIP.name || "Trip";
+}
+function switchTrip(id){
+  store.persist();
+  ui.trip=id; ui.city="All"; ui.day=null; save(LS.ui, ui);
+  applyTrip(); store.persist();
+  closeSheet(); setView("today");
+  toast("Opened "+TRIP.name);
+}
 
 /* ==========================================================================
    Navigation into Amap / Google Maps
@@ -1006,6 +1176,7 @@ function navUrls(loc){
   var zh = loc.name_zh || loc.name_en || "";
   var q  = encodeURIComponent(zh + (loc.city ? " " + loc.city : ""));
   var nm = encodeURIComponent(zh);
+  if(loc.nav_app === "apple") return appleUrls(loc, q, nm, lat, lng, hasXY);
   if(loc.nav_app === "amap"){
     return {
       app:"Amap 高德",
@@ -1028,6 +1199,11 @@ function navUrls(loc){
     search: "https://www.google.com/maps/search/?api=1&query="+q,
     cls:"g"
   };
+}
+/** Apple Maps: no app check needed on an iPhone, and the https link opens it. */
+function appleUrls(loc, q, nm, lat, lng, hasXY){
+  var u = hasXY ? "?q="+nm+"&ll="+lat+","+lng : "?q="+q;
+  return { app:"Apple Maps", scheme:"maps://"+u, web:"https://maps.apple.com/"+u, search:"https://maps.apple.com/?q="+q, cls:"p" };
 }
 
 /** Try the native scheme; if we are still here and visible ~1.4s later the
@@ -1054,6 +1230,7 @@ function nearbyUrls(loc, kind){
              web:"https://uri.amap.com/search?keyword="+kw+"&center="+g[1].toFixed(6)+","+g[0].toFixed(6)+"&radius=1000&callnative=1&src=TripCompanion" };
   }
   var q=encodeURIComponent(k.google);
+  if(loc.nav_app==="apple") return { scheme:"maps://?q="+q+"&sll="+lat+","+lng, web:"https://maps.apple.com/?q="+q+"&sll="+lat+","+lng };
   return { scheme:"comgooglemaps://?q="+q+"&center="+lat+","+lng+"&zoom=16",
            web:"https://www.google.com/maps/search/"+q+"/@"+lat+","+lng+",16z" };
 }
@@ -1104,9 +1281,8 @@ function photoNear(loc, c){
   if(!c || !isFinite(+c.lat) || !isFinite(+c.lon)) return false;
   var p={ lat:+c.lat, lng:+c.lon };
   if(hasXY(loc)) return roadKm(loc,p)/ROAD_FACTOR <= 3;
-  var ctr=CITY_CENTRES.concat([["Hong Kong",22.30,114.17],["Macau",22.17,113.55]])
-    .filter(function(x){ return x[0]===loc.city; })[0];
-  return !!ctr && roadKm({lat:ctr[1],lng:ctr[2]},p)/ROAD_FACTOR <= 200;   // day trips sit far out
+  var ctr=cityInfo(loc.city);
+  return !!ctr && hasXY(ctr) && roadKm(ctr,p)/ROAD_FACTOR <= 200;   // day trips sit far out
 }
 /** Names as Wikipedia would title them: no branch, no "(Jordan)", no "- Wan Chai". */
 function cleanName(n){
@@ -1201,7 +1377,7 @@ function defaultDay(){
   var t = todayISO();
   return DAYS.indexOf(t) >= 0 ? t : DAYS[0];
 }
-if(!ui.day || DAYS.indexOf(ui.day)<0) ui.day = defaultDay();
+// ui.day is checked against the open trip's days by applyTrip, at boot
 
 function dayNumber(date){ return DAYS.indexOf(date)+1; }
 
@@ -1378,7 +1554,7 @@ function renderDayInto(el, date, withStrip){
   var stops = store.dayStops(date);
   var n = dayNumber(date);
   $("#viewTitle").textContent = ui.view==="today" && date===todayISO() ? "Today · 今天" : "Day "+n+" · 第"+n+"天";
-  $("#viewSub").textContent = fmtDate(date,true)+" · "+(DAY_LABELS[date]||"");
+  $("#viewSub").textContent = fmtDate(date,true)+" · "+dayLabel(date);
 
   var strip = withStrip ? dayStrip(date) : "";
 
@@ -1418,6 +1594,7 @@ function renderDayInto(el, date, withStrip){
     '<div class="formactions" style="margin-top:16px">'+
       '<button class="btn primary" data-act="add-existing" data-date="'+date+'">+ Add a stop</button>'+
       '<button class="btn" data-act="quick-add" data-date="'+date+'">+ New place</button>'+
+      '<button class="btn ghost" data-act="rename-day" data-date="'+date+'">Rename day</button>'+
     '</div>';
 }
 
@@ -1455,12 +1632,74 @@ function tripBases(){
   });
   return out;
 }
-/** When a booking happens. Its time is local to where it happens, which on
- *  this trip is UTC+8 everywhere but the flight out of Sydney, and that one
- *  carries no time — so a date alone counts from the start of that day. */
+/** Minutes a time zone is ahead of UTC at a given moment, daylight saving
+ *  included; null when the phone doesn't know the zone. */
+function tzOffset(tz, ms){
+  try{
+    var p={};
+    new Intl.DateTimeFormat("en-US", { timeZone:tz, hourCycle:"h23", year:"numeric", month:"2-digit", day:"2-digit",
+      hour:"2-digit", minute:"2-digit", second:"2-digit" }).formatToParts(new Date(ms)).forEach(function(x){ p[x.type]=x.value; });
+    return (Date.UTC(+p.year, +p.month-1, +p.day, +p.hour%24, +p.minute, +p.second) - Math.floor(ms/1000)*1000)/60000;
+  }catch(e){ return null; }
+}
+function validTz(tz){ return !!tz && tzOffset(tz, Date.now())!==null; }
+/** A wall-clock date and time in a zone, as a moment. */
+function zonedMs(date, hhmm, tz){
+  var d=String(date).split("-"), t=String(hhmm||"00:00").split(":");
+  var guess=Date.UTC(+d[0], +d[1]-1, +d[2], +t[0]||0, +t[1]||0);
+  var off=tzOffset(tz, guess); if(off===null) off=tzOffset("Asia/Shanghai", guess);
+  var ms=guess-off*60000, off2=tzOffset(tz, ms);
+  return off2!==null && off2!==off ? guess-off2*60000 : ms;   // a moment either side of a clock change
+}
+function tzName(tz){ return String(tz||"").split("/").pop().replace(/_/g," "); }
+/** When a booking happens. Its time is local to where it happens: the
+ *  booking's own time zone if it has one, else the trip's. A date alone
+ *  counts from the start of that day. */
 function bookingWhen(b){
   var m=String(b.time||"").match(/^(\d{1,2}):(\d{2})/);
-  return Date.parse(b.date+"T"+(m ? (m[1].length<2?"0":"")+m[1]+":"+m[2] : "00:00")+":00+08:00");
+  return zonedMs(b.date, m ? m[1]+":"+m[2] : "00:00", b.tz || tripTz());
+}
+
+/* Day names. Set one in the app (Rename day) and it is shared as a Days row;
+   otherwise the first trip uses its original names, and any other trip gets
+   one worked out from where the day is spent. */
+function dayLabel(date){
+  var own=(store.raw.days||[]).filter(function(d){
+    return d.date===date && tripOf(d)===TRIP.id && String(d.label||"").trim();
+  })[0];
+  if(own) return String(own.label).trim();
+  if(TRIP.id===LEGACY_TRIP.id && TRIP.start===LEGACY_TRIP.start && DAY_LABELS[date]) return DAY_LABELS[date];
+  return autoDayLabel(date);
+}
+function baseOn(date, bases){
+  var b=null; bases.forEach(function(x){ if(x.from<=date) b=x; });
+  return b && date<=b.to ? b.city : "";
+}
+function autoDayLabel(date){
+  var bases=tripBases(), cs=[];
+  store.dayStops(date).forEach(function(s){ var l=store.loc(s.location_id); if(l && l.city && cs.indexOf(l.city)<0) cs.push(l.city); });
+  var here=baseOn(date, bases), before=baseOn(addDaysISO(date,-1), bases);
+  if(here && before && here!==before) return before+" → "+here;
+  if(!cs.length){
+    var bk=store.data.bookings.filter(function(b){ return b.date===date && /flight|train|ferry/.test(b.type); })[0];
+    return bk ? shortTitle(bk.description).replace(/\s*\([A-Z]{3}\)/g,"") : here;
+  }
+  if(here && cs.length===1 && cs[0]!==here) return cs[0]+" day trip";
+  return cs.join(" · ");
+}
+function renameDay(date){
+  var v=window.prompt("Name for "+fmtDate(date,true)+" (blank to work it out from the plan)", dayLabel(date));
+  if(v===null) return;
+  var row={ id:"day-"+TRIP.id+"-"+date.replace(/-/g,""), trip_id:TRIP.id, date:date, label:v.trim() };
+  store.write("saveDay", row, function(){
+    store.raw.days=(store.raw.days||[]).filter(function(d){ return d.id!==row.id; }).concat([row]);
+  }).then(function(){ render(); toast(row.label ? "Renamed" : "Name cleared"); });
+}
+function tripRange(){ return rangeText(TRIP_START, TRIP_END); }
+function rangeText(start, end){
+  var first=parseISO(start), last=parseISO(end);
+  var mo=function(d){ return d.getDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]; };
+  return mo(first)+" – "+mo(last)+" "+last.getFullYear();
 }
 function countdown(b){
   // Days are counted by the calendar, the same way as the trip countdown above it
@@ -1482,7 +1721,7 @@ function renderTrip(){
   var first=parseISO(TRIP_START), last=parseISO(TRIP_END);
   var mo=function(d){ return d.getDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]; };
   $("#viewTitle").textContent="Trip · 旅程总览";
-  $("#viewSub").textContent=mo(first)+" – "+mo(last)+" "+last.getFullYear()+" · "+DAYS.length+" days";
+  $("#viewSub").textContent=tripRange()+" · "+DAYS.length+" days";
 
   // Cities in the order they are first visited, day trips included
   var cities=[];
@@ -1495,8 +1734,8 @@ function renderTrip(){
              : "Trip complete · 旅程结束";
   var hero='<div class="triphero">'+
     '<div class="eyebrow" style="color:inherit;opacity:.8">'+esc(cities.join(" · "))+'</div>'+
-    '<div class="t">Greater China</div>'+
-    '<div class="tz zh">'+esc(cities.map(cityZh).filter(Boolean).join(" · "))+'</div>'+
+    '<div class="t">'+esc(TRIP.name)+'</div>'+
+    '<div class="tz zh">'+escz(TRIP.name_zh || cities.map(cityZh).filter(Boolean).join(" · "))+'</div>'+
     '<div class="d">'+esc(mo(first)+" – "+mo(last)+" "+last.getFullYear())+' · '+DAYS.length+' days</div>'+
     '<div class="c">'+esc(status)+'</div>'+
   '</div>';
@@ -1585,7 +1824,7 @@ function renderTrip(){
 
 function renderDays(){
   $("#viewTitle").textContent="All Days · 每日行程";
-  $("#viewSub").textContent="16 Oct – 1 Nov 2026 · "+DAYS.length+" days";
+  $("#viewSub").textContent=tripRange()+" · "+DAYS.length+" days";
   var html = statusBar()+'<div class="loclist">'+DAYS.map(function(d,i){
     var stops=store.dayStops(d);
     var cities={}; stops.forEach(function(s){ var l=store.loc(s.location_id); if(l) cities[l.city]=1; });
@@ -1593,7 +1832,7 @@ function renderDays(){
     return '<button class="locrow" data-act="day-open" data-date="'+d+'">'+
       '<div class="thumb" style="'+(d===todayISO()?"":"background:linear-gradient(140deg,var(--ink-3),var(--ink-2))")+'">'+(i+1)+'</div>'+
       '<div class="lb"><div class="en">'+esc(fmtDate(d,true))+'</div>'+
-      '<div class="mt" style="margin-top:2px;font-size:13px;color:var(--ink-2)">'+esc(DAY_LABELS[d]||cs||"—")+'</div>'+
+      '<div class="mt" style="margin-top:2px;font-size:13px;color:var(--ink-2)">'+esc(dayLabel(d)||cs||"—")+'</div>'+
       '<div class="mt">'+(stops.length?stops.length+" stop"+(stops.length>1?"s":""):"nothing planned")+(cs?" · "+esc(cs):"")+'</div></div>'+
       '<span class="rowend">'+IC.chev+'</span></button>';
   }).join("")+'</div>';
@@ -1602,7 +1841,7 @@ function renderDays(){
 
 function matches(loc,q){
   if(!q) return true;
-  var n=q.toLowerCase(), qs=zhs(q), zh=zhs(loc.name_zh);   // 蘭芳園 and 兰芳园 both find it
+  var n=q.toLowerCase(), qs=toSimp(q), zh=toSimp(loc.name_zh);   // 蘭芳園 and 兰芳园 both find it
   return String(loc.name_en||"").toLowerCase().indexOf(n)>=0 ||
          zh.indexOf(qs)>=0 ||
          zh.toLowerCase().indexOf(n)>=0 ||
@@ -1610,9 +1849,10 @@ function matches(loc,q){
 }
 function hilite(text,q){
   if(!q) return escz(text);
-  q=zhs(q);
-  var t=zhs(text), lt=t.toLowerCase(), lq=q.toLowerCase();
-  var i=t.indexOf(q); if(i<0) i=lt.indexOf(lq);
+  // Found in the Simplified form, marked in the shown one: one character for one, so they line up
+  q=toSimp(q);
+  var t=zhs(text), key=toSimp(text), lq=q.toLowerCase();
+  var i=key.indexOf(q); if(i<0) i=key.toLowerCase().indexOf(lq);
   if(i<0) return esc(t);
   return esc(t.slice(0,i))+"<mark>"+esc(t.slice(i,i+q.length))+"</mark>"+esc(t.slice(i+q.length));
 }
@@ -1685,8 +1925,9 @@ var BK_ICON={
   ferry:  svgIc('<path d="M3.4 15.6 5 10.8h14l1.6 4.8"/><path d="M6.8 10.8V6.6h10.4v4.2M12 3.2v3.4"/><path d="M2.6 18.2c1.6 0 1.6 1.6 3.1 1.6s1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.1-1.6"/>'),
   hotel:  svgIc('<path d="M3.6 20.4V8.6L12 3.4l8.4 5.2v11.8"/><path d="M9.4 20.4v-6h5.2v6"/>')
 };
-/* General advice for Hong Kong, Macau and the mainland. Nothing here is about
-   this particular trip, so it can live in the public repo. Static HTML only. */
+/* General advice for Hong Kong, Macau and the mainland, shown on any trip that
+   takes in one of them. Nothing here is about a particular trip, so it can
+   live in the public repo. Static HTML only. */
 var GUIDE = [
   { t:"Install before you fly", items:[
     "<b>Alipay</b> — the one that matters most. Sign up with your own mobile number, verify your passport in the app and link a Visa or Mastercard. It pays almost everywhere on the mainland, and DiDi and the metro QR codes run inside it.",
@@ -1827,8 +2068,28 @@ function prepPacking(){
   return html;
 }
 
+/* For trips that don't take in China. As general as the China one: nothing
+   here is about a particular trip. */
+var GUIDE_GENERAL = [
+  { t:"Before you fly", items:[
+    "Check each passport has <b>six months</b> left after you come home, and whether you need a visa or an electronic travel authority for every country on the way — transit stops included.",
+    "Tell your bank where you're going, and carry two cards from different banks. Check which ones charge for foreign transactions.",
+    "Travel insurance: check that it covers everyone, every country and anything you plan to do (hiring a car, skiing, diving).",
+    "Save copies of passports, insurance and bookings somewhere you can open offline, and share them with someone at home."
+  ]},
+  { t:"On your phone", items:[
+    "Download <b>offline maps</b> for each city in Google Maps or Apple Maps, and the language in your translator.",
+    "Mobile data: an eSIM bought before you go is usually cheaper than roaming. Install it at home and switch it on when you land.",
+    "Each place in this app opens in the map app set for its city — change it per place in Edit place."
+  ]},
+  { t:"Money and getting around", items:[
+    "Cards and phone payments are taken almost everywhere in many countries, but keep some local cash for markets, small shops and tips.",
+    "Rides and fares between stops are estimates, worked out from the distance and the city's taxi tariff when one is set in ⚙ Settings › Cities.",
+    "Check the local emergency number and save your country's embassy or consulate in your contacts."
+  ]}
+];
 function prepGuide(){
-  return '<div class="guide">'+GUIDE.map(function(sec){
+  return '<div class="guide">'+(tripHasChina() ? GUIDE : GUIDE_GENERAL).map(function(sec){
     return '<div class="card"><h3>'+esc(sec.t)+'</h3><ul>'+sec.items.map(function(x){ return '<li>'+x+'</li>'; }).join("")+'</ul></div>';
   }).join("")+'</div>';
 }
@@ -1877,6 +2138,16 @@ function setBookingTicket(bid){
     render(); toast(v ? "Ticket link saved" : "Ticket link removed");
   });
 }
+/** The zone a booking's time is in, when it isn't the trip's — a flight out
+ *  of home, say. Only the zone goes to the Sheet. */
+function setBookingTz(bid){
+  var b=store.data.bookings.filter(function(x){ return x.id===bid; })[0]; if(!b) return;
+  var v=window.prompt("Time zone for "+shortTitle(b.description)+"'s time, e.g. Australia/Sydney. Blank uses the trip's ("+tripTz()+").", b.tz||"");
+  if(v===null) return;
+  v=v.trim().replace(/\s+/g,"_");
+  if(v && !validTz(v)){ toast("Not a time zone this phone knows — try Region/City, like Europe/London"); return; }
+  store.write("saveBooking", { id:b.id, tz:v }, function(){ b.tz=v; }).then(function(){ render(); toast("Saved"); });
+}
 /** Upcoming tickets: travel bookings (with or without a link yet) and any
  *  booking or scheduled place that has one, soonest first. */
 function walletItems(){
@@ -1912,7 +2183,8 @@ function renderBookings(){
         '<button class="bk-head" data-act="bk">'+
           '<div class="bk-ic">'+(BK_ICON[b.type]||svgIc('<circle cx="12" cy="12" r="6"/>'))+'</div>'+
           '<div class="bk-b">'+
-            '<div class="bk-when">'+esc(dnum+fmtDate(b.date,false))+(b.time?" · "+esc(b.time):"")+'</div>'+
+            '<div class="bk-when">'+esc(dnum+fmtDate(b.date,false))+(b.time?" · "+esc(b.time):"")+
+              (b.tz && b.tz!==tripTz() ? " · "+esc(tzName(b.tz))+" time" : "")+'</div>'+
             '<div class="bk-t">'+escz(b.description)+'</div>'+
             (b.confirmation_no?'<div class="bk-cn">Ref <b>'+esc(b.confirmation_no)+'</b></div>':'')+
             (safeUrl(b.ticket_url)?'<div class="bk-cn"><span class="pill ok">Ticket link · 票券</span></div>':'')+
@@ -1921,7 +2193,8 @@ function renderBookings(){
         '<div class="bk-body">'+escz(b.details).replace(/\n/g,"<br>")+
           '<div class="bk-acts">'+(safeUrl(b.ticket_url)
             ? ticketLink(b.ticket_url,"Open ticket","btn sm primary")+'<button class="btn sm ghost" data-act="bk-ticket" data-bid="'+esc(b.id)+'">Change link</button>'
-            : '<button class="btn sm" data-act="bk-ticket" data-bid="'+esc(b.id)+'">+ Add ticket link</button>')+'</div>'+
+            : '<button class="btn sm" data-act="bk-ticket" data-bid="'+esc(b.id)+'">+ Add ticket link</button>')+
+            '<button class="btn sm ghost" data-act="bk-tz" data-bid="'+esc(b.id)+'">Time zone</button></div>'+
         '</div>'+
       '</div>';
     }).join("") : '<div class="card empty">No bookings yet.</div>');
@@ -2013,11 +2286,11 @@ function locationDetail(id){
 function locationForm(id){
   var l = id ? store.loc(id) : null;
   var isNew = !l;
-  l = l || { id:"", name_en:"", name_zh:"", city:"Hong Kong", type:"attraction",
-             lat:"", lng:"", nav_app:"google", history_blurb:"", recommendations:"",
+  var cities=cityOptions();
+  l = l || { id:"", name_en:"", name_zh:"", city:cities[0]||"", type:"attraction",
+             lat:"", lng:"", nav_app:mapAppFor(cities[0]), history_blurb:"", recommendations:"",
              dishes_to_order:"", souvenirs:"", notes:"", getting_there:"", arrive_by:"", tickets:"" };
-  var cities=["Hong Kong","Macau","Guangzhou","Foshan","Chongqing","Chengdu"];
-  store.data.locations.forEach(function(x){ if(cities.indexOf(x.city)<0) cities.push(x.city); });
+  if(l.city && cities.indexOf(l.city)<0) cities.push(l.city);
 
   function sel(name,val,opts){
     return '<select id="f_'+name+'">'+opts.map(function(o){
@@ -2037,8 +2310,8 @@ function locationForm(id){
       '<div class="field"><label>Latitude</label><input id="f_lat" inputmode="decimal" value="'+esc(l.lat)+'" placeholder="30.6690"></div>'+
       '<div class="field"><label>Longitude</label><input id="f_lng" inputmode="decimal" value="'+esc(l.lng)+'" placeholder="104.0570"></div>'+
     '</div>'+
-    '<div class="field"><label>Map app</label>'+sel("nav_app",l.nav_app,["amap","google"])+
-      '<div class="hint">Amap 高德 for the mainland, Google Maps for Hong Kong and Macau. Set automatically when you pick a city, unless you change it.</div></div>'+
+    '<div class="field"><label>Map app</label>'+sel("nav_app",l.nav_app,MAP_APPS)+
+      '<div class="hint">Amap 高德 for the mainland, Google Maps for Hong Kong, Macau and most other places. Set automatically when you pick a city, unless you change it.</div></div>'+
     '<div class="field"><label>Getting there</label><textarea id="f_getting_there" style="min-height:80px" placeholder="Nearest station and exit, and when a taxi is better.">'+esc(l.getting_there||"")+'</textarea></div>'+
     '<div class="field"><label>Best way to arrive</label><input id="f_arrive_by" value="'+esc(l.arrive_by||"")+'" placeholder="Optional — e.g. Peak Tram from Central">'+
       '<div class="hint">Only for places reached one particular way. It replaces the worked-out walk / taxi line on the day view, so leave it blank for anywhere a taxi or the metro is fine.</div></div>'+
@@ -2062,9 +2335,7 @@ function locationForm(id){
   bindLinkBox();
 
   var citySel=$("#f_city"), navSel=$("#f_nav_app");
-  citySel.addEventListener("change", function(){
-    navSel.value = (this.value==="Hong Kong"||this.value==="Macau") ? "google" : "amap";
-  });
+  citySel.addEventListener("change", function(){ navSel.value = mapAppFor(this.value); });
 }
 
 function collectLocationForm(existingId){
@@ -2148,13 +2419,22 @@ function regionOf(lat,lng){
   if(lat>=18 && lat<=54 && lng>=73 && lng<=135.1) return "mainland";
   return "";
 }
-var CITY_CENTRES=[["Guangzhou",23.13,113.26],["Foshan",23.02,113.12],["Chongqing",29.56,106.55],["Chengdu",30.66,104.07]];
+function regionCode(lat,lng){
+  return { "Hong Kong":"hk", "Macau":"mo", "Taiwan":"tw", "mainland":"cn" }[regionOf(lat,lng)] || "";
+}
+/** The city a pin belongs to: Hong Kong and Macau by their borders, anywhere
+ *  else the nearest known city in the same region within 250 km, so day
+ *  trips (Leshan, Sanxingdui) count as their base city. Cities this trip
+ *  uses win a tie with others. */
 function cityFor(lat,lng){
-  var r=regionOf(lat,lng);
-  if(r==="Hong Kong"||r==="Macau") return r;
-  if(r!=="mainland") return "";
-  var best="", bestKm=250;   // day trips (Leshan, Sanxingdui) count as their base city
-  CITY_CENTRES.forEach(function(c){ var k=roadKm({lat:lat,lng:lng},{lat:c[1],lng:c[2]})/ROAD_FACTOR; if(k<bestKm){ bestKm=k; best=c[0]; } });
+  var r=regionCode(lat,lng), here={}, best="", bestKm=250;
+  store.data.locations.forEach(function(l){ here[l.city]=1; });
+  var pool=cityList().filter(function(c){ return c.region===r && hasXY(c); });
+  if(r==="hk" || r==="mo"){ var own=pool.filter(function(c){ return here[c.name]; })[0] || pool[0]; return own ? own.name : ""; }
+  pool.forEach(function(c){
+    var k=roadKm({lat:lat,lng:lng},c)/ROAD_FACTOR - (here[c.name] ? 0.5 : 0);
+    if(k<bestKm){ bestKm=k; best=c.name; }
+  });
   return best;
 }
 function guessType(name){
@@ -2317,7 +2597,7 @@ function applyPlace(pl){
   setField("f_name_zh", pl.names.zh, true);
   setField("f_name_en", pl.names.en, true);
   if(pl.lat!=null){ setField("f_lat", String(pl.lat)); setField("f_lng", String(pl.lng)); }
-  if(pl.city){ setField("f_city", pl.city); setField("f_nav_app", (pl.city==="Hong Kong"||pl.city==="Macau") ? "google" : "amap"); }
+  if(pl.city){ setField("f_city", pl.city); setField("f_nav_app", mapAppFor(pl.city)); }
   setField("f_type", pl.type);
   var n=$("#f_notes");
   if(pl.address && n && n.value.indexOf(pl.address)<0) n.value=(n.value?n.value+"\n":"")+"Address: "+pl.address;
@@ -2373,8 +2653,8 @@ function quickAddForm(date){
     '<div class="field"><label>名称 (Chinese) — required</label><input id="f_name_zh" class="zh" style="font-size:19px" placeholder="小面馆"></div>'+
     '<div class="grid2">'+
       '<div class="field"><label>City</label><select id="f_city">'+
-        ["Hong Kong","Macau","Guangzhou","Foshan","Chongqing","Chengdu"].map(function(c){
-          return '<option'+(c===(guessCity(date)||"")?" selected":"")+'>'+c+'</option>'; }).join("")+
+        cityOptions().map(function(c){
+          return '<option'+(c===(guessCity(date)||"")?" selected":"")+'>'+esc(c)+'</option>'; }).join("")+
       '</select></div>'+
       '<div class="field"><label>Type</label><select id="f_type">'+
         ["attraction","restaurant","shopping","hotel"].map(function(t){return "<option>"+t+"</option>";}).join("")+
@@ -2385,7 +2665,7 @@ function quickAddForm(date){
       '<div class="field"><label>Longitude</label><input id="f_lng" inputmode="decimal" placeholder="optional"></div>'+
     '</div>'+
     '<div class="field"><label>Map app</label><select id="f_nav_app">'+
-      '<option value="amap">amap</option><option value="google">google</option></select>'+
+      MAP_APPS.map(function(a){ return '<option value="'+a+'">'+a+'</option>'; }).join("")+'</select>'+
       '<div class="hint">Without coordinates the map app will search the Chinese name instead, which usually works.</div></div>'+
     '<div class="field"><label>Time on this day</label><input id="f_time" placeholder="e.g. 14:30"></div>'+
     '<div class="field"><label>Notes</label><textarea id="f_notes" style="min-height:60px" placeholder="Optional"></textarea></div>'+
@@ -2393,16 +2673,28 @@ function quickAddForm(date){
   openSheet("New place · Day "+dayNumber(date), html);
   bindLinkBox();
   var c=$("#f_city"), n=$("#f_nav_app");
-  function syncNav(){ n.value=(c.value==="Hong Kong"||c.value==="Macau")?"google":"amap"; }
+  function syncNav(){ n.value=mapAppFor(c.value); }
   syncNav(); c.addEventListener("change", syncNav);
 }
 
+var MAP_APPS = ["amap","google","apple"];
+/** Cities for the place forms: this trip's first, in the order it visits
+ *  them, then every other known city. */
+function cityOptions(){
+  var out=[];
+  DAYS.forEach(function(d){ store.dayStops(d).forEach(function(s){
+    var l=store.loc(s.location_id); if(l && l.city && out.indexOf(l.city)<0) out.push(l.city);
+  }); });
+  store.data.locations.forEach(function(l){ if(l.city && out.indexOf(l.city)<0) out.push(l.city); });
+  cityList().forEach(function(c){ if(out.indexOf(c.name)<0) out.push(c.name); });
+  return out;
+}
 function guessCity(date){
   var stops=store.dayStops(date);
   for(var i=0;i<stops.length;i++){ var l=store.loc(stops[i].location_id); if(l) return l.city; }
-  var lbl=DAY_LABELS[date]||"";
-  var known=["Hong Kong","Macau","Guangzhou","Foshan","Chongqing","Chengdu"];
-  for(var j=0;j<known.length;j++) if(lbl.indexOf(known[j])>=0) return known[j];
+  var here=baseOn(date, tripBases()); if(here) return here;
+  var lbl=dayLabel(date), known=cityList();
+  for(var j=0;j<known.length;j++) if(lbl.indexOf(known[j].name)>=0) return known[j].name;
   return "";
 }
 
@@ -2440,7 +2732,7 @@ function pickDayForLocation(lid){
     return '<button class="locrow" data-act="pick" data-lid="'+esc(lid)+'" data-date="'+d+'">'+
       '<div class="thumb">'+(i+1)+'</div>'+
       '<div class="lb"><div class="en">'+esc(fmtDate(d,true))+'</div>'+
-      '<div class="mt">'+esc(DAY_LABELS[d]||"")+' · '+n+' stop'+(n===1?"":"s")+'</div></div>'+
+      '<div class="mt">'+esc(dayLabel(d))+' · '+n+' stop'+(n===1?"":"s")+'</div></div>'+
       '<span class="rowend">'+IC.plus+'</span></button>';
   }).join("")+'</div>';
   openSheet("Add to which day?", html);
@@ -2464,6 +2756,7 @@ function settingsForm(){
       '<button class="btn primary" data-act="save-cfg">Save &amp; connect</button>'+
       '<button class="btn" data-act="test-cfg">Test</button>'+
     '</div>'+
+    tripsSectionHTML()+citiesSectionHTML()+
     '<div class="section-title">Data</div>'+
     '<div class="loclist">'+
       '<div class="locrow"><div class="lb"><div class="en">Pending changes</div>'+
@@ -2487,12 +2780,195 @@ function settingsForm(){
     '<div class="section-title">About</div>'+
     '<p class="blurb small muted">'+store.data.locations.length+' places, '+store.data.bookings.length+' bookings, '+
       store.data.schedule.length+' scheduled stops across '+DAYS.length+' days.<br>'+
-      'Trip: 16 Oct – 1 Nov 2026.</p>';
+      esc(TRIP.name)+': '+esc(tripRange())+'.</p>';
   openSheet("Settings", html);
   var fi=$("#importFile");
   if(fi) fi.addEventListener("change", function(){ importNotes(this.files && this.files[0]); });
   var meIn=$("#s_me");
   if(meIn) meIn.addEventListener("change", function(){ save(LS.me, this.value.trim()); toast("Saved"); });
+}
+
+/* ---------- trips and cities (Settings) ---------- */
+var NEEDS_UPGRADE = '<p class="blurb small muted">Adding trips and cities needs the one-off update to the Sheet’s '+
+  'script — see the README, section 12. Until then this phone has the one trip.</p>';
+function tripsSectionHTML(){
+  var list=allTrips().slice().sort(function(a,b){ return a.start<b.start?-1:1; });
+  return '<div class="section-title">Trips</div><div class="loclist">'+list.map(function(t){
+      var open=t.id===TRIP.id;
+      return '<div class="locrow"><div class="lb"><div class="en">'+esc(t.name)+(t.name_zh?' <span class="zh">'+escz(t.name_zh)+'</span>':'')+'</div>'+
+        '<div class="mt">'+esc(rangeText(t.start,t.end))+(open?' · open now':'')+'</div></div>'+
+        (open ? (store.supportsTrips ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
+              : '<button class="btn sm primary" data-act="trip-open" data-tid="'+esc(t.id)+'">Open</button>')+'</div>';
+    }).join("")+'</div>'+
+    (store.supportsTrips ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="trip-new">+ New trip</button></div>' : NEEDS_UPGRADE);
+}
+function citiesSectionHTML(){
+  var here=cityOptions(), list=cityList().slice().sort(function(a,b){
+    var ia=here.indexOf(a.name), ib=here.indexOf(b.name);
+    return (ia<0?999:ia)-(ib<0?999:ib) || (a.name<b.name?-1:1);
+  });
+  var REG={ cn:"mainland China", hk:"Hong Kong", mo:"Macau", tw:"Taiwan" };
+  return '<div class="section-title">Cities</div>'+
+    '<p class="blurb small muted" style="margin:-2px 0 10px">Time zone, map app and taxi fares for each city. Add a city before adding places in it.</p>'+
+    '<div class="loclist">'+list.map(function(c){
+      return '<div class="locrow"><div class="lb"><div class="en">'+esc(c.name)+(c.name_zh?' <span class="zh">'+escz(c.name_zh)+'</span>':'')+'</div>'+
+        '<div class="mt">'+[REG[c.region]||"", tzName(c.tz)===REG[c.region] ? "" : (c.tz ? tzName(c.tz)+" time" : "no time zone"),
+          mapAppFor(c.name), c.taxi?"fares set":"no fares"].filter(Boolean).map(esc).join(" · ")+'</div></div>'+
+        (store.supportsTrips ? '<button class="btn sm" data-act="city-edit" data-v="'+esc(c.name)+'">Edit</button>' : '')+'</div>';
+    }).join("")+'</div>'+
+    (store.supportsTrips ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="city-new">+ Add city</button></div>' : '');
+}
+var COMMON_TZ=["Asia/Shanghai","Asia/Hong_Kong","Asia/Macau","Asia/Taipei","Asia/Tokyo","Asia/Seoul","Asia/Singapore",
+  "Asia/Bangkok","Asia/Kuala_Lumpur","Asia/Jakarta","Asia/Ho_Chi_Minh","Asia/Kolkata","Asia/Dubai","Europe/London",
+  "Europe/Paris","Europe/Berlin","Europe/Rome","Europe/Madrid","Europe/Istanbul","America/New_York","America/Los_Angeles",
+  "America/Vancouver","Pacific/Auckland","Australia/Sydney","Australia/Melbourne","Australia/Brisbane","Australia/Perth"];
+function tzDatalist(id){
+  var all=COMMON_TZ;
+  try{ if(Intl.supportedValuesOf) all=Intl.supportedValuesOf("timeZone"); }catch(e){}
+  return '<datalist id="'+id+'">'+all.map(function(z){ return '<option value="'+esc(z)+'">'; }).join("")+'</datalist>';
+}
+function tripForm(id){
+  var t=id ? allTrips().filter(function(x){ return x.id===id; })[0] : null;
+  var isNew=!t;
+  t=t || { id:"", name:"", name_zh:"", start:"", end:"", tz:tripTz(), zh_script:"", notes:"" };
+  var opt=function(v,l){ return '<option value="'+v+'"'+((t.zh_script||"")===v?" selected":"")+'>'+l+'</option>'; };
+  var html=
+    (isNew ? '<p class="blurb small muted" style="margin:12px 0 16px">A new trip opens empty. Add its cities in ⚙ Settings › Cities first, so places get the right map app, time zone and fares.</p>' : '<div style="height:12px"></div>')+
+    '<div class="field"><label>Name</label><input id="t_name" value="'+esc(t.name)+'" placeholder="Japan 2027"></div>'+
+    '<div class="field"><label>中文名 (optional)</label><input id="t_name_zh" class="zh" value="'+esc(t.name_zh)+'"></div>'+
+    '<div class="grid2">'+
+      '<div class="field"><label>First day</label><input id="t_start" type="date" value="'+esc(t.start)+'"></div>'+
+      '<div class="field"><label>Last day</label><input id="t_end" type="date" value="'+esc(t.end)+'"></div>'+
+    '</div>'+
+    (isNew ? '' : '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="t_move" checked> '+
+      'Move the plan with the first day — stops, day names. Bookings stay put; change those yourself.</label>')+
+    '<div class="field"><label>Time zone</label><input id="t_tz" list="tzlist" autocapitalize="off" value="'+esc(t.tz)+'">'+tzDatalist("tzlist")+
+      '<div class="hint">Where most of the trip is. Booking times are read in it, unless a booking has its own.</div></div>'+
+    '<div class="field"><label>Chinese characters</label><select id="t_script">'+
+      opt("","Automatic")+opt("simplified","Always Simplified")+opt("original","As written")+'</select>'+
+      '<div class="hint">Automatic shows Simplified when the trip takes in mainland China, Hong Kong or Macau.</div></div>'+
+    '<div class="field"><label>Notes</label><textarea id="t_notes" style="min-height:60px">'+esc(t.notes||"")+'</textarea></div>'+
+    '<div class="formactions"><button class="btn primary" data-act="trip-save" data-tid="'+esc(t.id)+'">'+(isNew?"Create and open":"Save")+'</button>'+
+      (!isNew && t.id!==defaultTripId() ? '<button class="btn danger" data-act="trip-delete" data-tid="'+esc(t.id)+'">Delete trip</button>' : '')+'</div>';
+  openSheet(isNew?"New trip":"Edit trip", html);
+}
+function daysBetween(a,b){ return Math.round((parseISO(b)-parseISO(a))/86400000); }
+function saveTripForm(id){
+  var g=function(k){ var e=$("#t_"+k); return e ? e.value.trim() : ""; };
+  var old=id ? allTrips().filter(function(x){ return x.id===id; })[0] : null;
+  var t=Object.assign({}, old || { id:uid("trip"), is_default:"" });
+  t.name=g("name"); t.name_zh=g("name_zh"); t.start=g("start"); t.end=g("end");
+  t.tz=g("tz").replace(/\s+/g,"_"); t.zh_script=g("script"); t.notes=g("notes"); t.updated=nowISO();
+  if(!t.name){ toast("Give the trip a name"); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(t.start) || !/^\d{4}-\d{2}-\d{2}$/.test(t.end)){ toast("Set the first and last day"); return; }
+  if(t.end<t.start){ toast("The last day is before the first"); return; }
+  if(daysBetween(t.start,t.end)>120){ toast("That's over 120 days — check the dates"); return; }
+  if(t.tz && !validTz(t.tz)){ toast("Not a time zone this phone knows — pick one from the list"); return; }
+  var shift = old && $("#t_move") && $("#t_move").checked ? daysBetween(old.start, t.start) : 0;
+  var row=function(o){ var r={}; ["id","name","name_zh","start","end","tz","zh_script","is_default","notes","updated"].forEach(function(k){ r[k]=o[k]==null?"":o[k]; }); return r; };
+  // The Sheet's first trip row: the one there is, written out before any other joins it
+  if(!(store.raw.trips||[]).length && t.id!==LEGACY_TRIP.id){
+    var first=row(Object.assign({}, LEGACY_TRIP, { updated:nowISO() }));
+    store.raw.trips=[first]; store.enqueue("saveTrip", first);
+  }
+  var r=row(t);
+  store.raw.trips=(store.raw.trips||[]).filter(function(x){ return x.id!==r.id; }).concat([r]);
+  store.enqueue("saveTrip", r);
+  if(shift && old.id===TRIP.id){
+    // Day names first, while dayLabel still reads the old dates
+    var named=DAYS.map(function(d){ return { d:d, label:dayLabel(d), own:(store.raw.days||[]).some(function(x){ return x.date===d && tripOf(x)===old.id && x.label; }) }; });
+    var legacy=old.id===LEGACY_TRIP.id && old.start===LEGACY_TRIP.start;
+    (store.raw.days||[]).filter(function(x){ return tripOf(x)===old.id; }).forEach(function(x){ store.enqueue("deleteDay", { id:x.id }); });
+    store.raw.days=(store.raw.days||[]).filter(function(x){ return tripOf(x)!==old.id; });
+    named.forEach(function(n){
+      if(!n.own && !(legacy && DAY_LABELS[n.d])) return;
+      var nd=addDaysISO(n.d, shift);
+      var dr={ id:"day-"+old.id+"-"+nd.replace(/-/g,""), trip_id:old.id, date:nd, label:n.label };
+      store.raw.days.push(dr); store.enqueue("saveDay", dr);
+    });
+    store.data.schedule.forEach(function(e){ e.date=addDaysISO(e.date, shift); store.enqueue("saveScheduleEntry", e); });
+  }
+  store.persist();
+  if(!old){ switchTrip(t.id); }
+  else { store.data=null; applyTrip(); store.persist(); closeSheet(); render(); toast(shift ? "Saved — plan moved "+Math.abs(shift)+" day"+(Math.abs(shift)===1?"":"s")+(shift>0?" later":" earlier") : "Saved"); }
+  if(store.configured()) store.flush().then(updateStatus).catch(function(){});
+}
+function deleteTrip(id){
+  var t=allTrips().filter(function(x){ return x.id===id; })[0];
+  if(!t || id===defaultTripId()) return;
+  if(!window.confirm("Delete “"+t.name+"” and everything in it — places, stops, bookings, checklist? This can't be undone.")) return;
+  store.persist();
+  store.write("deleteTrip", { id:id }, function(){
+    TRIP_TABS.concat(["days"]).forEach(function(k){ store.raw[k]=(store.raw[k]||[]).filter(function(r){ return r.trip_id!==id; }); });
+    store.raw.trips=(store.raw.trips||[]).filter(function(x){ return x.id!==id; });
+    store.data=null; ui.trip=defaultTripId(); save(LS.ui, ui); applyTrip();
+  }).then(function(){ closeSheet(); setView("today"); toast("Trip deleted"); });
+}
+function cityForm(name){
+  var c=name ? cityInfo(name) : null, isNew=!c;
+  c=c || { name:"", name_zh:"", lat:"", lng:"", tz:tripTz(), region:"", map_app:"", taxi:null };
+  var x=c.taxi||{}, v=function(k){ return x[k]==null ? "" : x[k]; };
+  var f=function(id,label,val,ph,mode){ return '<div class="field"><label>'+label+'</label><input id="y_'+id+'"'+(mode?' inputmode="'+mode+'"':'')+
+    ' value="'+esc(val)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+'></div>'; };
+  var sel=function(id,val,opts){ return '<select id="y_'+id+'">'+opts.map(function(o){
+    return '<option value="'+o[0]+'"'+(String(val||"")===o[0]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select>'; };
+  var html=
+    (isNew ? '' : '<p class="blurb small muted" style="margin:12px 0">Places are matched to their city by name, so a renamed city loses its places — add a new one instead.</p>')+
+    '<div class="grid2">'+f("name","City",c.name,"Kyoto").replace("<input ", isNew?"<input ":"<input readonly ")+f("name_zh","中文名",c.name_zh,"京都")+'</div>'+
+    '<div class="field linkbox"><label for="y_link">Centre from a map link</label>'+
+      '<textarea id="y_link" rows="2" placeholder="Paste a Google Maps or Amap link with a pin in it"></textarea>'+
+      '<div class="hint" id="y_link_status">Or type the coordinates. The centre is used to match new places to the city.</div></div>'+
+    '<div class="grid2">'+f("lat","Latitude",c.lat,"35.01","decimal")+f("lng","Longitude",c.lng,"135.77","decimal")+'</div>'+
+    '<div class="field"><label>Time zone</label><input id="y_tz" list="tzlist2" autocapitalize="off" value="'+esc(c.tz)+'">'+tzDatalist("tzlist2")+'</div>'+
+    '<div class="grid2">'+
+      '<div class="field"><label>Region</label>'+sel("region",c.region,[["","Elsewhere"],["cn","Mainland China"],["hk","Hong Kong"],["mo","Macau"],["tw","Taiwan"]])+'</div>'+
+      '<div class="field"><label>Map app</label>'+sel("map_app",c.map_app,[["","Automatic"],["amap","Amap 高德"],["google","Google Maps"],["apple","Apple Maps"]])+'</div>'+
+    '</div>'+
+    '<p class="blurb small muted" style="margin:-6px 0 14px">The region is filled in from the centre. Mainland China switches on Amap, the China guide and Simplified Chinese.</p>'+
+    '<div class="section-title">Taxi fares (optional)</div>'+
+    '<div class="grid2">'+f("currency","Currency symbol",v("cur"),"¥ or €")+f("round","Round to",v("step"),"1","decimal")+'</div>'+
+    '<div class="grid2">'+f("flag","Flag fall",v("flag"),"500","decimal")+f("flag_km","Km it covers",v("flagKm"),"1.1","decimal")+'</div>'+
+    '<div class="grid2">'+f("per_km","Per km after",v("perKm"),"400","decimal")+f("transit","Public transport is",v("transit"),"subway")+'</div>'+
+    '<div class="grid2">'+f("car","Cars are",v("car"),"taxi")+'<div></div></div>'+
+    '<details class="small" style="margin:-4px 0 14px"><summary>Cheaper rate past a fare</summary><div class="grid2" style="margin-top:10px">'+
+      f("high_at","From a fare of",v("highAt"),"","decimal")+f("per_km_high","Per km then",v("perKmHigh"),"","decimal")+'</div></details>'+
+    '<div class="formactions"><button class="btn primary" data-act="city-save" data-v="'+esc(c.name)+'">Save</button></div>';
+  openSheet(isNew?"New city":"Edit city", html);
+  var box=$("#y_link");
+  function fromLink(){
+    var p=placeFromParsed(parseMapText(box.value)), st=$("#y_link_status");
+    if(p.lat==null){ st.textContent="No pin in that — paste the full link (not a short one), or type the coordinates."; return; }
+    $("#y_lat").value=p.lat; $("#y_lng").value=p.lng;
+    var r=regionCode(p.lat,p.lng); $("#y_region").value=r;
+    if(!$("#y_name_zh").value && p.names.zh) $("#y_name_zh").value=p.names.zh;
+    st.textContent="Centre set"+(p.shiftedM?" (moved "+p.shiftedM+" m from the Chinese map grid to GPS)":"")+".";
+  }
+  box.addEventListener("paste", function(){ setTimeout(fromLink,0); });
+  box.addEventListener("change", fromLink);
+  ["y_lat","y_lng"].forEach(function(id){ $("#"+id).addEventListener("change", function(){
+    var a=parseFloat($("#y_lat").value), b=parseFloat($("#y_lng").value);
+    if(isFinite(a) && isFinite(b)) $("#y_region").value=regionCode(a,b);
+  }); });
+}
+function saveCityForm(oldName){
+  var g=function(k){ var e=$("#y_"+k); return e ? e.value.trim() : ""; };
+  var name=g("name"), cur=oldName ? cityInfo(oldName) : null;
+  if(!name){ toast("Give the city a name"); return; }
+  if(!oldName && cityInfo(name)){ toast(name+" is already on the list — edit it instead"); return; }
+  var lat=g("lat"), lng=g("lng");
+  if((lat||lng) && !(isFinite(parseFloat(lat)) && isFinite(parseFloat(lng)))){ toast("Latitude and longitude need to be numbers"); return; }
+  var tz=g("tz").replace(/\s+/g,"_");
+  if(tz && !validTz(tz)){ toast("Not a time zone this phone knows — pick one from the list"); return; }
+  var num=function(k){ var x=g(k); return x && isFinite(parseFloat(x)) ? String(parseFloat(x)) : ""; };
+  var r={ id:(cur && cur.id) || "city-"+(name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || Date.now().toString(36)),
+    name:oldName||name, name_zh:g("name_zh"), lat:lat?parseFloat(lat):"", lng:lng?parseFloat(lng):"", tz:tz,
+    region:g("region"), map_app:g("map_app"), currency:g("currency"), round:num("round"), flag:num("flag"),
+    flag_km:num("flag_km"), per_km:num("per_km"), high_at:num("high_at"), per_km_high:num("per_km_high"),
+    transit:g("transit"), car:g("car") };
+  if((r.flag || r.per_km) && !(r.flag && r.per_km)){ toast("Fares need both the flag fall and the per-km rate"); return; }
+  store.write("saveCity", r, function(){
+    store.raw.cities=(store.raw.cities||[]).filter(function(x){ return x.id!==r.id && String(x.name).toLowerCase()!==r.name.toLowerCase(); }).concat([r]);
+  }).then(function(){ closeSheet(); render(); toast("Saved"); });
 }
 
 /* Merges getting_there / arrive_by / tickets into places this phone already
@@ -2866,6 +3342,16 @@ document.addEventListener("click", function(ev){
       return;
     }
     case "bk-ticket": setBookingTicket(t.dataset.bid); return;
+    case "bk-tz": setBookingTz(t.dataset.bid); return;
+    case "rename-day": renameDay(date); return;
+    case "trip-open": switchTrip(t.dataset.tid); return;
+    case "trip-new": tripForm(null); return;
+    case "trip-edit": tripForm(t.dataset.tid); return;
+    case "trip-save": saveTripForm(t.dataset.tid); return;
+    case "trip-delete": deleteTrip(t.dataset.tid); return;
+    case "city-new": cityForm(null); return;
+    case "city-edit": cityForm(t.dataset.v); return;
+    case "city-save": saveCityForm(t.dataset.v); return;
     case "find-photos": {
       if(!navigator.onLine){ toast("Needs a connection — try again on wifi"); return; }
       toast("Looking for photos…");
@@ -2882,9 +3368,12 @@ document.addEventListener("click", function(ev){
       return;
     case "reset-local": {
       if(!window.confirm("Throw away this phone's copy, including anything not yet sent, and pull the trip again from the Sheet? Your checklist and packing ticks are kept.")) return;
-      var keepCk=store.data.checklist||[];
-      store.data=JSON.parse(JSON.stringify(EMPTY));
-      store.data.checklist=keepCk;   // the Sheet may not have a Checklist tab to restore it from
+      store.persist();
+      var keep=store.raw;
+      store.raw=JSON.parse(JSON.stringify(EMPTY));
+      // The Sheet may not have the tabs to restore these from
+      ["checklist","trips","cities","days"].forEach(function(k){ store.raw[k]=keep[k]||[]; });
+      store.data=null; applyTrip();
       store.queue=[]; save(LS.queue, store.queue); store.persist();
       closeSheet(); render();
       store.sync().catch(function(){});

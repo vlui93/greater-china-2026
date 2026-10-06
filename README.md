@@ -13,6 +13,7 @@ Vanilla HTML/CSS/JS, no build step, no framework. Data lives in a Google Sheet b
 - One-tap navigation that opens Amap on the mainland and Google Maps in Hong Kong and Macau
 - Tour-guide content for every seeded place: background, what to do, what to order, what to buy
 - Bookings list with confirmation numbers
+- More than one trip in the same Sheet, each with its own cities, time zone and guide ([§12](#12-more-than-one-trip))
 
 ---
 
@@ -341,7 +342,7 @@ All of that lives in the Google Sheet, which is private to your Google account, 
 
 - The app itself: markup, styles, logic, icons, service worker
 - The Apps Script backend, with an empty `SEED` and a placeholder key
-- The dates and the cities, in the day labels and the map-app routing rule. The route is already in the repository description, and Amap-vs-Google is decided by city, so the app cannot do its job without them.
+- The first trip's dates, day names and cities (`LEGACY_TRIP`, `DAY_LABELS`, `LEGACY_CITIES`), so the app works on a backend that has no Trips or Cities tab yet. The route is already in the repository description. Every later trip lives only in the Sheet.
 
 Two guards keep it that way. `src/no-trip-content.js` runs inside both build scripts and refuses to write `index.html` or `Code.gs` if anything from `src/seed.json` has found its way in, or if either file is suspiciously large. `src/build-seed.js` still rejects any booking carrying a confirmation number or a reference buried in its notes.
 
@@ -359,3 +360,44 @@ node src/sheet.js backup src/seed.json
 That writes the current Bookings, Locations and Schedule into exactly the shape `prepare-code.js` and `sheet.js push` expect, so you can go straight on to building `Code.READY.local.gs`.
 
 The per-city `src/seed-loc-*.json` files are the authoring split, not something the app needs — you only want them back if you intend to re-run `build-seed.js`. They are not in the Sheet and not in the history, so keep your own copy somewhere that is not this repo.
+
+---
+
+## 12. More than one trip
+
+One Sheet holds every trip. The app shows one at a time; switch in ⚙ Settings → **Trips**.
+
+### What goes where
+
+| Tab | One row per | Notes |
+|---|---|---|
+| **Trips** | trip | `id`, `name`, `name_zh`, `start`, `end` (yyyy-mm-dd), `tz`, `zh_script`, `is_default`, `notes`. Exactly one has `is_default` = 1. |
+| **Cities** | city | `name`, `name_zh`, centre (`lat`, `lng`), `tz`, `region`, `map_app`, and optional taxi fares (`currency`, `round`, `flag`, `flag_km`, `per_km`, `high_at`, `per_km_high`, `transit`, `car`). Shared by every trip. |
+| **Days** | named day | `trip_id`, `date`, `label`. Only days you have renamed. |
+
+Bookings, Locations, Schedule and Checklist each gain a `trip_id` column. **A blank `trip_id` means the default trip**, which is how every row written before this reads, so nothing in the Sheet has to change. Rows the app writes for any other trip carry its id.
+
+Places are matched to cities by name. A city's **region** (`cn` mainland China, `hk`, `mo`, `tw`, or blank) decides the defaults: mainland places open in Amap and everything else in Google Maps (Apple Maps can be picked per city or per place); a trip that takes in mainland China, Hong Kong or Macau gets the China guide and Simplified Chinese, and any other trip a general travel guide and Chinese as written. The trip's `zh_script` (`simplified` or `original`) overrides that.
+
+### In the app
+
+- **+ New trip** — name, dates, time zone. It opens empty; add cities first, then places.
+- **Edit trip** — rename it or move its dates. *Move the plan with the first day* shifts every stop and day name by the same number of days. Bookings are not moved; change those yourself.
+- **Delete trip** — removes the trip and every row tagged with it, in the app and the Sheet. The default trip can't be deleted.
+- **+ Add city** — paste a map link or type the centre; the region fills itself in. Fares are optional: without them, legs show distance and walking time only.
+- **Rename day** — at the bottom of each day. Clear the name to go back to the one worked out from the plan ("Kyoto", "Osaka → Kyoto", "Nara day trip").
+- **Time zone** on a booking — for a time that isn't in the trip's zone, like a flight out of home. Countdowns use it.
+
+Each trip has its own personal packing list on each phone.
+
+### Updating the backend
+
+The app works with the old backend — you just can't add trips or cities, and day names stay on the phone that set them. To switch it on:
+
+1. Open `Code.gs` from this repo, select all, copy.
+2. In the Sheet: **Extensions → Apps Script**, select all of the old code and paste over it.
+3. Find the line `var API_KEY = 'CHANGE-ME…';` near the top and put **your existing key** back in (it's in the app under ⚙ Settings → API key). Save.
+4. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment*, which would change the URL.
+5. In the app: ⚙ → **Pull**. **Trips** now has **+ New trip**.
+
+The new tabs and columns are added the first time the script runs. From a laptop, `node src/sheet.js push` also takes `trips`, `cities` and `days` arrays.

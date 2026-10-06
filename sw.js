@@ -4,7 +4,7 @@
 /* Bumped when the shell changes (v2: no trip content baked in; v3: transport
    legs and ticket notes; v4: Prep tab; v5: add a place from a map link; v6: offline adds survive the first sync; v7: map-link names in both languages; v10: trip overview, Simplified Chinese table; v11: photos and ticket links).
    */
-var CACHE = "gct-v11";
+var CACHE = "gct-v12";
 var PHOTOS = "gct-photos";   // filled by the page; see "Photos" in index.html
 var ASSETS = [
   "./", "./index.html", "./manifest.json", "./t2s.js",

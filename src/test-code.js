@@ -264,5 +264,37 @@ console.log("12. resolving map links");
   ok(!post({action:"resolvePlace",payload:{url:"https://maps.app.goo.gl/abc"}}).ok, "still needs the API key");
 }
 
+console.log("13. trips, cities and day names");
+{
+  const all = post({key:KEY,action:"all"}).data;
+  ok(Array.isArray(all.trips) && Array.isArray(all.cities) && Array.isArray(all.days), "all includes trips, cities and days");
+  ok(post({key:KEY,action:"saveTrip",payload:{id:"gc",name:"First",start:"2026-10-16",end:"2026-11-01",tz:"Asia/Shanghai",is_default:"1"}}).ok, "save the default trip");
+  let r = post({key:KEY,action:"saveTrip",payload:{name:"Second",start:"2027-04-01",end:"2027-04-05",tz:"Asia/Tokyo"}});
+  ok(r.ok && /^trip-/.test(r.data.trip.id), "a new trip gets a trip- id");
+  const tid = r.data.trip.id;
+  eq(post({key:KEY,action:"trips"}).data.trips.map(t=>t.name), ["First","Second"], "both listed");
+  const NL0 = post({key:KEY,action:"locations"}).data.locations.length;
+  r = post({key:KEY,action:"saveLocation",payload:{name_en:"T place",name_zh:"测",city:"Kyoto",type:"attraction",trip_id:tid}});
+  const lid = r.data.location.id;
+  post({key:KEY,action:"saveScheduleEntry",payload:{date:"2027-04-01",order_index:1,location_id:lid,trip_id:tid}});
+  post({key:KEY,action:"saveBooking",payload:{type:"flight",date:"2027-04-01",time:"09:00",description:"Out",trip_id:tid,tz:"Australia/Sydney"}});
+  post({key:KEY,action:"saveChecklistItem",payload:{kind:"task",text:"JR pass",trip_id:tid}});
+  post({key:KEY,action:"saveDay",payload:{id:"day-"+tid+"-20270401",trip_id:tid,date:"2027-04-01",label:"Arrive"}});
+  const bk = post({key:KEY,action:"bookings"}).data.bookings.find(b=>b.description==="Out");
+  eq([bk.trip_id, bk.tz], [tid, "Australia/Sydney"], "a booking keeps its trip and time zone");
+  eq(post({key:KEY,action:"all"}).data.days[0].label, "Arrive", "day name saved");
+  r = post({key:KEY,action:"saveCity",payload:{name:"Kyoto",tz:"Asia/Tokyo",flag:"500",per_km:"400"}});
+  ok(r.ok && /^city-/.test(r.data.city.id), "a city saves");
+  eq(post({key:KEY,action:"all"}).data.cities[0].tz, "Asia/Tokyo", "and reads back");
+  r = post({key:KEY,action:"deleteTrip",payload:{id:"gc"}});
+  ok(!r.ok && /default trip/.test(r.error), "the default trip can't be deleted");
+  r = post({key:KEY,action:"deleteTrip",payload:{id:tid}});
+  ok(r.ok && r.data.removed, "deleting the other trip works");
+  eq([r.data.rows_removed.Locations, r.data.rows_removed.Schedule, r.data.rows_removed.Bookings, r.data.rows_removed.Checklist, r.data.rows_removed.Days], [1,1,1,1,1], "and takes exactly its rows with it");
+  eq(post({key:KEY,action:"locations"}).data.locations.length, NL0, "the rest are untouched");
+  eq(post({key:KEY,action:"trips"}).data.trips.map(t=>t.id), ["gc"], "one trip left");
+  ok(post({key:KEY,action:"deleteCity",payload:{id:post({key:KEY,action:"all"}).data.cities[0].id}}).data.deleted.removed, "a city deletes");
+}
+
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));
 process.exit(fails ? 1 : 0);
