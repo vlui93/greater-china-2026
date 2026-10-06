@@ -15,6 +15,7 @@ Vanilla HTML/CSS/JS, no build step, no framework. Data lives in a Google Sheet b
 - Bookings list with confirmation numbers
 - More than one trip in the same Sheet, each with its own cities, time zone and guide ([§12](#12-more-than-one-trip))
 - Maps of every place and of each day, place search by name, imports from Google My Maps and Takeout, and a best-order button for a day ([§13](#13-maps-finding-and-importing-places-best-order))
+- Places copied between trips, packing templates, a calendar file and a printable itinerary, and bookings read from a pasted confirmation email ([§14](#14-reuse-export-and-paste-a-booking))
 
 ---
 
@@ -435,3 +436,41 @@ The file is read on the phone. You get a list to tick: places already on your li
 **Best order** (under each day with three or more stops) works out the shortest way round, starting and ending at the hotel as the day view does. Stops with a time, hotels and stops without a pin stay where they are relative to each other; the rest are fitted in where they add the least travel. It shows the new order and how much it saves, and asks before changing anything. Distances are straight lines, so treat it as a suggestion — it knows nothing about opening hours or a river in the way.
 
 The Chinese name is required for places in mainland China, Hong Kong and Macau, and optional anywhere else.
+
+---
+
+## 14. Reuse, export and paste-a-booking
+
+### Places from other trips
+
+Every trip's places are on each phone, so **Locations → Other trips** lists the places from your other trips (search in English or 中文). **Copy** puts a new place into the open trip with all its notes, tickets and photo; editing the copy leaves the original alone. Places already in this trip show **Here**. The same list opens from **+ Add a stop** → *Copy a place from another trip*.
+
+### Packing templates
+
+**Prep → Packing → Use a template** adds to your personal list from:
+
+- a few general starters (Essentials, Phone and tech, Warm weather, Cold weather, China extras);
+- templates you saved with **Save as template**;
+- your list from any other trip.
+
+Only items not already on the list are added, unticked. Templates live on the phone, like the personal list.
+
+### Calendar and print
+
+**All Days → Add to calendar** makes an `.ics` file of the open trip: an all-day event per day listing its stops, an event for each stop with a time, and the bookings (with their reference). Times are written in UTC from each city's own time zone, so they show right wherever your phone is. Open the file and your calendar offers to add the events. It's a copy — make a new file after big changes.
+
+**All Days → Print itinerary** shows the trip day by day — bookings, then stops with their times, the Chinese names large enough to show a driver, and optionally how to get to each place — and **Print or save as PDF** prints just that.
+
+### Add a booking, or paste one
+
+**Bookings → + Add booking** has a form for flights, trains, ferries, hotels and anything else: date, time, reference, details, a *Not booked yet (TO BOOK)* tick, an optional time zone and a ticket link. Each booking now has **Edit** (and Delete inside it).
+
+Paste a confirmation email — or the text of the booking page — into **Paste the confirmation** and press **Read it**. On the phone, with no AI and nothing sent anywhere, it looks for:
+
+- the type (hotel, flight, train, ferry), from the words used;
+- dates in most formats (`16 Oct 2026`, `Oct 16, 2026`, `2026-10-16`, `16/10/2026` read day-first, `2026年10月16日`), with a missing year taken from the trip;
+- the departure time (12- or 24-hour) and arrival time, or check-in and check-out;
+- the reference (booking, confirmation, order, PNR, 订单号…);
+- the flight number and airport codes, or the train number and stations (English or Chinese), or the hotel's name and nights, and coach and seat.
+
+It fills the form and says what it found; check each field before saving. Passenger names are not copied.
