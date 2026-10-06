@@ -5,6 +5,6 @@ const assertNoTripContent = require('./no-trip-content');
 const d = __dirname;
 const tpl = fs.readFileSync(path.join(d, 'index.template.html'), 'utf8');
 if (tpl.includes('/*__SEED__*/')) throw new Error('template still has the old seed placeholder');
-assertNoTripContent(tpl, 'index.template.html');
+assertNoTripContent(tpl, 'index.html');   // checked as what it becomes, so the size ceiling applies
 fs.writeFileSync(path.join(d, '..', 'index.html'), tpl);
 console.log('index.html written:', (fs.statSync(path.join(d, '..', 'index.html')).size / 1024).toFixed(0) + 'KB');

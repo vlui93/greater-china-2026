@@ -530,6 +530,37 @@ a.btn{text-decoration:none}
 .gatebox .gerr{color:#c2352f;font-size:13px;line-height:1.5;margin:0 0 11px}
 .gatebox .gerr:empty{display:none}
 .gatebox .ghint{margin:14px 0 0;color:var(--ink-3);font-size:12.5px;line-height:1.55}
+/* Maps (map.js) */
+.seg.two{grid-template-columns:repeat(2,1fr)}
+.mapbox{height:calc(100vh - 400px);height:calc(100dvh - 400px);min-height:300px;border-radius:var(--radius);
+  overflow:hidden;border:1px solid var(--line);background:var(--surface-2);position:relative;z-index:0}
+.mapbox.tall{height:calc(100vh - 190px);height:calc(100dvh - 190px)}
+.mapbox .mapmsg{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:var(--ink-2);font-size:14px}
+.mpin span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;color:#fff;font-weight:750;font-size:13px;
+  border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.mpin.place span{width:18px;height:18px;margin:5px;border-width:2px}
+.mpin.hotel span{border-radius:8px}
+.mlocate{width:34px;height:34px;display:grid;place-items:center;background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;cursor:pointer}
+.mlocate svg{width:20px;height:20px;fill:none;stroke:#333;stroke-width:1.8}
+.mlocate.busy svg{stroke:#1668d6}
+.mpop{font:14px/1.4 -apple-system,system-ui,sans-serif;color:#1b1210}
+.mpop .zh{font-size:15px}
+.mpop .mt{color:#6b5f55;font-size:12.5px;margin:2px 0 8px}
+.mpop .row{gap:6px}
+.mpop .btn{color:#1b1210}
+.mpop .btn.primary{color:#fff}
+.maplegend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12.5px;color:var(--ink-2);margin:8px 2px 0}
+.maplegend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.dayacts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.findres{margin-top:8px;display:grid;gap:6px}
+.findres button{text-align:left;padding:9px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface)}
+.findres .en{font-weight:650;font-size:14px}
+.findres .mt{font-size:12.5px;color:var(--ink-3);margin-top:1px}
+.implist{display:grid;gap:6px;margin:10px 0 14px}
+.implist label{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface)}
+.implist input{margin-top:3px;width:18px;height:18px;flex:none}
+.implist .en{font-weight:650;font-size:14px}
+.implist .mt{font-size:12.5px;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -591,6 +622,7 @@ a.btn{text-decoration:none}
 </div>
 
 <div id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="placesFile" accept=".kml,.kmz,.json,.geojson,.csv,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/json,text/csv" hidden>
 
 <!-- Traditional → Simplified character table (generated from OpenCC, Apache-2.0) -->
 <script src="t2s.js"></script>
@@ -1594,7 +1626,11 @@ function renderDayInto(el, date, withStrip){
     '<div class="formactions" style="margin-top:16px">'+
       '<button class="btn primary" data-act="add-existing" data-date="'+date+'">+ Add a stop</button>'+
       '<button class="btn" data-act="quick-add" data-date="'+date+'">+ New place</button>'+
-      '<button class="btn ghost" data-act="rename-day" data-date="'+date+'">Rename day</button>'+
+    '</div>'+
+    '<div class="dayacts">'+
+      (stops.length ? '<button class="btn sm ghost" data-act="day-map" data-date="'+date+'">Map of the day</button>' : '')+
+      (stops.length>2 ? '<button class="btn sm ghost" data-act="best-order" data-date="'+date+'">Best order</button>' : '')+
+      '<button class="btn sm ghost" data-act="rename-day" data-date="'+date+'">Rename day</button>'+
     '</div>';
 }
 
@@ -1865,8 +1901,21 @@ function renderPlaces(){
   var cities=["All"]; all.forEach(function(l){ if(cities.indexOf(l.city)<0) cities.push(l.city); });
   var types=["All","attraction","restaurant","shopping","hotel"];
   var q=ui.q||"";
+  var mode=ui.placesMode==="map" ? "map" : "list";
+  var seg='<div class="seg two" role="tablist">'+[["list","List · 列表"],["map","Map · 地图"]].map(function(x){
+    return '<button data-act="places-mode" data-v="'+x[0]+'" aria-pressed="'+(mode===x[0])+'">'+x[1]+'</button>';
+  }).join("")+'</div>';
+  var chips='<div class="filters">'+cities.map(function(c){
+      return '<button class="chip" data-act="city" data-v="'+esc(c)+'" aria-pressed="'+(ui.city===c)+'">'+esc(c)+'</button>';
+    }).join("")+'</div>'+
+    '<div class="filters" style="margin-top:-4px">'+types.map(function(t){
+      return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
+        (t==="All"?"All types":esc(t))+'</button>';
+    }).join("")+'</div>';
+  if(mode==="map"){ renderPlacesMap(seg+chips); return; }
+  dropMap("places");
 
-  $("#view-places").innerHTML =
+  $("#view-places").innerHTML = seg+
     '<div class="searchwrap'+(q?" has":"")+'">'+
       '<span class="mag"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></span>'+
       '<input id="q" type="search" inputmode="search" autocomplete="off" autocapitalize="off" '+
@@ -1902,7 +1951,8 @@ function placeResults(q){
   });
   return '<div class="spread small muted" style="margin:4px 0 10px">'+
       '<span>'+list.length+" of "+all.length+'</span>'+
-      '<button class="btn sm ghost" data-act="new-location">+ New place</button></div>'+
+      '<span class="row" style="gap:6px"><button class="btn sm ghost" data-act="import-places">Import</button>'+
+      '<button class="btn sm ghost" data-act="new-location">+ New place</button></span></div>'+
     (list.length ? '<div class="loclist">'+list.map(function(l){
       var u=navUrls(l);
       return '<div class="locrow">'+
@@ -2217,6 +2267,7 @@ function openSheet(title, html, actionLabel, onAction){
 }
 function closeSheet(){
   sheetStack=[];
+  dropMap("sheet");
   $("#sheet").classList.remove("open");
   document.body.style.overflow="";
 }
@@ -2297,11 +2348,11 @@ function locationForm(id){
       return '<option value="'+esc(o)+'"'+(String(val)===String(o)?" selected":"")+'>'+esc(o)+'</option>';
     }).join("")+'</select>';
   }
-  var html = (isNew ? linkBoxHTML() : "")+
+  var html = (isNew ? findBoxHTML()+linkBoxHTML() : "")+
     '<div class="field"><label>Name (English)</label><input id="f_name_en" value="'+esc(l.name_en)+'" placeholder="English name"></div>'+
-    '<div class="field"><label>名称 (Chinese) — required</label>'+
+    '<div class="field"><label>名称 (Chinese) — required in China</label>'+
       '<input id="f_name_zh" class="zh" value="'+esc(l.name_zh)+'" placeholder="中文名" style="font-size:19px">'+
-      '<div class="hint">Every place needs a Chinese name — it is what search, the map apps and showing your phone to a local all run on.</div></div>'+
+      '<div class="hint">Every place in mainland China, Hong Kong and Macau needs a Chinese name — it is what search, the map apps and showing your phone to a local all run on.</div></div>'+
     '<div class="grid2">'+
       '<div class="field"><label>City</label>'+sel("city",l.city,cities)+'</div>'+
       '<div class="field"><label>Type</label>'+sel("type",l.type,["attraction","restaurant","shopping","hotel"])+'</div>'+
@@ -2332,7 +2383,7 @@ function locationForm(id){
       (isNew?"":'<button class="btn danger" data-act="delete-location" data-lid="'+esc(l.id)+'">Delete</button>')+
     '</div>';
   openSheet(isNew?"New place":"Edit place", html);
-  bindLinkBox();
+  bindLinkBox(); bindFindBox();
 
   var citySel=$("#f_city"), navSel=$("#f_nav_app");
   citySel.addEventListener("change", function(){ navSel.value = mapAppFor(this.value); });
@@ -2355,7 +2406,7 @@ function collectLocationForm(existingId){
   if(o.photo_url && o.photo_url.toLowerCase()==="none") o.photo_url="none";
   else if(o.photo_url && !safeUrl(o.photo_url)) return { error:"The photo link needs to start with https://" };
   if(!o.name_en && !o.name_zh) return { error:"Give the place a name." };
-  if(!o.name_zh) return { error:"The Chinese name is required — you will need it on the ground." };
+  if(!o.name_zh && CHINA_REGIONS[cityRegion(o.city)]) return { error:"The Chinese name is required — you will need it on the ground." };
   if(!o.name_en) o.name_en=o.name_zh;
   if(!o.id) o.id=uid("loc");
   return { value:o };
@@ -2648,9 +2699,9 @@ function bindLinkBox(){
 function quickAddForm(date){
   var html =
     '<p class="blurb muted small" style="margin-bottom:14px">Just enough to navigate to it. Fill in the rest later.</p>'+
-    linkBoxHTML()+
+    findBoxHTML()+linkBoxHTML()+
     '<div class="field"><label>Name (English)</label><input id="f_name_en" placeholder="That noodle place"></div>'+
-    '<div class="field"><label>名称 (Chinese) — required</label><input id="f_name_zh" class="zh" style="font-size:19px" placeholder="小面馆"></div>'+
+    '<div class="field"><label>名称 (Chinese) — required in China</label><input id="f_name_zh" class="zh" style="font-size:19px" placeholder="小面馆"></div>'+
     '<div class="grid2">'+
       '<div class="field"><label>City</label><select id="f_city">'+
         cityOptions().map(function(c){
@@ -2671,7 +2722,7 @@ function quickAddForm(date){
     '<div class="field"><label>Notes</label><textarea id="f_notes" style="min-height:60px" placeholder="Optional"></textarea></div>'+
     '<div class="formactions"><button class="btn primary block" data-act="save-quick" data-date="'+esc(date)+'">Add to Day '+dayNumber(date)+'</button></div>';
   openSheet("New place · Day "+dayNumber(date), html);
-  bindLinkBox();
+  bindLinkBox(); bindFindBox();
   var c=$("#f_city"), n=$("#f_nav_app");
   function syncNav(){ n.value=mapAppFor(c.value); }
   syncNav(); c.addEventListener("change", syncNav);
@@ -3111,6 +3162,353 @@ function importNotes(file){
 }
 
 /* ==========================================================================
+   Maps — Leaflet and OpenStreetMap tiles, loaded from map.js the first time a
+   map is opened. Every place's own colour is its type's.
+   ========================================================================== */
+var TYPE_COLOR = { attraction:"#c2410c", restaurant:"#b7791f", shopping:"#7c3aed", hotel:"#1d4ed8" };
+var maps = {};   // the map on the Locations tab, and the one in a sheet
+function dropMap(which){
+  var m=maps[which]; if(!m) return;
+  if(which==="places"){ try{ var c=m.getCenter(); ui.mapView={ lat:c.lat, lng:c.lng, zoom:m.getZoom(), trip:TRIP.id }; }catch(e){} }
+  try{ m.remove(); }catch(e){}
+  maps[which]=null;
+}
+var mapJs=null;
+function loadMapJs(){
+  if(window.TripMap) return window.TripMap.load();
+  if(!mapJs) mapJs=new Promise(function(res, rej){
+    var s=document.createElement("script"); s.src="map.js";
+    s.onload=function(){ res(); }; s.onerror=function(){ mapJs=null; rej(new Error("map-load")); };
+    document.head.appendChild(s);
+  }).then(function(){ return window.TripMap.load(); });
+  return mapJs;
+}
+function mapPopup(l, extra){
+  return '<div class="mpop"><b>'+esc(l.name_en)+'</b>'+(l.name_zh?'<div class="zh">'+escz(l.name_zh)+'</div>':'')+
+    '<div class="mt">'+(extra?esc(extra)+' · ':'')+esc(l.city)+' · '+esc(l.type)+'</div>'+
+    '<div class="row"><button class="btn sm" data-act="open" data-lid="'+esc(l.id)+'">Details</button>'+
+    '<button class="btn sm primary" data-act="nav" data-lid="'+esc(l.id)+'">Navigate</button></div></div>';
+}
+function showMap(which, el, pins, opts){
+  dropMap(which);
+  el.innerHTML='<div class="mapmsg">Loading the map…</div>';
+  return loadMapJs().then(function(){
+    if(!el.isConnected) return;
+    return window.TripMap.show(el, pins, opts).then(function(m){
+      if(!el.isConnected){ try{ m.remove(); }catch(e){} return; }
+      maps[which]=m;
+    });
+  }).catch(function(){
+    el.innerHTML='<div class="mapmsg">The map needs a connection the first time it is opened.<br>Try again on wifi — after that it works offline.</div>';
+  });
+}
+function renderPlacesMap(head){
+  var all=store.data.locations;
+  var list=all.filter(function(l){ return (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type); });
+  var pinned=list.filter(hasXY), missing=list.length-pinned.length;
+  dropMap("places");
+  $("#view-places").innerHTML=head+
+    '<div class="mapbox" id="placesMap"></div>'+
+    '<div class="maplegend">'+["attraction","restaurant","shopping","hotel"].map(function(t){
+      return '<span><i style="background:'+TYPE_COLOR[t]+'"></i>'+t+'</span>'; }).join("")+
+      '<span class="muted">'+pinned.length+' on the map'+(missing?' · '+missing+' without a pin':'')+'</span></div>';
+  var v=ui.mapView && ui.mapView.trip===TRIP.id ? ui.mapView : null;
+  var ctr=cityInfo(ui.city!=="All" ? ui.city : (cityOptions()[0]||""));
+  showMap("places", $("#placesMap"), pinned.map(function(l){
+    return { lat:+l.lat, lng:+l.lng, kind:"place", color:TYPE_COLOR[l.type]||TYPE_COLOR.attraction, title:l.name_en, popup:mapPopup(l) };
+  }), { view: v, centre: ctr && hasXY(ctr) ? [+ctr.lat, +ctr.lng] : null });
+}
+/** The day's stops in order, numbered, with the way from and back to the hotel. */
+function dayMap(date){
+  var stops=store.dayStops(date), locs=stops.map(function(s){ return store.loc(s.location_id); }).filter(Boolean);
+  if(!locs.length) return;
+  var first=locs[0], last=locs[locs.length-1];
+  var hFirst=first.type!=="hotel" ? hotelFor(first) : null, hLast=last.type!=="hotel" ? hotelFor(last) : null;
+  var pins=[], n=0, nopin=[];
+  if(hFirst && hasXY(hFirst)) pins.push({ lat:+hFirst.lat, lng:+hFirst.lng, kind:"hotel", label:"H", color:TYPE_COLOR.hotel, title:hFirst.name_en, popup:mapPopup(hFirst,"Start") });
+  locs.forEach(function(l){
+    n++;
+    if(!hasXY(l)){ nopin.push(n+". "+l.name_en); return; }
+    pins.push({ lat:+l.lat, lng:+l.lng, kind:l.type==="hotel"?"hotel":"stop", label:String(n), color:TYPE_COLOR[l.type]||TYPE_COLOR.attraction, title:l.name_en, popup:mapPopup(l,"Stop "+n) });
+  });
+  if(hLast && hasXY(hLast)) pins.push({ lat:+hLast.lat, lng:+hLast.lng, kind:"hotel", label:"H", color:TYPE_COLOR.hotel, title:hLast.name_en, popup:mapPopup(hLast,"End") });
+  openSheet("Day "+dayNumber(date)+" · "+fmtDate(date,false),
+    '<div class="mapbox tall" id="dayMap" style="margin-top:12px"></div>'+
+    (nopin.length ? '<p class="blurb small muted" style="margin-top:8px">Not on the map (no pin): '+nopin.map(esc).join(", ")+'</p>' : ''));
+  showMap("sheet", $("#dayMap"), pins, { route:true, dashedEnds:!!(hFirst||hLast) });
+}
+
+/* ==========================================================================
+   Best order for a day: the shortest way round, starting and ending at the
+   hotel as the day view does. Stops with a time, hotels and stops without a
+   pin stay in their order; the rest are fitted in where they add the least,
+   then each is moved again while that still shortens the day. Straight-line
+   distances, so it is a suggestion — it asks before changing anything.
+   ========================================================================== */
+function routeKm(seq, start, end){
+  var pts=[start].concat(seq.map(function(x){ return x.l; })).concat([end]).filter(function(p){ return p && hasXY(p); }), km=0;
+  for(var i=1;i<pts.length;i++) km+=roadKm(pts[i-1],pts[i]);
+  return km;
+}
+function bestInsert(seq, it, start, end){
+  var best=0, bestKm=1e12;
+  for(var i=0;i<=seq.length;i++){
+    var t=seq.slice(0,i).concat([it]).concat(seq.slice(i)), k=routeKm(t,start,end);
+    if(k<bestKm-1e-9){ bestKm=k; best=i; }
+  }
+  return seq.slice(0,best).concat([it]).concat(seq.slice(best));
+}
+function orderDay(items, start, end){
+  var fixedOf=function(x){ return !x.l || !hasXY(x.l) || !!String(x.s.planned_time||"").trim() || x.l.type==="hotel"; };
+  var fixed=items.filter(fixedOf), free=items.filter(function(x){ return !fixedOf(x); });
+  var tries=[free, free.slice().reverse(), free.slice().sort(function(a,b){
+    return (start&&hasXY(start) ? roadKm(start,b.l)-roadKm(start,a.l) : 0); })];
+  var best=null, bestKm=1e12;
+  tries.forEach(function(order){
+    var seq=fixed.slice();
+    order.forEach(function(it){ seq=bestInsert(seq,it,start,end); });
+    for(var round=0, moved=true; moved && round<40; round++){
+      moved=false;
+      free.forEach(function(it){
+        var before=routeKm(seq,start,end), without=seq.filter(function(x){ return x!==it; });
+        var again=bestInsert(without,it,start,end);
+        if(routeKm(again,start,end) < before-1e-6){ seq=again; moved=true; }
+      });
+    }
+    var k=routeKm(seq,start,end); if(k<bestKm){ bestKm=k; best=seq; }
+  });
+  return { seq:best||items, km:bestKm, free:free.length };
+}
+function bestOrder(date){
+  var items=store.dayStops(date).map(function(s){ return { s:s, l:store.loc(s.location_id) }; });
+  var locs=items.map(function(x){ return x.l; }).filter(Boolean);
+  if(!locs.length) return;
+  var first=locs[0], last=locs[locs.length-1];
+  var start=first.type!=="hotel" ? hotelFor(first) : null, end=last.type!=="hotel" ? hotelFor(last) : null;
+  var r=orderDay(items, start, end), now=routeKm(items, start, end);
+  if(r.free<2){ toast("Nothing to move — stops with a time, hotels and stops without a pin stay put", 3200); return; }
+  var saved=(now-r.km)/ROAD_FACTOR;
+  if(saved<0.3 || r.seq.every(function(x,i){ return x===items[i]; })){ toast("This order is already about as short as it gets"); return; }
+  var msg="Best order — about "+distText(saved)+" less travel ("+distText(now/ROAD_FACTOR)+" → "+distText(r.km/ROAD_FACTOR)+" in straight lines):\n\n"+
+    r.seq.map(function(x,i){ return (i+1)+". "+(x.l?x.l.name_en:"?")+(x.s.planned_time?"  ("+x.s.planned_time+")":""); }).join("\n")+
+    "\n\nUse this order?";
+  if(!window.confirm(msg)) return;
+  commitOrder(date, r.seq.map(function(x){ return x.s.id; })).then(function(){ render(); toast("Reordered"); });
+}
+
+/* ==========================================================================
+   Find a place by name — OpenStreetMap's place search (Nominatim), near the
+   city picked in the form. Only the words typed are sent. Its coordinates
+   are plain GPS, so nothing is shifted, in China or anywhere else.
+   ========================================================================== */
+function findBoxHTML(){
+  return '<div class="field"><label for="f_find">Find by name</label>'+
+    '<div class="row" style="gap:8px"><input id="f_find" type="search" autocomplete="off" placeholder="e.g. Tim Ho Wan Sham Shui Po" style="flex:1">'+
+    '<button class="btn sm" data-act="find-place">Search</button></div>'+
+    '<div class="hint" id="f_find_status">Searches OpenStreetMap near the city picked below. Smaller places are often missing — a map link works for anything.</div>'+
+    '<div class="findres" id="f_find_results"></div></div>';
+}
+function bindFindBox(){
+  var i=$("#f_find"); if(!i) return;
+  i.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); findPlace(); } });
+}
+var found=[];
+function osmSearch(q, near){
+  var u="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&namedetails=1&addressdetails=1&accept-language=en&q="+encodeURIComponent(q);
+  if(near && hasXY(near)) u+="&viewbox="+[(+near.lng-0.6),(+near.lat+0.6),(+near.lng+0.6),(+near.lat-0.6)].map(function(x){ return x.toFixed(4); }).join(",");
+  return fetch(u, { headers:{ "Accept":"application/json" } }).then(function(r){
+    if(!r.ok) throw new Error("search "+r.status); return r.json();
+  });
+}
+function osmPlace(r){
+  var nd=r.namedetails||{}, raw=String(nd.name||r.name||"");
+  var zh=nd["name:zh-Hans"]||nd["name:zh"]||nd["name:zh-Hant"]||nd["name:zh-CN"]||nd["name:zh-HK"]||"";
+  var en=nd["name:en"]||"";
+  if(!zh || !en){ var sp=splitNames(raw); zh=zh||sp.zh; en=en||sp.en; }
+  if(!en && !CJK.test(raw)) en=raw;
+  var cat=r.category||r["class"]||"", typ=r.type||"";
+  var type = cat==="tourism" && /hotel|hostel|guest_house|motel|apartment/.test(typ) ? "hotel"
+           : cat==="amenity" && /restaurant|cafe|fast_food|food_court|bar|pub|ice_cream|biergarten/.test(typ) ? "restaurant"
+           : cat==="shop" || /marketplace|mall|department_store/.test(typ) ? "shopping"
+           : guessType(raw);
+  var lat=+(+r.lat).toFixed(6), lng=+(+r.lon).toFixed(6);
+  var parts=String(r.display_name||"").split(", ");
+  var address=parts.slice(raw && parts[0]===raw ? 1 : 0, Math.max(1, parts.length-1)).join(", ");
+  return { names:{ zh:zh, en:en }, lat:lat, lng:lng, city:cityFor(lat,lng), type:type, address:address, source:"osm", shiftedM:0,
+           kind:(typ||cat).replace(/_/g," ") };
+}
+function findPlace(){
+  var q=($("#f_find")||{}).value||"", st=$("#f_find_status"), box=$("#f_find_results");
+  q=q.trim(); if(!q || !box) return;
+  if(!navigator.onLine){ st.textContent="Searching needs a connection. A map link, or the Chinese name alone, works offline."; return; }
+  var c=$("#f_city"), near=cityInfo(c ? c.value : "");
+  st.textContent="Searching…"; box.innerHTML="";
+  osmSearch(q, near).then(function(rows){
+    found=(rows||[]).map(osmPlace);
+    if(!found.length){ st.textContent="Nothing found. Try fewer words, the Chinese name, or paste a map link below."; return; }
+    st.textContent="Pick one:";
+    box.innerHTML=found.map(function(p,i){
+      return '<button data-act="find-pick" data-i="'+i+'"><div class="en">'+esc(p.names.en||p.names.zh)+
+        (p.names.en&&p.names.zh?' <span class="zh">'+escz(p.names.zh)+'</span>':'')+'</div>'+
+        '<div class="mt">'+esc([p.kind, p.city||"", p.address].filter(Boolean).join(" · ").slice(0,140))+'</div></button>';
+    }).join("");
+  }).catch(function(){ st.textContent="The search didn't answer. Try again, or paste a map link below."; });
+}
+function pickFound(i){
+  var p=found[i]; if(!p) return;
+  var en=$("#f_name_en"), zh=$("#f_name_zh");
+  if(en) en.value=p.names.en||""; if(zh) zh.value=p.names.zh||"";
+  applyPlace(p);
+  var box=$("#f_find_results"); if(box) box.innerHTML="";
+  var st=$("#f_find_status"); if(st) st.textContent="Filled in from OpenStreetMap — check the names below.";
+}
+
+/* ==========================================================================
+   Import places from a file
+   - Google My Maps: Export to KML/KMZ (a list of pins with names and notes)
+   - Google Takeout, Maps (your places): "Saved Places.json"
+   - Google Takeout, Saved: one .csv per list (Title, Note, URL)
+   Read on the phone; nothing is uploaded except the places you add.
+   ========================================================================== */
+function unzipFirst(buf, want){
+  var u8=new Uint8Array(buf), dv=new DataView(buf), eocd=-1;
+  for(var i=u8.length-22;i>=Math.max(0,u8.length-66000);i--) if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; }
+  if(eocd<0) return Promise.reject(new Error("not a zip"));
+  var count=dv.getUint16(eocd+10,true), p=dv.getUint32(eocd+16,true), dec=new TextDecoder();
+  for(var k=0;k<count;k++){
+    if(dv.getUint32(p,true)!==0x02014b50) break;
+    var method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true), nlen=dv.getUint16(p+28,true),
+        xlen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true), off=dv.getUint32(p+42,true);
+    var name=dec.decode(u8.subarray(p+46,p+46+nlen));
+    p+=46+nlen+xlen+clen;
+    if(!want.test(name)) continue;
+    var start=off+30+dv.getUint16(off+26,true)+dv.getUint16(off+28,true), data=u8.subarray(start,start+csize);
+    if(method===0) return Promise.resolve(dec.decode(data));
+    if(method!==8 || typeof DecompressionStream==="undefined") return Promise.reject(new Error("can't unzip"));
+    return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+  }
+  return Promise.reject(new Error("no kml inside"));
+}
+function stripTags(h){
+  var d=document.createElement("div"); d.innerHTML=String(h||"").replace(/<br\s*\/?>/gi,"\n");
+  return (d.textContent||"").replace(/\n{3,}/g,"\n\n").trim();
+}
+function parseKml(text){
+  var doc=new DOMParser().parseFromString(text,"application/xml"), out=[];
+  var pms=doc.getElementsByTagName("Placemark");
+  for(var i=0;i<pms.length;i++){
+    var pm=pms[i], get=function(tag){ var e=pm.getElementsByTagName(tag)[0]; return e ? e.textContent.trim() : ""; };
+    if(!pm.getElementsByTagName("Point").length) continue;   // a route or an area, not a place
+    var c=get("coordinates").split(/\s+/)[0].split(",");
+    out.push({ name:get("name"), note:stripTags(get("description")), lng:c.length>1?+c[0]:null, lat:c.length>1?+c[1]:null });
+  }
+  return out;
+}
+function parseGeoJson(j){
+  var fs=(j && j.features) || (j && j.type==="Feature" ? [j] : []);
+  return fs.map(function(f){
+    var p=f.properties||{}, loc=p.location||p.Location||{}, g=f.geometry||{}, c=g.coordinates||[];
+    var lat=+c[1], lng=+c[0];
+    if(!(isFinite(lat)&&isFinite(lng)) || (lat===0&&lng===0)){
+      var gc=loc["Geo Coordinates"]||{}; lat=+gc.Latitude; lng=+gc.Longitude;
+    }
+    var url=p.google_maps_url||p["Google Maps URL"]||"";
+    if(!(isFinite(lat)&&isFinite(lng)) || (lat===0&&lng===0)){ var m=parseMapText(url); lat=m.lat; lng=m.lng; }
+    var addr=loc.address||loc.Address||"";
+    return { name:loc.name||loc["Business Name"]||p.Title||p.title||p.name||"", note:[p.Comment||p.comment||"", addr?"Address: "+addr:""].filter(Boolean).join("\n"),
+             lat:isFinite(lat)&&lat!==null?lat:null, lng:isFinite(lng)&&lng!==null?lng:null };
+  });
+}
+function parseCsv(text){
+  var rows=[], row=[], f="", q=false;
+  text=String(text).replace(/^﻿/,"");
+  for(var i=0;i<text.length;i++){
+    var ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=ch; continue; }
+    if(ch==='"') q=true;
+    else if(ch===","){ row.push(f); f=""; }
+    else if(ch==="\n"||ch==="\r"){ if(ch==="\r"&&text[i+1]==="\n") i++; row.push(f); rows.push(row); row=[]; f=""; }
+    else f+=ch;
+  }
+  if(f||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(function(r){ return r.some(function(x){ return String(x).trim(); }); });
+}
+function parseCsvPlaces(text){
+  var rows=parseCsv(text); if(rows.length<2) return [];
+  var h=rows[0].map(function(x){ return String(x).trim().toLowerCase(); });
+  var col=function(re){ for(var i=0;i<h.length;i++) if(re.test(h[i])) return i; return -1; };
+  var cn=col(/^(title|name)$/), cnote=col(/^(note|notes|comment|description)$/), cu=col(/^url$/), cla=col(/^(lat|latitude)$/), clo=col(/^(lng|lon|long|longitude)$/);
+  if(cn<0) cn=0;
+  return rows.slice(1).map(function(r){
+    var lat=cla>=0?parseFloat(r[cla]):NaN, lng=clo>=0?parseFloat(r[clo]):NaN;
+    if(!(isFinite(lat)&&isFinite(lng)) && cu>=0){ var m=parseMapText(r[cu]||""); lat=m.lat; lng=m.lng; }
+    return { name:String(r[cn]||"").trim(), note:cnote>=0?String(r[cnote]||"").trim():"",
+             lat:isFinite(lat)&&lat!==null?lat:null, lng:isFinite(lng)&&lng!==null?lng:null };
+  }).filter(function(x){ return x.name; });
+}
+function readPlacesFile(file){
+  var n=String(file.name||"").toLowerCase();
+  if(/\.kmz$/.test(n)) return file.arrayBuffer().then(function(b){ return unzipFirst(b,/\.kml$/i); }).then(parseKml);
+  return file.text().then(function(t){
+    if(/^\s*</.test(t)) return parseKml(t);
+    if(/^\s*[\[{]/.test(t)) return parseGeoJson(JSON.parse(t));
+    return parseCsvPlaces(t);
+  });
+}
+var importing=[];
+function importPlacesFile(file){
+  if(!file) return;
+  readPlacesFile(file).then(function(rows){
+    rows=rows.filter(function(r){ return r.name || r.lat!=null; });
+    if(!rows.length){ toast("No places found in that file", 2800); return; }
+    importing=rows.map(function(r){
+      var names=splitNames(r.name||"Unnamed place"), has=r.lat!=null&&r.lng!=null&&isFinite(r.lat)&&isFinite(r.lng);
+      var dup=nearDuplicate({ names:names, lat:has?r.lat:null, lng:has?r.lng:null });
+      return { names:names, raw:r.name, note:r.note||"", lat:has?+r.lat:null, lng:has?+r.lng:null,
+               city:has?cityFor(+r.lat,+r.lng):"", type:guessType(r.name), dup:dup };
+    });
+    var mainland=importing.some(function(x){ return x.lat!=null && regionOf(x.lat,x.lng)==="mainland"; });
+    var newOnes=importing.filter(function(x){ return !x.dup; }).length;
+    var opts=cityOptions();
+    openSheet("Import places",
+      '<p class="blurb small muted" style="margin:12px 0">'+importing.length+' in '+esc(file.name)+'. '+
+        (importing.length-newOnes ? (importing.length-newOnes)+' already on your list (unticked). ' : '')+
+        'They go into '+esc(TRIP.name)+'; add them to days afterwards.</p>'+
+      (mainland ? '<label class="row small" style="gap:8px;margin:0 0 12px;align-items:flex-start"><input type="checkbox" id="imp_shift" checked style="margin-top:2px"> '+
+        'Pins in mainland China came from Google Maps or Amap — move them to GPS (leave ticked unless the file came from somewhere else)</label>' : '')+
+      '<div class="field"><label>City for places outside the cities you have</label><select id="imp_city">'+
+        opts.map(function(c){ return '<option>'+esc(c)+'</option>'; }).join("")+'</select></div>'+
+      '<div class="implist">'+importing.map(function(x,i){
+        return '<label><input type="checkbox" data-i="'+i+'"'+(x.dup?'':' checked')+'><span><div class="en">'+esc(x.names.en||x.names.zh)+
+          (x.names.en&&x.names.zh?' <span class="zh">'+escz(x.names.zh)+'</span>':'')+'</div>'+
+          '<div class="mt">'+esc([x.city||"", x.type, x.lat==null?"no pin":"", x.dup?"already on your list":""].filter(Boolean).join(" · "))+'</div></span></label>';
+      }).join("")+'</div>'+
+      '<div class="formactions"><button class="btn primary block" data-act="import-apply">Add the ticked places</button></div>');
+  }).catch(function(e){
+    toast(/zip|unzip|kml inside/.test(String(e&&e.message)) ? "Couldn't open that KMZ — export it as KML instead" : "Couldn't read that file", 3200);
+  });
+}
+function applyImport(){
+  var shift=$("#imp_shift") && $("#imp_shift").checked, fallback=($("#imp_city")||{}).value||"";
+  var picked=[].slice.call(document.querySelectorAll('.implist input[type="checkbox"]')).filter(function(c){ return c.checked; })
+    .map(function(c){ return importing[+c.dataset.i]; }).filter(Boolean);
+  if(!picked.length){ toast("Nothing ticked"); return; }
+  var base=uid("loc");
+  picked.forEach(function(x,i){
+    var lat=x.lat, lng=x.lng;
+    if(lat!=null && shift && regionOf(lat,lng)==="mainland"){ var w=gcjToWgs(lat,lng); lat=+w[0].toFixed(6); lng=+w[1].toFixed(6); }
+    var city=(lat!=null ? cityFor(lat,lng) : "") || fallback;
+    var l={}; LOC_FIELDS.forEach(function(k){ l[k]=""; });
+    l.id=base+i.toString(36); l.name_en=x.names.en||x.names.zh; l.name_zh=x.names.zh; l.city=city; l.type=x.type;
+    l.lat=lat==null?"":lat; l.lng=lng==null?"":lng; l.nav_app=mapAppFor(city); l.notes=x.note;
+    store.data.locations.push(l); store.enqueue("saveLocation", l);
+  });
+  store.persist(); closeSheet(); render();
+  toast("Added "+picked.length+" place"+(picked.length===1?"":"s"));
+  if(store.configured()) store.flush().then(updateStatus).catch(function(){});
+}
+
+/* ==========================================================================
    Mutations
    ========================================================================== */
 function nextOrder(date){
@@ -3344,6 +3742,13 @@ document.addEventListener("click", function(ev){
     case "bk-ticket": setBookingTicket(t.dataset.bid); return;
     case "bk-tz": setBookingTz(t.dataset.bid); return;
     case "rename-day": renameDay(date); return;
+    case "places-mode": ui.placesMode=t.dataset.v; save(LS.ui,ui); renderPlaces(); return;
+    case "day-map": dayMap(date); return;
+    case "best-order": bestOrder(date); return;
+    case "find-place": findPlace(); return;
+    case "find-pick": pickFound(+t.dataset.i); return;
+    case "import-places": { var pf=$("#placesFile"); if(pf){ pf.value=""; pf.click(); } return; }
+    case "import-apply": applyImport(); return;
     case "trip-open": switchTrip(t.dataset.tid); return;
     case "trip-new": tripForm(null); return;
     case "trip-edit": tripForm(t.dataset.tid); return;
@@ -3382,6 +3787,7 @@ document.addEventListener("click", function(ev){
   }
 });
 
+$("#placesFile").addEventListener("change", function(){ importPlacesFile(this.files && this.files[0]); });
 $("#btnSettings").innerHTML = IC.gear;
 $("#sheetBack").innerHTML = IC.back;
 $("#btnSettings").addEventListener("click", settingsForm);

@@ -14,6 +14,7 @@ Vanilla HTML/CSS/JS, no build step, no framework. Data lives in a Google Sheet b
 - Tour-guide content for every seeded place: background, what to do, what to order, what to buy
 - Bookings list with confirmation numbers
 - More than one trip in the same Sheet, each with its own cities, time zone and guide ([§12](#12-more-than-one-trip))
+- Maps of every place and of each day, place search by name, imports from Google My Maps and Takeout, and a best-order button for a day ([§13](#13-maps-finding-and-importing-places-best-order))
 
 ---
 
@@ -340,7 +341,7 @@ All of that lives in the Google Sheet, which is private to your Google account, 
 
 **Here, because it has to be**
 
-- The app itself: markup, styles, logic, icons, service worker
+- The app itself: markup, styles, logic, icons, service worker, and Leaflet 1.9.4 under `vendor/leaflet/` (BSD-2-Clause, licence alongside) so maps work offline
 - The Apps Script backend, with an empty `SEED` and a placeholder key
 - The first trip's dates, day names and cities (`LEGACY_TRIP`, `DAY_LABELS`, `LEGACY_CITIES`), so the app works on a backend that has no Trips or Cities tab yet. The route is already in the repository description. Every later trip lives only in the Sheet.
 
@@ -401,3 +402,36 @@ The app works with the old backend — you just can't add trips or cities, and d
 5. In the app: ⚙ → **Pull**. **Trips** now has **+ New trip**.
 
 The new tabs and columns are added the first time the script runs. From a laptop, `node src/sheet.js push` also takes `trips`, `cities` and `days` arrays.
+
+---
+
+## 13. Maps, finding and importing places, best order
+
+### Maps
+
+- **Locations → Map** shows every place in the open trip with a pin, coloured by type. The city and type chips filter it. Tap a pin for its name, **Details** and **Navigate**. The ◎ button shows where you are (one reading, kept on the phone).
+- **Map of the day** (under each day's stops) numbers the stops in order, joins them up, and dashes the way from and back to the hotel.
+
+The map is OpenStreetMap's, drawn by Leaflet. OpenStreetMap uses plain GPS like the app, so pins are where they should be in China too. Both are loaded the first time a map is opened. Each map tile is kept on the phone once it has been looked at (up to about 3,000 tiles), so a city you have browsed on wifi still shows with no signal. Nothing is downloaded in advance — OpenStreetMap's tile servers don't allow that. Viewing a map tells OpenStreetMap which area you're looking at, as any web map does.
+
+### Find by name
+
+**+ New place** (both forms) has a **Find by name** box. It searches OpenStreetMap's place directory (Nominatim) near the city picked in the form. Pick a result and the names (English and Chinese where OpenStreetMap has them), pin, city, type and map app are filled in. Only the words you type are sent. Smaller restaurants are often missing there, especially on the mainland — a map link from Amap or Google Maps works for anything.
+
+### Import places from a file
+
+**Locations → Import** reads:
+
+| File | Where it comes from |
+|---|---|
+| `.kml` / `.kmz` | Google My Maps → ⋮ → Export to KML/KMZ. Pins only; routes and shapes are skipped. |
+| `Saved Places.json` | Google Takeout → Maps (your places): your starred places. |
+| `.csv` | Google Takeout → Saved: one file per saved list (Title, Note, URL). Pins come from the link when it has coordinates; otherwise the place is added without one and the map app searches its name. |
+
+The file is read on the phone. You get a list to tick: places already on your list are spotted by Chinese name or by pin and left unticked, and places that fall outside your cities go to a city you choose. Pins in mainland China from Google or Amap are moved from the Chinese map grid to GPS, as with map links (there is a tick box for files from elsewhere). Imported places go into the open trip; add them to days afterwards.
+
+### Best order
+
+**Best order** (under each day with three or more stops) works out the shortest way round, starting and ending at the hotel as the day view does. Stops with a time, hotels and stops without a pin stay where they are relative to each other; the rest are fitted in where they add the least travel. It shows the new order and how much it saves, and asks before changing anything. Distances are straight lines, so treat it as a suggestion — it knows nothing about opening hours or a river in the way.
+
+The Chinese name is required for places in mainland China, Hong Kong and Macau, and optional anywhere else.
