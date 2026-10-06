@@ -150,6 +150,8 @@ Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the bac
 
 ---
 
+**Moving between days:** on Home, swipe left for the next day and right for the one before; the trip overview comes before Day 1. The day chips along the top still jump straight to any day, and on a computer the ← → keys do the same.
+
 ## 5. Two things to know before you go
 
 **Google is blocked in mainland China.** Twelve of the seventeen days are in Guangzhou, Foshan, Chongqing and Chengdu. Google Sheets, Apps Script and Google Maps are all unreachable there without a VPN. The app handles this: it caches everything locally, keeps working offline, and queues any edits you make — they send themselves the next time it can reach Google (Hong Kong, or a VPN, or when you get home). The sync badge at the top of each screen tells you where you stand.
