@@ -565,6 +565,18 @@ a.btn{text-decoration:none}
 .implist input{margin-top:3px;width:18px;height:18px;flex:none}
 .implist .en{font-weight:650;font-size:14px}
 .implist .mt{font-size:12.5px;color:var(--ink-3)}
+/* Travel on the day plan: departures and arrivals between the stops */
+.travel{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin:0 0 12px;border-radius:var(--radius);
+  background:color-mix(in srgb,var(--accent) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line))}
+.travel .tt{font-weight:750;font-size:16px;color:var(--accent);min-width:46px;font-variant-numeric:tabular-nums}
+.travel .tt small{display:block;font-size:10.5px;font-weight:650;color:var(--ink-3);letter-spacing:.03em;text-transform:uppercase}
+.travel .ti{font-weight:650;font-size:15px;line-height:1.35}
+.travel .ti .svgic{width:16px;height:16px;vertical-align:-3px;margin-right:4px;color:var(--accent)}
+.travel .sub{font-size:13.2px;line-height:1.5;color:var(--ink-2);margin-top:4px}
+.travel .sub b{color:var(--ink)}
+.travel .free{margin-top:8px;padding-top:8px;border-top:1px dashed color-mix(in srgb,var(--accent) 35%,var(--line));font-size:13.2px;color:var(--ink)}
+.travel .free .btn{margin-top:6px}
+.pill.clash{background:color-mix(in srgb,var(--warn) 16%,var(--surface));color:var(--ink);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
 .toolrow{display:flex;flex-wrap:wrap;gap:8px;margin:-2px 0 12px}
 .pastebox textarea{min-height:120px;font-size:14px}
 #printView{display:none}
@@ -884,6 +896,9 @@ var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", pho
    phone survive until the backend has the columns to hold them. The cost: to
    clear one of these, clear it in the app, not by deleting it in the Sheet. */
 var LOCAL_FIRST = ["getting_there", "arrive_by", "tickets", "photo_url", "ticket_url"];
+/* Booking fields added after the first release; kept on the phone through a
+   sync until the backend has the columns, as LOCAL_FIRST is for places. */
+var BK_LOCAL_FIRST = ["ticket_url","tz","number","from_place","to_place","arr_date","arr_time","arr_tz"];
 var LOC_FIELDS = ["id","name_en","name_zh","city","type","lat","lng","nav_app","history_blurb",
                   "recommendations","dishes_to_order","souvenirs","notes"].concat(LOCAL_FIRST);
 
@@ -1085,8 +1100,7 @@ var store = {
           // Same for a booking's ticket link, which an older backend can't store
           var myBk={}; (raw.bookings||[]).forEach(function(b){ myBk[b.id]=b; });
           (d.bookings||[]).forEach(function(b){ var m=myBk[b.id]; if(!m) return;
-            if(!b.ticket_url && m.ticket_url) b.ticket_url=m.ticket_url;
-            if(!b.tz && m.tz) b.tz=m.tz; });
+            BK_LOCAL_FIRST.forEach(function(k){ if(!b[k] && m[k]) b[k]=m[k]; }); });
           var ck = mergeChecklist(raw.checklist||[], d.checklist);
           // An older backend sends no trips, cities or day names: keep this phone's
           self.supportsTrips = Array.isArray(d.trips); save(LS.trips, self.supportsTrips);
@@ -1515,7 +1529,7 @@ function stopEls(list){
   return Array.prototype.slice.call(list.children).filter(function(c){ return c.classList.contains("stop"); });
 }
 
-function stopCard(entry, loc, idx, total, next){
+function stopCard(entry, loc, idx, total, next, clash){
   var u = navUrls(loc);
   var leg = next ? legText(loc, next) : "";
   var summary = entry.notes || firstSentence(loc.history_blurb, 120) || (loc.type+" in "+loc.city);
@@ -1529,6 +1543,7 @@ function stopCard(entry, loc, idx, total, next){
         '<div class="stop-zh zh">'+escz(loc.name_zh)+'</div>'+
         '<div class="stop-sum">'+escz(summary)+'</div>'+
         '<div class="stop-meta">'+
+          (clash ? '<span class="pill clash">'+esc(clash)+'</span>' : '')+
           (function(){ var b=bookingState(loc.id);
             return b==="ok" ? '<span class="pill ok">Booked · 已订</span>'
                  : b==="todo" ? '<span class="pill todo">To book · 待订</span>' : ""; })()+
@@ -1569,9 +1584,14 @@ function dayBrief(date, title, cls){
   var bks=store.data.bookings.filter(function(b){
     return b.date===date || (b.date===next && /^0[0-5]:/.test(b.time||""));
   }).sort(function(a,b){ return (a.date+(a.time||"")) < (b.date+(b.time||"")) ? -1 : 1; });
+  store.data.bookings.forEach(function(b){
+    if(MOVE_TYPES[b.type] && b.date!==date && bkArrDate(b)===date && hhmm(b.arr_time))
+      lines.push({ k:hhmm(b.arr_time), t:(b.type==="flight"?"Land":"Arrive")+(b.to_place?" "+escz(b.to_place):"")+" · "+escz(bkTitle(b)) });
+  });
   bks.forEach(function(b){
-    var tonight=b.date!==date, time=(b.time||"").slice(0,5);
-    lines.push({ k: time || "—", t: escz(b.description)+(tonight?" — <b>tonight</b>, after midnight":"")+
+    var tonight=b.date!==date, time=(b.time||"").slice(0,5), at=hhmm(b.arr_time), ad=bkArrDate(b);
+    lines.push({ k: time || "—", t: escz(bkTitle(b))+(tonight?" — <b>tonight</b>, after midnight":"")+
+      (MOVE_TYPES[b.type] && at ? " · arrives "+esc(at)+(ad && ad!==b.date ? " +"+daysBetween(b.date,ad) : "") : "")+
       (safeUrl(b.ticket_url) ? " · "+ticketLink(b.ticket_url,"Ticket","tklink") : "") });
     if(/TO BOOK/.test(b.details||"")) lines.push({ warn:true, k:"Book", t:"Not booked yet: "+escz(b.description) });
   });
@@ -1618,9 +1638,10 @@ function renderDayInto(el, date, withStrip){
 
   var strip = withStrip ? dayStrip(date) : "";
 
-  var body;
+  var body, trav=dayTravel(date, stops);
   if(!stops.length){
-    body = '<div class="card empty">Nothing planned for this day yet.</div>';
+    body = trav.cards.map(function(c){ return c.html; }).join("")+
+      '<div class="card empty">'+(trav.cards.length ? 'Nothing else planned for this day yet.' : 'Nothing planned for this day yet.')+'</div>';
   } else {
     var locs = stops.map(function(s){ return store.loc(s.location_id); });
     var first = locs[0], last = locs[locs.length-1];
@@ -1631,7 +1652,11 @@ function renderDayInto(el, date, withStrip){
     };
     var hFirst = first && first.type!=="hotel" ? hotelFor(first) : null;
     var hLast  = last && last.type!=="hotel" ? hotelFor(last) : null;
-    body = (hFirst ? hotelLine(hFirst, first, 'From <b>'+esc(hFirst.name_en)+'</b> to <b>'+esc(first.name_en)+'</b>') : "")+
+    // Travel goes where its time falls among the stops: before them all
+    // (an early landing), after them all (an evening flight) or in between
+    var cardsAt=function(i){ return trav.cards.filter(function(c){ return c.at===i; }).map(function(c){ return c.html; }).join(""); };
+    body = cardsAt(0)+
+      (hFirst ? hotelLine(hFirst, first, 'From <b>'+esc(hFirst.name_en)+'</b> to <b>'+esc(first.name_en)+'</b>') : "")+
       '<div class="stops" id="stopList" data-date="'+date+'">'+stops.map(function(s,i){
       var loc = locs[i];
       var tod = todOf(s.planned_time), prev = i ? todOf(stops[i-1].planned_time) : "";
@@ -1639,9 +1664,9 @@ function renderDayInto(el, date, withStrip){
         ? '<div class="tod">'+TOD[tod][0]+'<span class="zh">'+TOD[tod][1]+'</span></div>' : "";
       if(!loc) return '<div class="stop card empty small" data-sid="'+esc(s.id)+'">Missing location <code>'+esc(s.location_id)+'</code> '+
         '<button class="btn sm danger" data-act="remove-orphan" data-sid="'+esc(s.id)+'">Remove</button></div>';
-      return label+stopCard(s, loc, i, stops.length, locs[i+1]||null);
+      return (i ? cardsAt(i) : "")+label+stopCard(s, loc, i, stops.length, locs[i+1]||null, trav.clash[s.id]);
     }).join("")+'</div>'+
-      (hLast ? hotelLine(last, hLast, 'Back to <b>'+esc(hLast.name_en)+'</b>', "after") : "");
+      (hLast ? hotelLine(last, hLast, 'Back to <b>'+esc(hLast.name_en)+'</b>', "after") : "")+cardsAt(stops.length);
   }
 
   // In the evening the Today tab also looks ahead: what tomorrow needs sorting tonight.
@@ -1816,7 +1841,161 @@ function tzName(tz){ return String(tz||"").split("/").pop().replace(/_/g," "); }
  *  counts from the start of that day. */
 function bookingWhen(b){
   var m=String(b.time||"").match(/^(\d{1,2}):(\d{2})/);
-  return zonedMs(b.date, m ? m[1]+":"+m[2] : "00:00", b.tz || tripTz());
+  return zonedMs(b.date, m ? m[1]+":"+m[2] : "00:00", depTz(b));
+}
+
+/* ==========================================================================
+   Travel on the day plan. A flight, train or ferry with an arrival time puts
+   the landing on that day's plan, with when you can drop your bags at the
+   hotel and be out exploring; one with a departure time says when to leave
+   for it. Stops that fall while you are travelling are flagged. All of it
+   is worked out on the phone from the booking and the coordinates; the
+   allowances below are rules of thumb, shown as "about".
+   ========================================================================== */
+var MOVE_TYPES = { flight:1, train:1, ferry:1 };
+var EXIT_MIN  = { flight:50, train:15, ferry:30 };    // landing to out of the terminal: immigration, bags
+var EARLY_MIN = { flight:150, train:45, ferry:45 };   // there this long before departure
+var RIDE_MIN  = { flight:45, train:25, ferry:25 };    // to or from it, when there are no coordinates
+var PLACE_WORD = { flight:"the airport", train:"the station", ferry:"the pier" };
+/* Airports, for their time zone and to time the ride in. Public facts. */
+var AIRPORTS = {
+  SYD:[-33.940,151.175,"Australia/Sydney","Sydney"], MEL:[-37.669,144.841,"Australia/Melbourne","Melbourne"],
+  BNE:[-27.384,153.118,"Australia/Brisbane","Brisbane"], PER:[-31.940,115.967,"Australia/Perth","Perth"],
+  ADL:[-34.945,138.531,"Australia/Adelaide","Adelaide"], AKL:[-37.008,174.792,"Pacific/Auckland","Auckland"],
+  HKG:[22.308,113.918,"Asia/Hong_Kong","Hong Kong"], MFM:[22.150,113.592,"Asia/Macau","Macau"],
+  CAN:[23.392,113.299,"Asia/Shanghai","Guangzhou"], SZX:[22.639,113.811,"Asia/Shanghai","Shenzhen"],
+  CKG:[29.719,106.642,"Asia/Shanghai","Chongqing"], CTU:[30.579,103.947,"Asia/Shanghai","Chengdu"],
+  TFU:[30.313,104.441,"Asia/Shanghai","Chengdu"], PVG:[31.144,121.808,"Asia/Shanghai","Shanghai"],
+  SHA:[31.198,121.336,"Asia/Shanghai","Shanghai"], PEK:[40.080,116.603,"Asia/Shanghai","Beijing"],
+  PKX:[39.510,116.411,"Asia/Shanghai","Beijing"], XIY:[34.447,108.752,"Asia/Shanghai","Xi'an"],
+  KMG:[25.102,102.929,"Asia/Shanghai","Kunming"], HGH:[30.229,120.434,"Asia/Shanghai","Hangzhou"],
+  TPE:[25.080,121.233,"Asia/Taipei","Taipei"], SIN:[1.364,103.992,"Asia/Singapore","Singapore"],
+  KUL:[2.746,101.710,"Asia/Kuala_Lumpur","Kuala Lumpur"], BKK:[13.690,100.750,"Asia/Bangkok","Bangkok"],
+  NRT:[35.772,140.393,"Asia/Tokyo","Tokyo"], HND:[35.549,139.780,"Asia/Tokyo","Tokyo"], KIX:[34.427,135.244,"Asia/Tokyo","Osaka"],
+  ICN:[37.460,126.441,"Asia/Seoul","Seoul"], LHR:[51.470,-0.454,"Europe/London","London"], DXB:[25.253,55.365,"Asia/Dubai","Dubai"]
+};
+function hhmm(t){ var m=String(t||"").match(/^(\d{1,2})[:：](\d{2})/); return m ? pad2(+m[1])+":"+m[2] : ""; }
+/** What's known about "SYD", "Sydney (SYD)" or "Guangzhou South": time zone, and a point to time a ride from. */
+function placeInfo(txt){
+  txt=String(txt||"").trim(); if(!txt) return null;
+  var codes=txt.match(/\b[A-Z]{3}\b/g)||[];
+  for(var i=0;i<codes.length;i++){ var a=AIRPORTS[codes[i]];
+    if(a) return { lat:a[0], lng:a[1], tz:a[2], city:a[3], code:codes[i], name:txt }; }
+  var low=txt.toLowerCase(), c=cityList().filter(function(x){ return low.indexOf(x.name.toLowerCase())>=0 || (x.name_zh && txt.indexOf(x.name_zh)>=0); })[0];
+  return c ? { lat:c.lat, lng:c.lng, tz:c.tz, city:c.name, name:txt, centre:true } : { name:txt };
+}
+function depTz(b){ return b.tz || ((MOVE_TYPES[b.type] && placeInfo(b.from_place))||{}).tz || tripTz(); }
+function arrTz(b){ return b.arr_tz || ((MOVE_TYPES[b.type] && placeInfo(b.to_place))||{}).tz || depTz(b); }
+/** Arrival (or check-out) date: as entered, or — given only a time earlier
+ *  than the departure — the next day, as an overnight flight lands. */
+function bkArrDate(b){
+  if(b.arr_date) return b.arr_date;
+  var at=hhmm(b.arr_time), dt=hhmm(b.time);
+  if(!at || !b.date) return "";
+  return dt && at<dt ? addDaysISO(b.date,1) : b.date;
+}
+function bkArrMs(b){ var d=bkArrDate(b), t=hhmm(b.arr_time); return d && t ? zonedMs(d, t, arrTz(b)) : null; }
+function bkRoute(b){ return [[b.from_place,b.to_place].filter(Boolean).join(" → "), b.number].filter(Boolean).join(" — "); }
+function bkTitle(b){ return b.description || bkRoute(b) || b.type || "Booking"; }
+/** "22:20 → 04:40 +1", or a hotel's "in 14:00 · out Wed 21 Oct" */
+function bkWhenText(b){
+  var dt=String(b.time||"").trim(), at=hhmm(b.arr_time), ad=bkArrDate(b);
+  if(b.type==="hotel"){
+    return [dt?"in "+dt:"", b.arr_date ? "out "+fmtDate(b.arr_date,false)+(at?" "+at:"") : (at?"out "+at:"")].filter(Boolean).join(" · ");
+  }
+  if(!at) return dt;
+  var plus=ad && ad!==b.date ? " +"+daysBetween(b.date, ad) : "";
+  return (hhmm(dt)||dt)+" → "+at+plus;
+}
+function fmtHM(ms, tz){
+  try{ return new Intl.DateTimeFormat("en-GB",{ timeZone:tz, hour:"2-digit", minute:"2-digit", hourCycle:"h23" }).format(new Date(ms)); }
+  catch(e){ return ""; }
+}
+function roundTo5(ms, up){ var f=5*60000; return (up ? Math.ceil(ms/f) : Math.floor(ms/f))*f; }
+function rideMin(a, b, type){
+  // Airports have fast links into town (airport express trains, expressways): 70 km/h plus getting on it
+  var air=(a && a.code) || (b && b.code);
+  if(a && b && hasXY(a) && hasXY(b) && !a.centre && !b.centre)
+    return Math.max(10, Math.round(((air?15:10)+roadKm(a,b)/(air?70:50)*60)/5)*5);
+  return RIDE_MIN[type]||30;
+}
+function durText(min){ var h=Math.floor(min/60), m=min%60; return (h?h+" h"+(m?" ":""):"")+(m?m+" min":""); }
+/** The hotel you sleep in that night, from the hotels on the plan. */
+function hotelOn(date){
+  var bases=tripBases(), h=null;
+  bases.forEach(function(x){ if(x.from<=date && date<=x.to) h=x.loc; });
+  return h;
+}
+/** The hotel booking that covers a date, for its check-in time. */
+function hotelBookingOn(date){
+  return store.data.bookings.filter(function(b){
+    return b.type==="hotel" && b.date && (b.date===date || (b.date<date && b.arr_date && date<b.arr_date));
+  }).sort(function(a,b){ return a.date<b.date?1:-1; })[0] || null;
+}
+function dayTravel(date, stops){
+  var cards=[], clash={}, blocks=[];
+  var stopMs=function(s){ var l=store.loc(s.location_id), t=hhmm(s.planned_time); return t ? zonedMs(date, t, placeTz(l)) : null; };
+  var timed=stops.map(function(s,i){ return { i:i, s:s, t:hhmm(s.planned_time), ms:stopMs(s) }; });
+  // where a card at local time t sits: before the first timed stop at or after it
+  var slot=function(t){ for(var k=0;k<timed.length;k++) if(timed[k].t && timed[k].t>=t) return timed[k].i; return stops.length; };
+  store.data.bookings.forEach(function(b){
+    if(!MOVE_TYPES[b.type]) return;
+    var dt=hhmm(b.time), at=hhmm(b.arr_time), ad=bkArrDate(b), title=bkTitle(b), icon=BK_ICON[b.type]||BK_ICON.train;
+    // Only when the clock differs: Hong Kong time on a China trip is the same time
+    var tzNote=function(tz){ return tzOffset(tz, Date.now())!==tzOffset(tripTz(), Date.now()) ? ' <small>'+esc(tzName(tz))+' time</small>' : ''; };
+    if(b.date===date && dt){
+      var dep=bookingWhen(b), atBy=dep-(EARLY_MIN[b.type]||45)*60000, from=placeInfo(b.from_place), i=slot(dt);
+      var prevStop=null; for(var k=i-1;k>=0;k--){ var pl=store.loc(stops[k].location_id); if(pl){ prevStop=pl; break; } }
+      var origin=prevStop || hotelOn(date) || hotelOn(addDaysISO(date,-1));
+      var ride=rideMin(origin, from, b.type), leave=roundTo5(atBy-ride*60000, false), tz=depTz(b);
+      var arrTxt = at ? (b.type==="flight"?"Lands ":"Arrives ")+at+(ad && ad!==date ? " on "+fmtDate(ad,false) : "")+
+        (tzOffset(arrTz(b),dep)!==tzOffset(tz,dep) ? " ("+tzName(arrTz(b))+" time)" : "")+"." : "";
+      cards.push({ at:i, t:dt, html:'<div class="travel dep" data-bid="'+esc(b.id)+'"><div class="tt">'+esc(dt)+tzNote(tz)+'</div><div>'+
+        '<div class="ti">'+icon+escz(title)+'</div>'+
+        '<div class="sub">Be at '+PLACE_WORD[b.type]+' by <b>'+esc(fmtHM(atBy,tz))+'</b>'+
+          (origin ? ' — leave '+esc(origin.name_en)+' about <b>'+esc(fmtHM(leave,tz))+'</b> (~'+durText(ride)+' there)' : '')+'. '+esc(arrTxt)+'</div>'+
+        (/TO BOOK/.test(b.details||"") ? '<div class="sub"><span class="pill todo">To book · 待订</span></div>' : '')+'</div></div>' });
+      var endMs=(ad===date && bkArrMs(b)) ? bkArrMs(b)+(EXIT_MIN[b.type]||30)*60000 : Infinity;
+      blocks.push({ from:leave, to:endMs, why:"After you leave for "+(b.number||PLACE_WORD[b.type].replace("the ","")) });
+    }
+    if(ad===date && at){
+      var arr=bkArrMs(b), to=placeInfo(b.to_place), tz2=arrTz(b), hotel=hotelOn(date), hb=hotelBookingOn(date);
+      var out=arr+(EXIT_MIN[b.type]||30)*60000, j=slot(at), lines=[];
+      var freeFrom=out;
+      if(hotel){
+        var r=rideMin(to, hotel, b.type), drop=roundTo5(out+r*60000, true), checkIn=hhmm(hb && hb.time) || "";
+        var early=!checkIn || fmtHM(drop,tz2) < checkIn;
+        lines.push((b.type==="flight"?"Through immigration and bags":"Out")+" about <b>"+esc(fmtHM(out,tz2))+"</b>, then ~"+durText(r)+" to "+esc(hotel.name_en)+": "+
+          (early ? "drop your bags about <b>"+esc(fmtHM(drop,tz2))+"</b>"+(checkIn ? " — the room is ready from "+esc(checkIn)+"." : " — most rooms are ready from 14:00–15:00.")
+                 : "check in about <b>"+esc(fmtHM(drop,tz2))+"</b>."));
+        freeFrom=drop+15*60000;
+      } else {
+        lines.push((b.type==="flight"?"Through immigration and bags":"Out")+" about <b>"+esc(fmtHM(out,tz2))+"</b>.");
+      }
+      var nx=timed.filter(function(x){ return x.ms!==null && x.ms>freeFrom; })[0], free="";
+      if(nx){
+        var gap=Math.round((nx.ms-freeFrom)/60000), nl=store.loc(nx.s.location_id);
+        if(gap>=90) free='<div class="free">Free from about <b>'+esc(fmtHM(freeFrom,tz2))+'</b> until '+esc(nl?nl.name_en:"the next stop")+' at '+esc(nx.t)+
+          ' — '+durText(Math.round(gap/15)*15)+' to explore.<br><button class="btn sm" data-act="add-existing" data-date="'+date+'">+ Add a stop</button></div>';
+      } else if(hotel){
+        free='<div class="free">Free from about <b>'+esc(fmtHM(freeFrom,tz2))+'</b>.</div>';
+      }
+      cards.push({ at:j, t:at, html:'<div class="travel arr" data-bid="'+esc(b.id)+'"><div class="tt">'+esc(at)+tzNote(tz2)+'</div><div>'+
+        '<div class="ti">'+icon+(b.type==="flight"?"Land":"Arrive")+(b.to_place?" · "+escz(b.to_place):"")+'</div>'+
+        '<div class="sub">'+escz(title)+(b.date!==date ? ' · left '+esc(fmtDate(b.date,false))+(dt?' '+esc(dt):'') : '')+'</div>'+
+        '<div class="sub">'+lines.join(" ")+'</div>'+free+'</div></div>' });
+      if(b.date!==date) blocks.push({ from:-Infinity, to:freeFrom, arr:arr, why:"" });
+    }
+  });
+  cards.sort(function(a,b){ return a.at-b.at || (a.t<b.t?-1:1); });
+  timed.forEach(function(x){
+    if(x.ms===null) return;
+    blocks.forEach(function(k){
+      if(x.ms>=k.from && x.ms<k.to && !clash[x.s.id])
+        clash[x.s.id]=k.why || (x.ms<k.arr ? "Before you land" : "Before you're free");
+    });
+  });
+  return { cards:cards, clash:clash };
 }
 
 /* Day names. Set one in the app (Rename day) and it is shared as a Days row;
@@ -2336,7 +2515,7 @@ function walletItems(){
     var u=safeUrl(b.ticket_url);
     if(!u && !/flight|train|ferry/.test(b.type)) return;
     out.push({ kind:"bk", id:b.id, date:b.date, time:String(b.time||"").slice(0,5), type:b.type,
-               title:shortTitle(b.description), url:u });
+               title:shortTitle(bkTitle(b)), url:u });
   });
   store.data.locations.forEach(function(l){
     if(!safeUrl(l.ticket_url)) return;
@@ -2363,9 +2542,9 @@ function renderBookings(){
         '<button class="bk-head" data-act="bk">'+
           '<div class="bk-ic">'+(BK_ICON[b.type]||svgIc('<circle cx="12" cy="12" r="6"/>'))+'</div>'+
           '<div class="bk-b">'+
-            '<div class="bk-when">'+esc(dnum+fmtDate(b.date,false))+(b.time?" · "+esc(b.time):"")+
-              (b.tz && b.tz!==tripTz() ? " · "+esc(tzName(b.tz))+" time" : "")+'</div>'+
-            '<div class="bk-t">'+escz(b.description)+'</div>'+
+            '<div class="bk-when">'+esc(dnum+fmtDate(b.date,false))+(bkWhenText(b)?" · "+esc(bkWhenText(b)):"")+
+              (tzOffset(depTz(b),Date.now())!==tzOffset(tripTz(),Date.now()) ? " · "+esc(tzName(depTz(b)))+" time" : "")+'</div>'+
+            '<div class="bk-t">'+escz(bkTitle(b))+'</div>'+
             (b.confirmation_no?'<div class="bk-cn">Ref <b>'+esc(b.confirmation_no)+'</b></div>':'')+
             (safeUrl(b.ticket_url)?'<div class="bk-cn"><span class="pill ok">Ticket link · 票券</span></div>':'')+
           '</div><span class="chev">'+IC.chev+'</span>'+
@@ -3810,9 +3989,11 @@ function buildIcs(o){
   if(o.bookings) store.data.bookings.forEach(function(b){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(b.date||"")) return;
     var m=String(b.time||"").match(/^(\d{1,2}):(\d{2})/), desc=[b.confirmation_no?"Ref "+b.confirmation_no:"", b.details].filter(Boolean).join("\n");
-    var title=(b.type==="hotel"?"Hotel · ":"")+b.description;
-    if(m && b.type!=="hotel"){ var st=bookingWhen(b); push("bk-"+b.id, ["DTSTART:"+icsUtc(st)], ["DTEND:"+icsUtc(st+3600000)], title, desc); }
-    else push("bk-"+b.id, ["DTSTART;VALUE=DATE:"+icsDate(b.date)], ["DTEND;VALUE=DATE:"+icsDate(addDaysISO(b.date,1))], title, desc);
+    var title=(b.type==="hotel"?"Hotel · ":"")+bkTitle(b), arr=bkArrMs(b);
+    if(m && b.type!=="hotel"){ var st=bookingWhen(b); push("bk-"+b.id, ["DTSTART:"+icsUtc(st)], ["DTEND:"+icsUtc(arr && arr>st ? arr : st+3600000)], title, desc,
+      [b.from_place, b.to_place].filter(Boolean).join(" → ")); }
+    else push("bk-"+b.id, ["DTSTART;VALUE=DATE:"+icsDate(b.date)],
+      ["DTEND;VALUE=DATE:"+icsDate(b.type==="hotel" && b.arr_date>b.date ? b.arr_date : addDaysISO(b.date,1))], title, desc);
   });
   return { n:ev.length, text:["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Trip Companion//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH",
     icsFold("X-WR-CALNAME:"+icsText(TRIP.name))].concat(ev).concat(["END:VCALENDAR"]).join("\r\n")+"\r\n" };
@@ -3852,7 +4033,9 @@ function printHTML(withNotes){
     var bks=store.data.bookings.filter(function(b){ return b.date===d; }).sort(function(a,b){ return String(a.time||"")<String(b.time||"")?-1:1; });
     if(!stops.length && !bks.length) return;
     h+='<div class="day"><h2>Day '+(i+1)+' · '+esc(fmtDate(d,true))+' <span>· '+esc(dayLabel(d))+'</span></h2>'+
-      bks.map(function(b){ return '<div class="bk"><b>'+esc(String(b.time||"").slice(0,5)||b.type)+'</b> · '+escz(b.description)+
+      store.data.bookings.filter(function(b){ return MOVE_TYPES[b.type] && b.date!==d && bkArrDate(b)===d && hhmm(b.arr_time); }).map(function(b){
+        return '<div class="bk"><b>'+esc(hhmm(b.arr_time))+'</b> · '+(b.type==="flight"?"Land":"Arrive")+' · '+escz(bkTitle(b))+'</div>'; }).join("")+
+      bks.map(function(b){ return '<div class="bk"><b>'+esc(bkWhenText(b)||b.type)+'</b> · '+escz(bkTitle(b))+
         (b.confirmation_no?' · Ref '+esc(b.confirmation_no):'')+(/TO BOOK/.test(b.details||"")?' · <b>TO BOOK</b>':'')+'</div>'; }).join("")+
       (stops.length ? '<table>'+stops.map(function(s){
         var l=store.loc(s.location_id); if(!l) return "";
@@ -3934,14 +4117,15 @@ function parseBookingText(text){
   if(/ferry|turbojet|cotai|water ?jet|船票|码头|pier/.test(low)) score.ferry+=3;
   var type=Object.keys(score).sort(function(a,b){ return score[b]-score[a]; })[0];
   if(!score[type]) type="other";
-  var dates=findDates(text), times=findTimes(text), o={ type:type, date:"", time:"", description:"", confirmation_no:findRef(text), details:"" };
+  var dates=findDates(text), times=findTimes(text), o={ type:type, date:"", time:"", description:"", confirmation_no:findRef(text), details:"",
+    number:"", from_place:"", to_place:"", arr_date:"", arr_time:"" };
   var det=[];
   if(type==="hotel"){
     var ci=after(dates,text,/check[- ]?in|入住/i)||dates[0], co=after(dates,text,/check[- ]?out|退房|离店/i);
     if(co && ci && co.iso===ci.iso) co=dates.filter(function(x){ return x.iso>ci.iso; })[0]||null;
     o.date=ci?ci.iso:"";
-    var cit=after(times,text,/check[- ]?in|入住/i); if(cit) det.push("Check-in from "+cit.t);
-    if(co){ det.unshift("Check-out "+fmtDate(co.iso,false)); var cot=after(times,text,/check[- ]?out|退房/i); if(cot) det.push("Check-out by "+cot.t); }
+    var cit=after(times,text,/check[- ]?in|入住/i); if(cit) o.time=cit.t;
+    if(co){ o.arr_date=co.iso; var cot=after(times,text,/check[- ]?out|退房/i); if(cot && (!cit || cot.i>cit.i)) o.arr_time=cot.t; }
     var nights=(text.match(/(\d+)\s*(?:nights?|晚)/i)||[])[1] || (ci&&co ? daysBetween(ci.iso,co.iso) : 0);
     var name="";
     text.split(/\r?\n/).map(function(x){ return x.trim(); }).forEach(function(line){
@@ -3955,14 +4139,22 @@ function parseBookingText(text){
     o.date=dep?dep.iso:"";
     var dt=after(times,text,/depart|departure|出发|发车|開車|开车/i)||times[0];
     o.time=dt?dt.t:"";
-    var at=after(times,text,/arriv|到达|抵达/i); if(at && at.t!==o.time) det.push("Arrives "+at.t);
+    var at=after(times,text,/arriv|到达|抵达/i);
+    if(!at && times.length>1 && dt) at=times.filter(function(x){ return x.i>dt.i; })[0]||null;   // "08:12 … 14:05": the second time is the arrival
+    if(at && at.t!==o.time){
+      o.arr_time=at.t;
+      var ad=after(dates,text,/arriv|到达|抵达/i);
+      if(/^\s*(?:\(?\s*\+\s*1\b|\(?next day\)?)/i.test(text.slice(at.i+at.t.length+1, at.i+at.t.length+14))) o.arr_date=addDaysISO(o.date,1);
+      else if(ad && dep && ad.i>dep.i && ad.iso>=o.date) o.arr_date=ad.iso;
+    }
     var from="", to="", m;
     if(type==="flight"){
       m=text.match(/\b([A-Z]{3})\s*(?:→|->|–|—|-|to)\s*([A-Z]{3})\b/);
       if(m){ from=m[1]; to=m[2]; }
       else { var codes=[], cr=/\(([A-Z]{3})\)/g, c; while((c=cr.exec(text))) if(codes.indexOf(c[1])<0) codes.push(c[1]); if(codes.length>1){ from=codes[0]; to=codes[1]; } }
       var fn=(text.match(/\bflight\s*(?:no\.?|number)?\s*[:：]?\s*([A-Z][A-Z0-9]\s?\d{2,4})\b/i)||text.match(/\b((?:[A-Z]{2}|[A-Z]\d|\d[A-Z])\s?\d{2,4})\b(?=[^\n]{0,40}(?:\n|$))/)||[])[1]||"";
-      o.description=(from&&to?from+" → "+to:"Flight")+(fn?" — "+fn.replace(/\s+/,""):"");
+      o.number=fn.replace(/\s+/,"");
+      o.description=(from&&to?from+" → "+to:"Flight")+(fn?" — "+o.number:"");
     } else {
       var tn=type==="train" ? ((text.match(/(?:train|车次)\s*(?:no\.?|number)?\s*[:：]?\s*([GDCZTKY]\d{1,4})\b/i)||text.match(/\b([GDC]\d{1,4})\b/)||[])[1]||"") : "";
       var bare=tn ? text.split(tn).join(" ") : text;   // "G1234 Guangzhou South → …": the number isn't part of the station
@@ -3970,59 +4162,98 @@ function parseBookingText(text){
       var en=bare.match(/\bfrom\s+([A-Z][\w .'’()-]{2,40}?)\s+to\s+([A-Z][\w .'’()-]{2,40}?)(?=\s*(?:[\n,.;]|\bon\b|\bat\b|$))/)||
              bare.match(/\b([A-Z][\w .'’()-]{2,40}?)\s*(?:→|->)\s*([A-Z][\w .'’()-]{2,40}?)(?=\s*(?:[\n,;]|$))/);
       if(en){ from=en[1].trim(); to=en[2].trim(); } else if(zh){ from=zh[1]; to=zh[2]; }
+      o.number=tn;
       o.description=(from&&to?from+" → "+to:(type==="train"?"Train":type==="ferry"?"Ferry":"Booking"))+(tn?" — "+tn:"");
       var seat=(text.match(/\b(?:seat|座位)\s*(?:no\.?)?\s*[:：]?\s*([0-9]{1,2}[A-F]?(?:\s*(?:\/|,)\s*[0-9]{1,2}[A-F]?)*)/i)||[])[1];
       var car=(text.match(/\b(?:coach|carriage|car|车厢)\s*(?:no\.?)?\s*[:：]?\s*(\d{1,2})\b/i)||[])[1];
       if(car||seat) det.push([car?"Coach "+car:"", seat?"seat "+seat:""].filter(Boolean).join(", "));
     }
   }
+  o.from_place=from||""; o.to_place=to||"";
   o.details=det.join(". ")+(det.length?".":"");
   return o;
 }
 function bookingForm(id){
   var b=id ? store.data.bookings.filter(function(x){ return x.id===id; })[0] : null, isNew=!b;
-  b=b || { id:"", type:"flight", date:"", time:"", description:"", confirmation_no:"", details:"", ticket_url:"", tz:"" };
+  b=b || { id:"", type:"flight", date:"", time:"", description:"", confirmation_no:"", details:"", ticket_url:"", tz:"",
+           number:"", from_place:"", to_place:"", arr_date:"", arr_time:"", arr_tz:"" };
   var types=["flight","train","ferry","hotel","other"];
+  var f=function(id,label,val,extra,cls){ return '<div class="field'+(cls?" "+cls:"")+'"><label id="'+id+'_l">'+label+'</label><input id="'+id+'" value="'+esc(val||"")+'"'+(extra||"")+'></div>'; };
   var html=(isNew ? '<div class="field linkbox pastebox" style="margin-top:12px"><label for="b_paste">Paste the confirmation</label>'+
       '<textarea id="b_paste" placeholder="Copy the confirmation email (or the booking page) and paste it here"></textarea>'+
       '<div class="linkrow"><button class="btn sm primary" data-act="bk-read">Read it</button></div>'+
       '<div class="hint" id="b_paste_status">Read on this phone — nothing is sent anywhere. Check each field before saving.</div></div>' : '<div style="height:12px"></div>')+
     '<div class="grid2"><div class="field"><label>Type</label><select id="b_type">'+types.map(function(t){
         return '<option'+(b.type===t?" selected":"")+'>'+t+'</option>'; }).join("")+'</select></div>'+
-      '<div class="field"><label>Reference</label><input id="b_confirmation_no" autocapitalize="characters" value="'+esc(b.confirmation_no)+'"></div></div>'+
-    '<div class="grid2"><div class="field"><label>Date</label><input id="b_date" type="date" value="'+esc(b.date)+'"></div>'+
-      '<div class="field"><label>Time</label><input id="b_time" type="time" value="'+esc(String(b.time||"").slice(0,5))+'"></div></div>'+
-    '<div class="field"><label>Description</label><input id="b_description" value="'+esc(b.description)+'" placeholder="SYD → HKG — CX110, or the hotel and nights"></div>'+
+      f("b_number","Flight no.",b.number,' autocapitalize="characters" placeholder="CX138"',"mv")+'</div>'+
+    '<div class="grid2 mv">'+f("b_from","From",b.from_place,' placeholder="SYD, or a station"')+f("b_to","To",b.to_place,' placeholder="HKG"')+'</div>'+
+    '<div class="grid2">'+f("b_date","Departs",b.date,' type="date"')+f("b_time","Time",hhmm(b.time)||"",' type="time"')+'</div>'+
+    (b.time && !hhmm(b.time) || /^\d{1,2}:\d{2}\s*[-–]/.test(b.time||"") ? '<p class="hint" style="margin:-8px 0 12px">Was “'+esc(b.time)+'” — now just the start; put the end in Arrives.</p>' : '')+
+    '<div class="grid2">'+f("b_arr_date","Arrives",b.arr_date||"",' type="date"')+f("b_arr_time","Time",hhmm(b.arr_time)||"",' type="time"')+'</div>'+
+    '<p class="blurb small muted mv" id="b_arr_hint" style="margin:-8px 0 14px">The arrival goes on that day’s plan: when you can drop bags at the hotel and be out exploring.</p>'+
+    '<div class="field"><label>Reference</label><input id="b_confirmation_no" autocapitalize="characters" value="'+esc(b.confirmation_no)+'"></div>'+
+    '<div class="field"><label>Description</label><input id="b_description" value="'+esc(b.description)+'" placeholder="Filled in from the route if left blank"></div>'+
     '<div class="field"><label>Details</label><textarea id="b_details" style="min-height:80px">'+esc(b.details)+'</textarea></div>'+
     '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="b_tobook"'+(/TO BOOK/.test(b.details||"")?" checked":"")+'> Not booked yet (TO BOOK)</label>'+
-    '<div class="grid2"><div class="field"><label>Time zone</label><input id="b_tz" list="tzlist3" autocapitalize="off" value="'+esc(b.tz||"")+'" placeholder="'+esc(tripTz())+'">'+tzDatalist("tzlist3")+'</div>'+
-      '<div class="field"><label>Ticket link</label><input id="b_ticket_url" inputmode="url" autocapitalize="off" value="'+esc(b.ticket_url||"")+'" placeholder="https://…"></div></div>'+
+    '<details class="small" style="margin:-4px 0 14px"'+(b.tz||b.arr_tz?" open":"")+'><summary>Time zones</summary>'+
+      '<p class="hint" style="margin:8px 0">Worked out from airport codes and your cities. Set one only when that guess is wrong.</p>'+
+      '<div class="grid2"><div class="field"><label id="b_tz_l">Departure</label><input id="b_tz" list="tzlist3" autocapitalize="off" value="'+esc(b.tz||"")+'"></div>'+
+      '<div class="field"><label id="b_arr_tz_l">Arrival</label><input id="b_arr_tz" list="tzlist3" autocapitalize="off" value="'+esc(b.arr_tz||"")+'"></div></div>'+tzDatalist("tzlist3")+'</details>'+
+    '<div class="field"><label>Ticket link</label><input id="b_ticket_url" inputmode="url" autocapitalize="off" value="'+esc(b.ticket_url||"")+'" placeholder="https://…"></div>'+
     '<div class="formactions"><button class="btn primary" data-act="bk-save" data-bid="'+esc(b.id)+'">Save</button>'+
       (isNew?'':'<button class="btn danger" data-act="bk-delete" data-bid="'+esc(b.id)+'">Delete</button>')+'</div>';
   openSheet(isNew?"New booking":"Edit booking", html);
   var pb=$("#b_paste"); if(pb) pb.addEventListener("paste", function(){ setTimeout(readPasted, 0); });
+  ["b_type","b_from","b_to"].forEach(function(id){ $("#"+id).addEventListener("change", bookingFormShape); $("#"+id).addEventListener("input", bookingFormShape); });
+  bookingFormShape();
+}
+/** Labels and fields follow the type: a hotel has check-in and check-out, a
+ *  journey a number, a route and departs/arrives. Time zones show their guess. */
+function bookingFormShape(){
+  var t=$("#b_type") ? $("#b_type").value : "flight", move=!!MOVE_TYPES[t];
+  document.querySelectorAll("#sheetBody .mv").forEach(function(e){ e.hidden=!move; });
+  var set=function(id,txt){ var e=$("#"+id); if(e) e.textContent=txt; };
+  set("b_number_l", t==="flight"?"Flight no.":t==="train"?"Train no.":"Sailing / no.");
+  set("b_date_l", t==="hotel"?"Check-in":move?"Departs":"Date");
+  set("b_arr_date_l", t==="hotel"?"Check-out":move?"Arrives":"Ends");
+  var probe={ type:t, from_place:($("#b_from")||{}).value||"", to_place:($("#b_to")||{}).value||"", tz:"", arr_tz:"" };
+  var a=$("#b_tz"), c=$("#b_arr_tz");
+  if(a) a.placeholder=depTz(probe); if(c) c.placeholder=arrTz(probe);
+  var d=$("#b_description"); if(d && move) d.placeholder=bkRoute({ from_place:probe.from_place, to_place:probe.to_place, number:($("#b_number")||{}).value||"" }) || "Filled in from the route if left blank";
 }
 function readPasted(){
   var box=$("#b_paste"), st=$("#b_paste_status"); if(!box || !box.value.trim()) return;
   var o=parseBookingText(box.value), got=[];
-  var set=function(id,v,label){ if(!v) return; var e=$("#"+id); if(e){ e.value=v; got.push(label); } };
-  set("b_type", o.type==="other"?"":o.type, "type"); set("b_date", o.date, "date"); set("b_time", o.time, "time");
+  var set=function(id,v,label){ if(!v) return; var e=$("#"+id); if(e){ e.value=v; if(label) got.push(label); } };
+  set("b_type", o.type==="other"?"":o.type, "type"); set("b_number", o.number, "number");
+  set("b_from", o.from_place, ""); set("b_to", o.to_place, o.from_place||o.to_place ? "route" : "");
+  set("b_date", o.date, "date"); set("b_time", o.time, "time");
+  set("b_arr_date", o.arr_date, ""); set("b_arr_time", o.arr_time, o.type==="hotel" ? "check-out" : "arrival");
+  if(o.type==="hotel" && o.arr_date && got.indexOf("check-out")<0) got.push("check-out");
   set("b_description", o.description, "what it is"); set("b_confirmation_no", o.confirmation_no, "reference"); set("b_details", o.details, "details");
+  bookingFormShape();
   if(o.date && (o.date<TRIP_START || o.date>TRIP_END)) got.push("<b>the date is outside this trip — check it</b>");
-  st.innerHTML=got.length ? "Filled in: "+got.join(", ")+". Check each field before saving." : "Couldn\u2019t find anything to fill in — type it in below.";
+  st.innerHTML=got.length ? "Filled in: "+got.join(", ")+". Check each field before saving." : "Couldn’t find anything to fill in — type it in below.";
 }
 function saveBookingForm(id){
   var g=function(k){ var e=$("#b_"+k); return e ? e.value.trim() : ""; };
   var old=id ? store.data.bookings.filter(function(x){ return x.id===id; })[0] : null;
   var b=Object.assign({}, old||{});
-  ["type","date","time","description","confirmation_no","details","ticket_url"].forEach(function(k){ b[k]=g(k); });
-  b.tz=g("tz").replace(/\s+/g,"_");
+  ["type","date","time","description","confirmation_no","details","ticket_url","number","arr_date","arr_time"].forEach(function(k){ b[k]=g(k); });
+  b.from_place=g("from"); b.to_place=g("to");
+  b.tz=g("tz").replace(/\s+/g,"_"); b.arr_tz=g("arr_tz").replace(/\s+/g,"_");
+  if(!MOVE_TYPES[b.type]){ b.number=""; b.from_place=""; b.to_place=""; if(b.type!=="hotel") b.arr_tz=""; }
+  b.number=b.number.toUpperCase().replace(/\s+/g,"");
   var tb=$("#b_tobook") && $("#b_tobook").checked;
   b.details=tb ? (/TO BOOK/.test(b.details) ? b.details : ("TO BOOK. "+b.details).trim()) : b.details.replace(/TO BOOK\.?\s*/g,"").trim();
+  if(!b.description) b.description=MOVE_TYPES[b.type] ? bkRoute(b) : "";
   if(!b.description){ toast("Say what it is — a route, a hotel"); return; }
   if(!/^\d{4}-\d{2}-\d{2}$/.test(b.date)){ toast("Set the date"); return; }
+  if(b.arr_time && !b.arr_date) b.arr_date=bkArrDate(b);
+  if(b.arr_date && b.arr_date<b.date){ toast(b.type==="hotel" ? "Check-out is before check-in" : "The arrival is before the departure"); return; }
+  if(MOVE_TYPES[b.type] && b.arr_date && b.time && b.arr_time && bkArrMs(b)<=bookingWhen(b)){ toast("It arrives before it leaves — check the times and time zones"); return; }
   if(b.ticket_url && !safeUrl(b.ticket_url)){ toast("The ticket link needs to start with https://"); return; }
-  if(b.tz && !validTz(b.tz)){ toast("Not a time zone this phone knows — pick one from the list"); return; }
+  if((b.tz && !validTz(b.tz)) || (b.arr_tz && !validTz(b.arr_tz))){ toast("Not a time zone this phone knows — pick one from the list"); return; }
   if(!b.id) b.id=uid("bk");
   store.write("saveBooking", b, function(){
     var found=false;

@@ -29,9 +29,13 @@ var TABS = {
   // never the ticket or its QR code itself.
   // trip_id ties a row to a trip in Trips; blank means the default trip, so
   // every row written before trips existed stays where it was. tz is the time
-  // zone a booking's time is in (blank: the trip's).
+  // zone a booking's time is in (blank: the trip's). A booking runs from
+  // date/time (departure, or check-in) to arr_date/arr_time (arrival, or
+  // check-out), arr_tz being the arrival's zone; number is the flight, train
+  // or sailing, from_place/to_place where it leaves from and goes to.
   Bookings: ['id', 'type', 'date', 'time', 'description', 'confirmation_no', 'details',
-             'ticket_url', 'trip_id', 'tz'],
+             'ticket_url', 'trip_id', 'tz', 'number', 'from_place', 'to_place',
+             'arr_date', 'arr_time', 'arr_tz'],
   Locations: ['id', 'name_en', 'name_zh', 'city', 'type', 'lat', 'lng', 'nav_app',
               'history_blurb', 'recommendations', 'dishes_to_order', 'souvenirs', 'notes',
               'getting_there', 'arrive_by', 'tickets', 'photo_url', 'ticket_url', 'trip_id'],
@@ -246,7 +250,7 @@ function readTab_(name) {
     for (var c = 0; c < headers.length; c++) {
       var h = headers[c], v = row[c];
       if (v instanceof Date) {
-        v = Utilities.formatDate(v, ss_().getSpreadsheetTimeZone(), h === 'planned_time' || h === 'time' ? 'HH:mm' : 'yyyy-MM-dd');
+        v = Utilities.formatDate(v, ss_().getSpreadsheetTimeZone(), /time$/.test(h) ? 'HH:mm' : 'yyyy-MM-dd');
       }
       obj[h] = NUMERIC[h] ? (v === '' || v === null ? '' : Number(v)) : String(v == null ? '' : v);
     }
@@ -464,7 +468,7 @@ function seedTab_(name, rows, force) {
   // keep date and time columns as plain text so they round-trip unchanged
   if (sh.getLastRow() > 1) {
     headers.forEach(function (h, i) {
-      if (h === 'date' || h === 'time' || h === 'planned_time') {
+      if (/(^|_)(date|time)$/.test(h)) {
         sh.getRange(2, i + 1, sh.getLastRow() - 1, 1).setNumberFormat('@');
       }
     });

@@ -476,3 +476,16 @@ Paste a confirmation email — or the text of the booking page — into **Paste 
 - the flight number and airport codes, or the train number and stations (English or Chinese), or the hotel's name and nights, and coach and seat.
 
 It fills the form and says what it found; check each field before saving. Passenger names are not copied.
+
+### Departures and arrivals on the day plan
+
+A flight, train or ferry has its **number**, **from** and **to**, and a **departure** and **arrival** date and time (a hotel has **check-in** and **check-out**). Enter just an arrival time earlier than the departure and the app takes it as the next day, as an overnight flight lands. Each time is read in the time zone of where it happens — worked out from airport codes (SYD, HKG, CAN, TFU…) and your cities, and changeable under *Time zones* — so 22:20 in Sydney and 04:40 in Hong Kong are both right.
+
+Then the day plan uses them:
+
+- **The day you land** opens with the landing: when you're likely through immigration and bags (about 50 min after a flight, 15 after a train, 30 after a ferry), the ride to that night's hotel (timed from the airport's position to the hotel's pin), when you can **drop your bags** — and that the room itself is ready at the hotel booking's check-in time — and how many **free hours** that leaves before the first stop, with **+ Add a stop** to fill them.
+- **The day you leave** has the departure among the stops at its time, with when to be at the airport (2½ h before), station or pier (45 min) and when to leave the stop or hotel before it.
+- **Stops that clash** are flagged: anything before you land or are free, or after you need to leave.
+- The day briefing, the Bookings list (`22:20 → 04:40 +1`), the calendar file (the event runs until the arrival) and the printout all show the arrival.
+
+The allowances are rules of thumb, shown as "about"; they don't know about queues or traffic.

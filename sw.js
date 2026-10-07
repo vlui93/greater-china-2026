@@ -2,9 +2,9 @@
    mainland China, and github.io can be slow or unreachable there too. Once the
    app has been opened on wifi it keeps working with no connection at all. */
 /* Bumped when the shell changes (v2: no trip content baked in; v3: transport
-   legs and ticket notes; v4: Prep tab; v5: add a place from a map link; v6: offline adds survive the first sync; v7: map-link names in both languages; v10: trip overview, Simplified Chinese table; v11: photos and ticket links; v12: trips and cities; v13: maps, place search, best order; v14: map filters move the map; v15: places from other trips, packing templates, calendar, print, add bookings; v16: swipe between days).
+   legs and ticket notes; v4: Prep tab; v5: add a place from a map link; v6: offline adds survive the first sync; v7: map-link names in both languages; v10: trip overview, Simplified Chinese table; v11: photos and ticket links; v12: trips and cities; v13: maps, place search, best order; v14: map filters move the map; v15: places from other trips, packing templates, calendar, print, add bookings; v16: swipe between days; v17: departures and arrivals on the day plan).
    */
-var CACHE = "gct-v16";
+var CACHE = "gct-v17";
 var PHOTOS = "gct-photos";   // filled by the page; see "Photos" in index.html
 /* Map tiles, kept once viewed so a city looked at on wifi still shows with no
    signal. Never fetched ahead (OpenStreetMap's tile policy forbids bulk

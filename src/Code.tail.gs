@@ -73,7 +73,7 @@ function seedTab_(name, rows, force) {
   // keep date and time columns as plain text so they round-trip unchanged
   if (sh.getLastRow() > 1) {
     headers.forEach(function (h, i) {
-      if (h === 'date' || h === 'time' || h === 'planned_time') {
+      if (/(^|_)(date|time)$/.test(h)) {
         sh.getRange(2, i + 1, sh.getLastRow() - 1, 1).setNumberFormat('@');
       }
     });

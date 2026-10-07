@@ -10,9 +10,9 @@
 const fs = require('fs'), path = require('path');
 
 // The seed added ~118KB to index.html when it was baked in, so the ceiling sits
-// well above the app on its own (~250KB with trips, maps, imports, calendar, print and the booking reader) and
+// well above the app on its own (~275KB with trips, maps, imports, calendar, print, bookings and travel planning) and
 // well below the app plus a seed. Raise it with the app, never past the app + ~40KB.
-const CEILING_KB = { 'index.html': 275, 'Code.gs': 60 };
+const CEILING_KB = { 'index.html': 300, 'Code.gs': 60 };
 
 module.exports = function assertNoTripContent(text, what) {
   const seedPath = path.join(__dirname, 'seed.json');
