@@ -488,8 +488,22 @@ A flight, train or ferry has its **number**, **from** and **to**, and a **depart
 Then the day plan uses them:
 
 - **The day you land** opens with the landing: when you're likely through immigration and bags (about 50 min after a flight, 15 after a train, 30 after a ferry), the ride to that night's hotel (timed from the airport's position to the hotel's pin), when you can **drop your bags** — and that the room itself is ready at the hotel booking's check-in time — and how many **free hours** that leaves before the first stop, with **+ Add a stop** to fill them.
-- **The day you leave** has the departure among the stops at its time, with when to be at the airport (2½ h before), station or pier (45 min) and when to leave the stop or hotel before it.
+- **The day you leave** has the departure among the stops at its time, with when to be at the airport (2½ h before), station or pier (45 min) and when to leave the stop before it — or, first thing, the hotel you slept in (on a moving day, last night's, not the next one). The ride is timed from the hotel's pin to the airport, or to Hong Kong West Kowloon, the Hong Kong–Macau Ferry Terminal or Chengdu East when the booking leaves from one of those (other stations get a rule-of-thumb 25 minutes). The day briefing, and the evening *Tomorrow* card, open with that **Leave … by** time.
+- **A departure after midnight** (before 06:00) also shows at the end of the evening before, marked *tonight*.
+- **No time yet?** A train, ferry or ticket without one says **+ Add time** on its ticket and in the briefing.
 - **Stops that clash** are flagged: anything before you land or are free, or after you need to leave.
 - The day briefing, the Bookings list (`22:20 → 04:40 +1`), the calendar file (the event runs until the arrival) and the printout all show the arrival.
 
 The allowances are rules of thumb, shown as "about"; they don't know about queues or traffic.
+
+### Ticking places off
+
+The tick beside each stop (and each place in Places) marks it as **been**: the card dims, a *Been · 已去* tag shows, and its pin turns grey on the maps. *Hide visited* in Places leaves them out. Handy when plans move about — the tick stays with the place, whichever day it ends up on. Ticks are shared through the Sheet's `visited` column (paste the updated `Code.gs`, *Deploy → Manage deployments → Edit → New version*); until then they stay on the phone.
+
+### Opening on today
+
+During the trip the app opens on today's plan — the third day of the trip on its third day — and moves to the new day if it was left open overnight. The route on the trip overview is a timeline, one row per hotel stay.
+
+### Map links
+
+Notes you add to a place's name — *(Optional)*, *(FAR)*, *[to replace]*, *(20:30)*, *晚上* — stay in the name but are left out of the map search. Amap goes straight to a pin only when it is precise (pasted from a map app); a rough one is searched for by its Chinese name in its city instead.

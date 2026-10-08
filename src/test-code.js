@@ -215,6 +215,9 @@ console.log("10b. link columns: a booking's ticket, a place's photo and ticket")
   ok(post({key:KEY,action:"saveLocation",payload:{id:L0.id, photo_url:"https://upload.example.org/a.jpg", ticket_url:"https://example.com/t"}}).ok, "place links save");
   const L1 = post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===L0.id);
   eq([L1.photo_url, L1.ticket_url, L1.name_en], ["https://upload.example.org/a.jpg","https://example.com/t",L0.name_en], "place links persist");
+  ok(post({key:KEY,action:"saveLocation",payload:{id:L0.id, visited:"2026-10-18"}}).ok, "a place is ticked off");
+  const L2 = post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===L0.id);
+  eq([L2.visited, L2.photo_url, L2.name_en], ["2026-10-18","https://upload.example.org/a.jpg",L0.name_en], "the tick is kept, nothing else changes");
 }
 
 console.log("11. shared checklist");

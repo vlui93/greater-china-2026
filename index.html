@@ -217,6 +217,14 @@ nav.tabs .tz{font-size:10px;font-weight:500;line-height:1;opacity:.85;margin-top
 .navbtn.g{background:var(--nav-g);color:var(--on-nav-g)}
 .navbtn.p{background:var(--ink);color:var(--bg)}
 .navbtn:active{filter:brightness(.92)}
+.visitbtn{width:44px;height:36px;border-radius:12px;display:grid;place-items:center;flex:none;
+  background:var(--surface);border:1.5px solid var(--line-strong);color:var(--ink-3)}
+.visitbtn .svgic{width:20px;height:20px}
+.visitbtn[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.stop.been .stop-en,.stop.been .stop-zh,.locrow.been .en{color:var(--ink-3)}
+.stop.been .stop-time{color:var(--ink-3)}
+.pill.been{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 38%,var(--line))}
+.locrow .visitbtn{height:44px;margin-right:6px}
 .stop-tools{
   display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);
   background:var(--surface-2);padding:2px 4px;
@@ -427,6 +435,9 @@ ul.lst li .cn{font-weight:650}
 .brief li .k{flex:none;min-width:44px;font-weight:650;color:var(--ink-2)}
 .brief li.warn .k{color:#c2352f}
 .brief.tomorrow{border-style:dashed}
+.linkbtn{background:none;border:0;padding:0;font:inherit;font-weight:650;color:var(--brand);cursor:pointer}
+.tk-when .linkbtn{font-size:12px}
+.travel.tonight{border-style:dashed}
 
 /* Trip overview, route, countdown — the Today tab before (and after) the trip */
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}
@@ -451,22 +462,27 @@ ul.lst li .cn{font-weight:650}
   color:var(--brand);background:color-mix(in srgb,var(--brand) 13%,var(--surface))}
 .route{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 10px 12px}
 .route .sum{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);text-align:right;padding:0 6px 10px}
-.route ol{list-style:none;margin:0;padding:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;position:relative}
-.route li{position:relative;text-align:center;padding-top:34px;min-width:0}
-.route li::before{content:"";position:absolute;top:24px;left:0;right:0;height:2px;background:var(--line)}
-.route li:first-child::before{left:50%} .route li:last-child::before{right:50%}
-.route .node{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;
-  background:var(--surface);border:2.5px solid var(--line-strong)}
+/* A timeline down the card, one row per stay, so any number of stays fits */
+.route ol{list-style:none;margin:0;padding:0 4px}
+.route li{position:relative;padding-left:32px}
+.route li::before{content:"";position:absolute;left:8px;top:0;bottom:0;width:2px;background:var(--line)}
+.route li:first-child::before{top:14px}
+.route li:last-child::before{bottom:auto;height:40px}
+.route li:only-child::before{display:none}
+.route .stay{position:relative;padding:2px 0 8px;min-width:0}
+.route li:last-child .stay{padding-bottom:2px}
+.route .node{position:absolute;left:-32px;top:3px;width:18px;height:18px;border-radius:50%;
+  background:var(--surface);border:2.5px solid var(--line-strong);box-sizing:border-box}
 .route li.here .node{background:var(--brand);border-color:var(--brand);box-shadow:0 0 0 4px color-mix(in srgb,var(--brand) 22%,transparent)}
-.route li.past .node{background:var(--line-strong)}
-.route .leg{position:absolute;top:-2px;left:-50%;width:100%;font-size:10px;line-height:1.2;color:var(--ink-3);white-space:nowrap;
-  display:flex;align-items:center;justify-content:center;gap:3px}
-.route .leg .svgic{width:13px;height:13px}
+.route li.past .node{background:var(--line-strong);border-color:var(--line-strong)}
+.route .leg{display:flex;align-items:center;gap:5px;height:22px;margin-bottom:4px;font-size:11.5px;color:var(--ink-3);white-space:nowrap}
+.route .leg .svgic{width:14px;height:14px}
 .route li:first-child .leg{display:none}
-.route .en{font-size:13px;font-weight:650;line-height:1.2;margin-top:6px;padding:0 2px}
+.route .en{font-size:14.5px;font-weight:650;line-height:1.3}
+.route .en .zh{font-size:13px;font-weight:500;color:var(--ink-2);margin-left:6px}
 .route li.here .en{color:var(--brand)}
-.route .zh{font-size:12px;color:var(--ink-2);margin-top:1px}
-.route .n{font-size:11px;color:var(--ink-3);margin-top:2px}
+.route li.past .en{color:var(--ink-3)}
+.route .sub2{font-size:12px;color:var(--ink-3);margin-top:1px}
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:12px}
 .tile{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:13px 12px;text-align:left;
   background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
@@ -908,6 +924,16 @@ var LOCAL_FIRST = ["getting_there", "arrive_by", "tickets", "photo_url", "ticket
 var BK_LOCAL_FIRST = ["ticket_url","tz","number","from_place","to_place","arr_date","arr_time","arr_tz"];
 var LOC_FIELDS = ["id","name_en","name_zh","city","type","lat","lng","nav_app","history_blurb",
                   "recommendations","dishes_to_order","souvenirs","notes"].concat(LOCAL_FIRST);
+/* Places ticked off on the trip: visited is the day it was ticked, or "no"
+   once unticked (a value, so the untick reaches the Sheet past the rule
+   above). Kept through a sync the same way, for a backend without the column. */
+var VISIT_KEEP = LOCAL_FIRST.concat(["visited"]);
+function isVisited(l){ var v=String(l && l.visited || "").trim(); return !!v && v!=="no"; }
+function toggleVisited(id){
+  var l=store.loc(id); if(!l) return Promise.resolve(false);
+  var v=isVisited(l) ? "no" : todayISO();
+  return store.write("saveLocation", { id:l.id, visited:v }, function(){ l.visited=v; }).then(function(){ return v!=="no"; });
+}
 
 /* ---------- tiny utils ---------- */
 function $(s,r){ return (r||document).querySelector(s); }
@@ -1102,7 +1128,7 @@ var store = {
           var mine={}; (raw.locations||[]).forEach(function(l){ mine[l.id]=l; });
           (d.locations||[]).forEach(function(l){
             var local=mine[l.id]; if(!local) return;
-            LOCAL_FIRST.forEach(function(k){ if(!l[k] && local[k]) l[k]=local[k]; });
+            VISIT_KEEP.forEach(function(k){ if(!l[k] && local[k]) l[k]=local[k]; });
           });
           // Same for a booking's ticket link, which an older backend can't store
           var myBk={}; (raw.bookings||[]).forEach(function(b){ myBk[b.id]=b; });
@@ -1234,7 +1260,11 @@ function applyTrip(){
   var script = TRIP.zh_script || (tripHasChina() ? "simplified" : "original");
   ZH_SIMPLIFY = script==="simplified";
   if(!ui.day || DAYS.indexOf(ui.day)<0) ui.day = defaultDay();
-  if(applyTrip.open!==cur){ applyTrip.open=cur; homeMode = tripPhase()==="during" ? "day" : "trip"; }
+  // Opening the app (or another trip) during the trip lands on today's plan
+  if(applyTrip.open!==cur){
+    applyTrip.open=cur; homeMode = tripPhase()==="during" ? "day" : "trip";
+    if(DAYS.indexOf(todayISO())>=0) ui.day=todayISO();
+  }
   document.title = TRIP.name || "Trip";
 }
 function switchTrip(id){
@@ -1251,14 +1281,26 @@ function switchTrip(id){
 
 /** Amap consumes GCJ-02 by default; dev=1 / coordinate=wgs84 tell it our
  *  coordinates are plain GPS so it does the shift itself. */
+/* Notes people add to a place's name for themselves — "(Optional)", "(FAR)",
+   "[to replace]", "(20:30)", "SKP 晚上" — stay in the name but are left out
+   of what the map app is asked to find. */
+var NAME_NOTE = /\s*[\[(（【][^\])）】]*(?:optional|\bfar\b|can.?t find|to book|to replace|replace\]|closer|maybe|if time|\d{1,2}[:：]\d{2})[^\])）】]*[\])）】]\s*/gi;
+var ZH_NOTE = /\s+(?:早上|上午|中午|下午|晚上|傍晚|夜晚|可选|备选|待定)$/;
+function searchName(t){ return String(t||"").replace(NAME_NOTE," ").replace(ZH_NOTE,"").replace(/\s{2,}/g," ").trim(); }
+/** A pin worth navigating to: pasted from a map app (4+ decimals), not a rough
+ *  hand-entered one that could be a street or two out. */
+function precisePin(v){ var m=String(v).match(/\.(\d+)/); return !!m && m[1].length>=4; }
 function navUrls(loc){
   var lat=Number(loc.lat), lng=Number(loc.lng);
   var hasXY = isFinite(lat) && isFinite(lng) && (lat!==0 || lng!==0);
-  var zh = loc.name_zh || loc.name_en || "";
+  var zh = searchName(loc.name_zh) || searchName(loc.name_en) || loc.name_zh || loc.name_en || "";
   var q  = encodeURIComponent(zh + (loc.city ? " " + loc.city : ""));
   var nm = encodeURIComponent(zh);
   if(loc.nav_app === "apple") return appleUrls(loc, q, nm, lat, lng, hasXY);
   if(loc.nav_app === "amap"){
+    // Amap goes to the pin itself, so a rough one is searched for by name instead
+    hasXY = hasXY && precisePin(loc.lat) && precisePin(loc.lng);
+    var cz = cityZh(loc.city) || loc.city || "";
     return {
       app:"Amap 高德",
       scheme: hasXY
@@ -1266,8 +1308,8 @@ function navUrls(loc){
         : "iosamap://poi?sourceApplication=TripCompanion&keywords="+nm,
       web: hasXY
         ? "https://uri.amap.com/marker?position="+lng+","+lat+"&name="+nm+"&coordinate=wgs84&callnative=1&src=TripCompanion"
-        : "https://uri.amap.com/search?keyword="+nm+"&callnative=1&src=TripCompanion",
-      search: "https://uri.amap.com/search?keyword="+nm+(loc.city?"&city="+encodeURIComponent(loc.city):"")+"&callnative=1&src=TripCompanion",
+        : "https://uri.amap.com/search?keyword="+nm+(cz?"&city="+encodeURIComponent(cz):"")+"&callnative=1&src=TripCompanion",
+      search: "https://uri.amap.com/search?keyword="+nm+(cz?"&city="+encodeURIComponent(cz):"")+"&callnative=1&src=TripCompanion",
       cls:"a"
     };
   }
@@ -1540,8 +1582,9 @@ function stopCard(entry, loc, idx, total, next, clash){
   var u = navUrls(loc);
   var leg = next ? legText(loc, next) : "";
   var summary = entry.notes || firstSentence(loc.history_blurb, 120) || (loc.type+" in "+loc.city);
+  var been=isVisited(loc);
   return ''+
-  '<div class="stop'+(photoOf(loc)?" has-photo":"")+'" data-sid="'+esc(entry.id)+'" data-lid="'+esc(loc.id)+'">'+
+  '<div class="stop'+(photoOf(loc)?" has-photo":"")+(been?" been":"")+'" data-sid="'+esc(entry.id)+'" data-lid="'+esc(loc.id)+'">'+
     (photoOf(loc) ? '<button class="stop-photo" data-act="open" data-lid="'+esc(loc.id)+'" style="'+bgStyle(photoOf(loc))+'" aria-label="'+esc(loc.name_en)+'"></button>' : '')+
     '<button class="stop-main" data-act="open" data-lid="'+esc(loc.id)+'">'+
       '<div class="stop-time '+(entry.planned_time?"":"none")+'">'+esc(entry.planned_time||"––:––")+'</div>'+
@@ -1550,7 +1593,8 @@ function stopCard(entry, loc, idx, total, next, clash){
         '<div class="stop-zh zh">'+escz(loc.name_zh)+'</div>'+
         '<div class="stop-sum">'+escz(summary)+'</div>'+
         '<div class="stop-meta">'+
-          (clash ? '<span class="pill clash">'+esc(clash)+'</span>' : '')+
+          (been ? '<span class="pill been">Been · 已去</span>' : '')+
+          (clash && !been ? '<span class="pill clash">'+esc(clash)+'</span>' : '')+
           (function(){ var b=bookingState(loc.id);
             return b==="ok" ? '<span class="pill ok">Booked · 已订</span>'
                  : b==="todo" ? '<span class="pill todo">To book · 待订</span>' : ""; })()+
@@ -1562,6 +1606,7 @@ function stopCard(entry, loc, idx, total, next, clash){
     (leg ? '<div class="stop-leg">'+IC.down+'<div>Then <b>'+esc(next.name_en)+'</b> · '+leg+'</div></div>' : '')+
     '<div class="stop-side" style="position:absolute;right:12px;top:12px">'+
       '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(loc.id)+'" aria-label="Navigate with '+esc(u.app)+'">'+IC.nav+'</button>'+
+      visitBtn(loc)+
     '</div>'+
     '<div class="stop-tools">'+
       '<button class="handle g" data-act="drag" aria-label="Drag to reorder">'+IC.drag+'</button>'+
@@ -1574,6 +1619,12 @@ function stopCard(entry, loc, idx, total, next, clash){
       '<button data-act="remove" aria-label="Remove from day">REMOVE</button>'+
     '</div>'+
   '</div>';
+}
+
+function visitBtn(l){
+  var on=isVisited(l);
+  return '<button class="visitbtn" data-act="visit" data-lid="'+esc(l.id)+'" aria-pressed="'+on+'" aria-label="'+
+    (on ? "Been here — tap to untick" : "Tick off: been here")+'">'+IC.check+'</button>';
 }
 
 /* ==========================================================================
@@ -1595,14 +1646,21 @@ function dayBrief(date, title, cls){
     if(MOVE_TYPES[b.type] && b.date!==date && bkArrDate(b)===date && hhmm(b.arr_time))
       lines.push({ k:hhmm(b.arr_time), t:(b.type==="flight"?"Land":"Arrive")+(b.to_place?" "+escz(b.to_place):"")+" · "+escz(bkTitle(b)) });
   });
+  var stops=store.dayStops(date);
   bks.forEach(function(b){
     var tonight=b.date!==date, time=isOpenTime(b.time) ? "Open" : (b.time||"").slice(0,5), at=hhmm(b.arr_time), ad=bkArrDate(b);
+    // When to set off for it, from the hotel or the stop before
+    var dp=depPlan(b, date, stops);
+    if(dp && dp.origin) lines.push({ warn: fmtHM(dp.leave,dp.tz)<"08:00" || dp.tonight, k:"Leave", t:"<b>"+esc(fmtHM(dp.leave,dp.tz))+"</b> from "+esc(dp.origin.name_en)+
+      (dp.eveBefore?" the evening before":"")+" for the "+esc(dp.dt)+" "+esc(b.number||b.type)+" — at "+PLACE_WORD[b.type]+" by "+esc(fmtHM(dp.atBy,dp.tz))+
+      " (~"+durText(dp.ride)+" ride, "+(EARLY_MIN[b.type]||45)+" min to spare)" });
     lines.push({ k: time || "—", t: escz(bkTitle(b))+(tonight?" — <b>tonight</b>, after midnight":"")+
       (MOVE_TYPES[b.type] && at ? " · arrives "+esc(at)+(ad && ad!==b.date ? " +"+daysBetween(b.date,ad) : "") : "")+
+      (/flight|train|ferry|ticket/.test(b.type) && !time ? ' · <button class="linkbtn" data-act="bk-edit" data-bid="'+esc(b.id)+'">Add the time</button>' : "")+
       (safeUrl(b.ticket_url) ? " · "+ticketLink(b.ticket_url,"Ticket","tklink") : "") });
     if(/TO BOOK/.test(b.details||"")) lines.push({ warn:true, k:"Book", t:"Not booked yet: "+escz(b.description) });
   });
-  var stops=store.dayStops(date), here={};
+  var here={};
   stops.forEach(function(s){ here[s.location_id]=1; });
   store.data.checklist.filter(function(i){
     return i.kind==="task" && !i.removed && !i.done && i.location_id && here[i.location_id];
@@ -1881,6 +1939,13 @@ var AIRPORTS = {
   NRT:[35.772,140.393,"Asia/Tokyo","Tokyo"], HND:[35.549,139.780,"Asia/Tokyo","Tokyo"], KIX:[34.427,135.244,"Asia/Tokyo","Osaka"],
   ICN:[37.460,126.441,"Asia/Seoul","Seoul"], LHR:[51.470,-0.454,"Europe/London","London"], DXB:[25.253,55.365,"Asia/Dubai","Dubai"]
 };
+/* Stations and piers this trip leaves from, to time the ride to them. Public
+   facts; anything not listed gets the rule-of-thumb ride above. */
+var STATIONS = [
+  { k:/west kowloon|西九龍|西九龙/i, lat:22.3047, lng:114.1650, tz:"Asia/Hong_Kong", city:"Hong Kong" },
+  { k:/shun tak|sheung wan|macau ferry terminal|港澳碼頭|港澳码头|信德/i, lat:22.2877, lng:114.1527, tz:"Asia/Hong_Kong", city:"Hong Kong" },
+  { k:/chengdu ?east|成都東|成都东/i, lat:30.6311, lng:104.1390, tz:"Asia/Shanghai", city:"Chengdu" }
+];
 function hhmm(t){ var m=String(t||"").match(/^(\d{1,2})[:：](\d{2})/); return m ? pad2(+m[1])+":"+m[2] : ""; }
 /** What's known about "SYD", "Sydney (SYD)" or "Guangzhou South": time zone, and a point to time a ride from. */
 function placeInfo(txt){
@@ -1888,6 +1953,8 @@ function placeInfo(txt){
   var codes=txt.match(/\b[A-Z]{3}\b/g)||[];
   for(var i=0;i<codes.length;i++){ var a=AIRPORTS[codes[i]];
     if(a) return { lat:a[0], lng:a[1], tz:a[2], city:a[3], code:codes[i], name:txt }; }
+  for(var j=0;j<STATIONS.length;j++){ var st=STATIONS[j];
+    if(st.k.test(txt)) return { lat:st.lat, lng:st.lng, tz:st.tz, city:st.city, name:txt, station:true }; }
   var low=txt.toLowerCase(), c=cityList().filter(function(x){ return low.indexOf(x.name.toLowerCase())>=0 || (x.name_zh && txt.indexOf(x.name_zh)>=0); })[0];
   return c ? { lat:c.lat, lng:c.lng, tz:c.tz, city:c.name, name:txt, centre:true } : { name:txt };
 }
@@ -1942,6 +2009,42 @@ function hotelBookingOn(date){
     return b.type==="hotel" && b.date && (b.date===date || (b.date<date && b.arr_date && date<b.arr_date));
   }).sort(function(a,b){ return a.date<b.date?1:-1; })[0] || null;
 }
+/** Where a booking leaves from, for the ride there: its from_place, or else
+ *  the start of its description ("Hong Kong West Kowloon → …") and any
+ *  "from Sheung Wan" in it. */
+function bkFromInfo(b){
+  var a=placeInfo(b.from_place);
+  if(a && hasXY(a) && !a.centre) return a;
+  var d=String(b.description||""), parts=d.split(/\s*(?:→|->)\s*/);
+  if(parts.length>1){
+    var f=d.match(/\bfrom ([^,—–(]+)/i), c=placeInfo(parts[0]+(f?" "+f[1]:""));
+    if(c && hasXY(c) && (!c.centre || !a)) return c;
+  }
+  return a;
+}
+/** Where a card at local time t sits among the stops: before the first timed one at or after it. */
+function slotIn(stops, t){
+  for(var k=0;k<stops.length;k++){ var st=hhmm(stops[k].planned_time); if(st && st>=t) return k; }
+  return stops.length;
+}
+/** When to set off for a departure on the day plan of `date`: there EARLY_MIN
+ *  before it, after the ride from the stop before it — or, first thing, from
+ *  the hotel slept in the night before (on a moving day, not the new one). A
+ *  departure after midnight (before 06:00) belongs to the evening before. */
+function depPlan(b, date, stops){
+  var dt=hhmm(b.time);
+  if(!MOVE_TYPES[b.type] || !dt || isOpenTime(b.time)) return null;
+  var tonight=b.date!==date;
+  if(tonight && !(b.date===addDaysISO(date,1) && dt<"06:00")) return null;
+  var i=tonight ? stops.length : slotIn(stops, dt), origin=null;
+  for(var k=i-1;k>=0;k--){ var pl=store.loc(stops[k].location_id); if(pl){ origin=pl; break; } }
+  if(!origin) origin=tonight ? hotelOn(date) : (hotelOn(addDaysISO(date,-1)) || hotelOn(date));
+  var dep=bookingWhen(b), tz=depTz(b), from=bkFromInfo(b);
+  var atBy=dep-(EARLY_MIN[b.type]||45)*60000, ride=rideMin(origin, from, b.type), leave=roundTo5(atBy-ride*60000, false);
+  var dayStart=zonedMs(date, "00:00", tz);
+  return { i:i, dt:dt, tonight:tonight, origin:origin, ride:ride, atBy:atBy, leave:leave, tz:tz,
+           eveBefore: !tonight && leave<dayStart };
+}
 function dayTravel(date, stops){
   var cards=[], clash={}, blocks=[];
   var stopMs=function(s){ var l=store.loc(s.location_id), t=hhmm(s.planned_time); return t ? zonedMs(date, t, placeTz(l)) : null; };
@@ -1953,17 +2056,16 @@ function dayTravel(date, stops){
     var dt=hhmm(b.time), at=hhmm(b.arr_time), ad=bkArrDate(b), title=bkTitle(b), icon=BK_ICON[b.type]||BK_ICON.train;
     // Only when the clock differs: Hong Kong time on a China trip is the same time
     var tzNote=function(tz){ return tzOffset(tz, Date.now())!==tzOffset(tripTz(), Date.now()) ? ' <small>'+esc(tzName(tz))+' time</small>' : ''; };
-    if(b.date===date && dt){
-      var dep=bookingWhen(b), atBy=dep-(EARLY_MIN[b.type]||45)*60000, from=placeInfo(b.from_place), i=slot(dt);
-      var prevStop=null; for(var k=i-1;k>=0;k--){ var pl=store.loc(stops[k].location_id); if(pl){ prevStop=pl; break; } }
-      var origin=prevStop || hotelOn(date) || hotelOn(addDaysISO(date,-1));
-      var ride=rideMin(origin, from, b.type), leave=roundTo5(atBy-ride*60000, false), tz=depTz(b);
-      var arrTxt = at ? (b.type==="flight"?"Lands ":"Arrives ")+at+(ad && ad!==date ? " on "+fmtDate(ad,false) : "")+
+    var dp=depPlan(b, date, stops);
+    if(dp){
+      var dep=bookingWhen(b), atBy=dp.atBy, origin=dp.origin, ride=dp.ride, leave=dp.leave, tz=dp.tz, i=dp.i;
+      var arrTxt = at ? (b.type==="flight"?"Lands ":"Arrives ")+at+(ad && ad!==b.date ? " on "+fmtDate(ad,false) : "")+
         (tzOffset(arrTz(b),dep)!==tzOffset(tz,dep) ? " ("+tzName(arrTz(b))+" time)" : "")+"." : "";
-      cards.push({ at:i, t:dt, html:'<div class="travel dep" data-bid="'+esc(b.id)+'"><div class="tt">'+esc(dt)+tzNote(tz)+'</div><div>'+
-        '<div class="ti">'+icon+escz(title)+'</div>'+
+      cards.push({ at:i, t:dp.tonight ? "99:"+dt : dt, html:'<div class="travel dep'+(dp.tonight?" tonight":"")+'" data-bid="'+esc(b.id)+'"><div class="tt">'+esc(dt)+tzNote(tz)+
+          (dp.tonight ? '<small>after midnight</small>' : '')+'</div><div>'+
+        '<div class="ti">'+icon+escz(title)+(dp.tonight ? ' — tonight' : '')+'</div>'+
         '<div class="sub">Be at '+PLACE_WORD[b.type]+' by <b>'+esc(fmtHM(atBy,tz))+'</b>'+
-          (origin ? ' — leave '+esc(origin.name_en)+' about <b>'+esc(fmtHM(leave,tz))+'</b> (~'+durText(ride)+' there)' : '')+'. '+esc(arrTxt)+'</div>'+
+          (origin ? ' — leave '+esc(origin.name_en)+' about <b>'+esc(fmtHM(leave,tz))+'</b>'+(dp.eveBefore?' the evening before':'')+' (~'+durText(ride)+' there)' : '')+'. '+esc(arrTxt)+'</div>'+
         (/TO BOOK/.test(b.details||"") ? '<div class="sub"><span class="pill todo">To book · 待订</span></div>' : '')+'</div></div>' });
       var endMs=(ad===date && bkArrMs(b)) ? bkArrMs(b)+(EXIT_MIN[b.type]||30)*60000 : Infinity;
       blocks.push({ from:leave, to:endMs, why:"After you leave for "+(b.number||PLACE_WORD[b.type].replace("the ","")) });
@@ -2113,9 +2215,10 @@ function renderTrip(){
       bases.map(function(b){
         var cls = phase==="during" && today>=b.from && today<b.to ? "here" : (phase==="after" || today>=b.to ? "past" : "");
         var leg = b.leg ? '<span class="leg">'+legIcon(b.leg.type)+esc(b.leg.time||b.leg.type)+'</span>' : '';
-        return '<li class="'+cls+'">'+leg+'<span class="node"></span>'+
-          '<div class="en">'+esc(b.city)+'</div><div class="zh">'+esc(cityZh(b.city))+'</div>'+
-          '<div class="n">'+b.nights+' night'+(b.nights===1?"":"s")+'</div></li>';
+        return '<li class="'+cls+'">'+leg+'<div class="stay"><span class="node"></span>'+
+          '<div class="en">'+esc(b.city)+'<span class="zh">'+esc(cityZh(b.city))+'</span></div>'+
+          '<div class="sub2">'+esc(b.loc.name_en)+'</div>'+
+          '<div class="sub2"><span class="n">'+b.nights+' night'+(b.nights===1?"":"s")+'</span> · '+esc(rangeText(b.from, b.to).replace(/ \d{4}$/,""))+'</div></div></li>';
       }).join("")+'</ol></div>';
   }
 
@@ -2162,7 +2265,8 @@ function renderTrip(){
         return '<div class="tk'+(x.url?"":" missing")+'">'+
           '<div class="tk-top"><span class="tk-ic">'+icon+'</span><span class="tk-type">'+esc(x.kind==="loc"?"Entry":x.type)+'</span></div>'+
           '<div class="tk-t">'+escz(x.title)+'</div>'+(x.zh?'<div class="tk-z zh">'+escz(x.zh)+'</div>':'')+
-          '<div class="tk-when">'+(x.date?esc(fmtDate(x.date,false))+(x.time?" · "+esc(x.time):""):"&nbsp;")+'</div>'+
+          '<div class="tk-when">'+(x.date?esc(fmtDate(x.date,false))+(x.time?" · "+esc(x.time):""):"&nbsp;")+
+            (x.kind==="bk" && !x.time ? ' · <button class="linkbtn" data-act="bk-edit" data-bid="'+esc(x.id)+'">+ Add time</button>' : '')+'</div>'+
           (x.url ? ticketLink(x.url,"Open","tk-go")
                  : '<button class="tk-go add" data-act="bk-ticket" data-bid="'+esc(x.id)+'">+ Add link</button>')+
         '</div>';
@@ -2221,6 +2325,7 @@ function renderPlaces(){
   var types=["All","attraction","restaurant","shopping","hotel"];
   var q=ui.q||"";
   var mode=ui.placesMode==="map" ? "map" : "list";
+  var hideChip=all.some(isVisited) ? '<button class="chip" data-act="hide-visited" aria-pressed="'+!!ui.hideVisited+'">Hide visited</button>' : '';
   var seg='<div class="seg two" role="tablist">'+[["list","List · 列表"],["map","Map · 地图"]].map(function(x){
     return '<button data-act="places-mode" data-v="'+x[0]+'" aria-pressed="'+(mode===x[0])+'">'+x[1]+'</button>';
   }).join("")+'</div>';
@@ -2230,7 +2335,7 @@ function renderPlaces(){
     '<div class="filters" style="margin-top:-4px">'+types.map(function(t){
       return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
         (t==="All"?"All types":esc(t))+'</button>';
-    }).join("")+'</div>';
+    }).join("")+hideChip+'</div>';
   if(mode==="map"){ renderPlacesMap(seg+chips); return; }
   dropMap("places");
 
@@ -2247,7 +2352,7 @@ function renderPlaces(){
     '<div class="filters" style="margin-top:-4px">'+types.map(function(t){
       return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
         (t==="All"?"All types":esc(t))+'</button>';
-    }).join("")+'</div>'+
+    }).join("")+hideChip+'</div>'+
     '<div id="placeResults">'+placeResults(q)+'</div>';
 
   var input=$("#q");
@@ -2266,7 +2371,7 @@ function renderPlaces(){
 function placeResults(q){
   var all=store.data.locations;
   var list=all.filter(function(l){
-    return matches(l,q) && (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type);
+    return matches(l,q) && (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type) && !(ui.hideVisited && isVisited(l));
   });
   return '<div class="spread small muted" style="margin:4px 0 10px">'+
       '<span>'+list.length+" of "+all.length+'</span>'+
@@ -2275,14 +2380,15 @@ function placeResults(q){
       '<button class="btn sm ghost" data-act="new-location">+ New place</button></span></div>'+
     (list.length ? '<div class="loclist">'+list.map(function(l){
       var u=navUrls(l);
-      return '<div class="locrow">'+
+      return '<div class="locrow'+(isVisited(l)?" been":"")+'">'+
         (photoOf(l) ? '<button class="thumb photo" data-act="open" data-lid="'+esc(l.id)+'" style="border:0;'+bgStyle(photoOf(l))+'" aria-label="'+esc(l.name_en)+'"></button>'
                     : '<button class="thumb" data-act="open" data-lid="'+esc(l.id)+'" style="border:0">'+typeIcon(l.type)+'</button>')+
         '<button class="lb" data-act="open" data-lid="'+esc(l.id)+'" style="text-align:left;background:none">'+
           '<div class="en">'+hilite(l.name_en,q)+'</div>'+
           '<div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
-          '<div class="mt">'+esc(l.city)+' · '+esc(l.type)+' · '+esc(u.app)+'</div>'+
+          '<div class="mt">'+(isVisited(l)?'<b style="color:var(--ok)">Been · 已去</b> · ':'')+esc(l.city)+' · '+esc(l.type)+' · '+esc(u.app)+'</div>'+
         '</button>'+
+        visitBtn(l)+
         '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(l.id)+'" aria-label="Navigate">'+IC.nav+'</button>'+
       '</div>';
     }).join("")+'</div>' : '<div class="card empty">No match for &ldquo;'+esc(q)+'&rdquo;.<br><span class="small">Try part of the Chinese name — two or three characters is enough</span></div>');
@@ -2643,6 +2749,9 @@ function locationDetail(id){
     (souv.length ? '<div class="section-title">Worth buying</div><ul class="lst">'+listItems(souv)+'</ul>' : "")+
     (l.notes ? '<div class="section-title">Practical</div><p class="blurb">'+escz(l.notes)+'</p>' : "")+
     '<div class="section-title">On the trip</div>'+
+    (isVisited(l) ? '<button class="btn block" data-act="visit" data-lid="'+esc(l.id)+'" style="margin-bottom:10px;color:var(--ok)">'+IC.check+' Been here'+
+        (/^\d{4}-\d\d-\d\d/.test(l.visited) ? ' · '+esc(fmtDate(l.visited.slice(0,10),false)) : '')+' — tap to untick</button>'
+      : '<button class="btn block" data-act="visit" data-lid="'+esc(l.id)+'" style="margin-bottom:10px">'+IC.check+' Mark as visited · 已去</button>')+
     (function(){
       var appear=store.data.schedule.filter(function(s){ return s.location_id===l.id; })
         .sort(function(a,b){ return a.date<b.date?-1:1; });
@@ -3492,6 +3601,8 @@ function importNotes(file){
    map is opened. Every place's own colour is its type's.
    ========================================================================== */
 var TYPE_COLOR = { attraction:"#c2410c", restaurant:"#b7791f", shopping:"#7c3aed", hotel:"#1d4ed8" };
+var VISITED_COLOR = "#8a8f98";   // places already ticked off
+function pinColor(l){ return isVisited(l) && l.type!=="hotel" ? VISITED_COLOR : TYPE_COLOR[l.type]||TYPE_COLOR.attraction; }
 var maps = {};   // the map on the Locations tab, and the one in a sheet
 function dropMap(which){
   var m=maps[which]; if(!m) return;
@@ -3532,19 +3643,20 @@ function showMap(which, el, pins, opts){
 }
 function renderPlacesMap(head){
   var all=store.data.locations;
-  var list=all.filter(function(l){ return (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type); });
+  var list=all.filter(function(l){ return (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type) && !(ui.hideVisited && isVisited(l)); });
   var pinned=list.filter(hasXY), missing=list.length-pinned.length;
   dropMap("places");
   $("#view-places").innerHTML=head+
     '<div class="mapbox" id="placesMap"></div>'+
     '<div class="maplegend">'+["attraction","restaurant","shopping","hotel"].map(function(t){
       return '<span><i style="background:'+TYPE_COLOR[t]+'"></i>'+t+'</span>'; }).join("")+
+      (list.some(isVisited) ? '<span><i style="background:'+VISITED_COLOR+'"></i>visited</span>' : '')+
       '<span class="muted">'+pinned.length+' on the map'+(missing?' · '+missing+' without a pin':'')+'</span></div>';
-  var key=TRIP.id+"|"+ui.city+"|"+ui.type;
+  var key=TRIP.id+"|"+ui.city+"|"+ui.type+"|"+!!ui.hideVisited;
   var v=ui.mapView && ui.mapView.key===key ? ui.mapView : null;
   var ctr=cityInfo(ui.city!=="All" ? ui.city : (cityOptions()[0]||""));
   showMap("places", $("#placesMap"), pinned.map(function(l){
-    return { lat:+l.lat, lng:+l.lng, kind:"place", color:TYPE_COLOR[l.type]||TYPE_COLOR.attraction, title:l.name_en, popup:mapPopup(l) };
+    return { lat:+l.lat, lng:+l.lng, kind:"place", color:pinColor(l), title:l.name_en, popup:mapPopup(l) };
   }), { view: v, centre: ctr && hasXY(ctr) ? [+ctr.lat, +ctr.lng] : null }).then(function(){
     if(maps.places) maps.places._filterKey=key;
   });
@@ -3560,7 +3672,7 @@ function dayMap(date){
   locs.forEach(function(l){
     n++;
     if(!hasXY(l)){ nopin.push(n+". "+l.name_en); return; }
-    pins.push({ lat:+l.lat, lng:+l.lng, kind:l.type==="hotel"?"hotel":"stop", label:String(n), color:TYPE_COLOR[l.type]||TYPE_COLOR.attraction, title:l.name_en, popup:mapPopup(l,"Stop "+n) });
+    pins.push({ lat:+l.lat, lng:+l.lng, kind:l.type==="hotel"?"hotel":"stop", label:String(n), color:pinColor(l), title:l.name_en, popup:mapPopup(l,"Stop "+n) });
   });
   if(hLast && hasXY(hLast)) pins.push({ lat:+hLast.lat, lng:+hLast.lng, kind:"hotel", label:"H", color:TYPE_COLOR.hotel, title:hLast.name_en, popup:mapPopup(hLast,"End") });
   openSheet("Day "+dayNumber(date)+" · "+fmtDate(date,false),
@@ -4409,6 +4521,15 @@ document.addEventListener("click", function(ev){
       var l=store.loc(lid); if(l) openMaps(l);
       return;
     }
+    case "visit": {
+      ev.preventDefault();
+      var inSheet=!!t.closest("#sheetBody");
+      toggleVisited(lid).then(function(on){ toast(on ? "Ticked off · 已去" : "Unticked"); });
+      if(inSheet){ var y=$("#sheet").scrollTop; locationDetail(lid); $("#sheet").scrollTop=y; }
+      render();
+      return;
+    }
+    case "hide-visited": ui.hideVisited=!ui.hideVisited; save(LS.ui,ui); render(); return;
     case "nearby": {
       var ln=store.loc(lid); if(ln && hasXY(ln)) openUrls(nearbyUrls(ln, t.dataset.kind));
       return;
@@ -4653,7 +4774,18 @@ window.addEventListener("online", function(){
 if(store.hasData()) setTimeout(function(){ findPhotos(false); }, 4000);
 document.addEventListener("visibilitychange", function(){
   if(!document.hidden && store.configured() && store.queue.length) store.flush().then(updateStatus).catch(function(){});
+  if(!document.hidden) jumpToNewDay();
 });
+/* A phone keeps the app open in the background for days. Back in front on a
+   new date, it moves to that day's plan, as it would on a fresh start. */
+var shownOn=todayISO();
+function jumpToNewDay(){
+  var t=todayISO(); if(t===shownOn) return;
+  shownOn=t;
+  if(DAYS.indexOf(t)<0) return;
+  ui.day=t; save(LS.ui,ui); homeMode="day";
+  if(ui.view==="today" && !$("#sheet.open")) render();
+}
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", function(){
