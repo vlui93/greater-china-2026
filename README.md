@@ -477,6 +477,10 @@ Paste a confirmation email — or the text of the booking page — into **Paste 
 
 It fills the form and says what it found; check each field before saving. Passenger names are not copied.
 
+### Tickets you add yourself
+
+The overview's **Tickets 票夹** row ends with **+ Add a ticket**: an attraction, a show, a tour (type *ticket*), or any flight, train or ferry. Tickets stay on the row whether or not they have a link yet. Tick **Open — no fixed time** for something you'll use whenever suits — an open return ferry, a pass valid all day. It shows as *Open*, goes on the calendar as an all-day event, and the day plan doesn't invent a departure time for it; untick it and set the time once you've picked a sailing.
+
 ### Departures and arrivals on the day plan
 
 A flight, train or ferry has its **number**, **from** and **to**, and a **departure** and **arrival** date and time (a hotel has **check-in** and **check-out**). Enter just an arrival time earlier than the departure and the app takes it as the next day, as an overnight flight lands. Each time is read in the time zone of where it happens — worked out from airport codes (SYD, HKG, CAN, TFU…) and your cities, and changeable under *Time zones* — so 22:20 in Sydney and 04:40 in Hong Kong are both right.

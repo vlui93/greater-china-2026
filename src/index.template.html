@@ -520,6 +520,13 @@ a.btn{text-decoration:none}
 .tk-when{font-size:12px;color:var(--ink-3);margin-top:auto;padding-top:6px;font-variant-numeric:tabular-nums}
 .tk-go{display:flex;align-items:center;justify-content:center;min-height:40px;margin-top:6px;border-radius:10px;font-size:13.5px;font-weight:650;
   text-decoration:none;background:var(--brand);color:var(--on-brand)}
+/* Form rows shown or hidden by type: a layout's display must not beat [hidden] */
+#sheetBody [hidden]{display:none!important}
+.tk.addnew{align-items:center;justify-content:center;text-align:center;gap:6px;border-style:dashed;box-shadow:none;color:var(--brand);
+  background:transparent;font:inherit;min-height:150px}
+.tk.addnew .svgic{width:24px;height:24px}
+.tk.addnew b{font-size:14px}
+.tk.addnew span{font-size:12px;color:var(--ink-3);line-height:1.35}
 .tk-go.add{background:transparent;color:var(--brand);border:1px solid color-mix(in srgb,var(--brand) 45%,var(--line))}
 /* First-run gate. The page ships with no trip content, so until the Sheet has
    been reached once there is nothing to show — this is the whole app. */
@@ -1589,7 +1596,7 @@ function dayBrief(date, title, cls){
       lines.push({ k:hhmm(b.arr_time), t:(b.type==="flight"?"Land":"Arrive")+(b.to_place?" "+escz(b.to_place):"")+" · "+escz(bkTitle(b)) });
   });
   bks.forEach(function(b){
-    var tonight=b.date!==date, time=(b.time||"").slice(0,5), at=hhmm(b.arr_time), ad=bkArrDate(b);
+    var tonight=b.date!==date, time=isOpenTime(b.time) ? "Open" : (b.time||"").slice(0,5), at=hhmm(b.arr_time), ad=bkArrDate(b);
     lines.push({ k: time || "—", t: escz(bkTitle(b))+(tonight?" — <b>tonight</b>, after midnight":"")+
       (MOVE_TYPES[b.type] && at ? " · arrives "+esc(at)+(ad && ad!==b.date ? " +"+daysBetween(b.date,ad) : "") : "")+
       (safeUrl(b.ticket_url) ? " · "+ticketLink(b.ticket_url,"Ticket","tklink") : "") });
@@ -1898,8 +1905,11 @@ function bkArrMs(b){ var d=bkArrDate(b), t=hhmm(b.arr_time); return d && t ? zon
 function bkRoute(b){ return [[b.from_place,b.to_place].filter(Boolean).join(" → "), b.number].filter(Boolean).join(" — "); }
 function bkTitle(b){ return b.description || bkRoute(b) || b.type || "Booking"; }
 /** "22:20 → 04:40 +1", or a hotel's "in 14:00 · out Wed 21 Oct" */
+/** A ticket with no fixed time — an open return ferry, a timed-entry-free attraction. */
+function isOpenTime(t){ return String(t||"").trim().toLowerCase()==="open"; }
 function bkWhenText(b){
   var dt=String(b.time||"").trim(), at=hhmm(b.arr_time), ad=bkArrDate(b);
+  if(isOpenTime(dt)) return MOVE_TYPES[b.type] ? "open — any sailing" : "open — any time";
   if(b.type==="hotel"){
     return [dt?"in "+dt:"", b.arr_date ? "out "+fmtDate(b.arr_date,false)+(at?" "+at:"") : (at?"out "+at:"")].filter(Boolean).join(" · ");
   }
@@ -2142,11 +2152,11 @@ function renderTrip(){
       '<div class="card" style="padding:12px 14px 2px">'+inner+'</div>';
   }
 
-  // Tickets: open each one from here, or add the missing link
+  // Tickets: open each one from here, add the missing link, or add a new one
   var w=walletItems(), wallet="";
-  if(w.length){
+  if(phase!=="after"){
     var withLink=w.filter(function(x){ return x.url; }).length;
-    wallet='<div class="h2">Tickets<span class="zh">票夹</span><span class="more" style="font-weight:600">'+withLink+' of '+w.length+' linked</span></div>'+
+    wallet='<div class="h2">Tickets<span class="zh">票夹</span>'+(w.length?'<span class="more" style="font-weight:600">'+withLink+' of '+w.length+' linked</span>':'')+'</div>'+
       '<div class="wallet">'+w.map(function(x){
         var icon = x.kind==="loc" ? IC.check : (BK_ICON[x.type]||BK_ICON.train);
         return '<div class="tk'+(x.url?"":" missing")+'">'+
@@ -2156,7 +2166,9 @@ function renderTrip(){
           (x.url ? ticketLink(x.url,"Open","tk-go")
                  : '<button class="tk-go add" data-act="bk-ticket" data-bid="'+esc(x.id)+'">+ Add link</button>')+
         '</div>';
-      }).join("")+'</div>';
+      }).join("")+
+      '<button class="tk addnew" data-act="bk-new" data-type="ticket">'+IC.plus+'<b>Add a ticket</b>'+
+        '<span>An attraction, a show, a tour — or an open return</span></button></div>';
   }
 
   $("#view-today").innerHTML = statusBar()+dayStrip(null)+hero+next+route+tiles+wallet+prep;
@@ -2281,7 +2293,8 @@ var BK_ICON={
   flight: svgIc('<path d="M20.4 15.6v-1.6l-7-4.2V4.7a1.4 1.4 0 0 0-2.8 0v5.1l-7 4.2v1.6l7-2.1v4.6l-2 1.4v1.2l3.4-.9 3.4.9v-1.2l-2-1.4v-4.6z"/>'),
   train:  svgIc('<rect x="6" y="3.6" width="12" height="12.4" rx="3"/><path d="M6 10.6h12M8.7 20.4l2-3.2M15.3 20.4l-2-3.2"/><circle cx="9.4" cy="13.4" r=".9"/><circle cx="14.6" cy="13.4" r=".9"/>'),
   ferry:  svgIc('<path d="M3.4 15.6 5 10.8h14l1.6 4.8"/><path d="M6.8 10.8V6.6h10.4v4.2M12 3.2v3.4"/><path d="M2.6 18.2c1.6 0 1.6 1.6 3.1 1.6s1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.2-1.6 1.6 1.6 3.1 1.6 1.6-1.6 3.1-1.6"/>'),
-  hotel:  svgIc('<path d="M3.6 20.4V8.6L12 3.4l8.4 5.2v11.8"/><path d="M9.4 20.4v-6h5.2v6"/>')
+  hotel:  svgIc('<path d="M3.6 20.4V8.6L12 3.4l8.4 5.2v11.8"/><path d="M9.4 20.4v-6h5.2v6"/>'),
+  ticket: svgIc('<path d="M3.6 8.2a2.2 2.2 0 0 0 0 4.4v3.6h16.8v-3.6a2.2 2.2 0 0 1 0-4.4V4.6H3.6z"/><path d="M14.4 4.6v11.6" stroke-dasharray="1.6 1.8"/>')
 };
 /* General advice for Hong Kong, Macau and the mainland, shown on any trip that
    takes in one of them. Nothing here is about a particular trip, so it can
@@ -2515,8 +2528,8 @@ function walletItems(){
   store.data.bookings.forEach(function(b){
     if(!b.date || b.date<today) return;
     var u=safeUrl(b.ticket_url);
-    if(!u && !/flight|train|ferry/.test(b.type)) return;
-    out.push({ kind:"bk", id:b.id, date:b.date, time:String(b.time||"").slice(0,5), type:b.type,
+    if(!u && !/flight|train|ferry|ticket/.test(b.type)) return;
+    out.push({ kind:"bk", id:b.id, date:b.date, time:isOpenTime(b.time) ? "Open" : String(b.time||"").slice(0,5), type:b.type,
                title:shortTitle(bkTitle(b)), url:u });
   });
   store.data.locations.forEach(function(l){
@@ -4175,11 +4188,11 @@ function parseBookingText(text){
   o.details=det.join(". ")+(det.length?".":"");
   return o;
 }
-function bookingForm(id){
+function bookingForm(id, presetType){
   var b=id ? store.data.bookings.filter(function(x){ return x.id===id; })[0] : null, isNew=!b;
-  b=b || { id:"", type:"flight", date:"", time:"", description:"", confirmation_no:"", details:"", ticket_url:"", tz:"",
+  b=b || { id:"", type:presetType||"flight", date:"", time:"", description:"", confirmation_no:"", details:"", ticket_url:"", tz:"",
            number:"", from_place:"", to_place:"", arr_date:"", arr_time:"", arr_tz:"" };
-  var types=["flight","train","ferry","hotel","other"];
+  var types=["flight","train","ferry","hotel","ticket","other"];
   var f=function(id,label,val,extra,cls){ return '<div class="field'+(cls?" "+cls:"")+'"><label id="'+id+'_l">'+label+'</label><input id="'+id+'" value="'+esc(val||"")+'"'+(extra||"")+'></div>'; };
   var html=(isNew ? '<div class="field linkbox pastebox" style="margin-top:12px"><label for="b_paste">Paste the confirmation</label>'+
       '<textarea id="b_paste" placeholder="Copy the confirmation email (or the booking page) and paste it here"></textarea>'+
@@ -4190,8 +4203,10 @@ function bookingForm(id){
       f("b_number","Flight no.",b.number,' autocapitalize="characters" placeholder="CX138"',"mv")+'</div>'+
     '<div class="grid2 mv">'+f("b_from","From",b.from_place,' placeholder="SYD, or a station"')+f("b_to","To",b.to_place,' placeholder="HKG"')+'</div>'+
     '<div class="grid2">'+f("b_date","Departs",b.date,' type="date"')+f("b_time","Time",hhmm(b.time)||"",' type="time"')+'</div>'+
-    (b.time && !hhmm(b.time) || /^\d{1,2}:\d{2}\s*[-–]/.test(b.time||"") ? '<p class="hint" style="margin:-8px 0 12px">Was “'+esc(b.time)+'” — now just the start; put the end in Arrives.</p>' : '')+
-    '<div class="grid2">'+f("b_arr_date","Arrives",b.arr_date||"",' type="date"')+f("b_arr_time","Time",hhmm(b.arr_time)||"",' type="time"')+'</div>'+
+    '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="b_open"'+(isOpenTime(b.time)?" checked":"")+'> '+
+      '<span id="b_open_l">Open — no fixed time</span></label>'+
+    (b.time && !hhmm(b.time) && !isOpenTime(b.time) || /^\d{1,2}:\d{2}\s*[-–]/.test(b.time||"") ? '<p class="hint" style="margin:-8px 0 12px">Was “'+esc(b.time)+'” — now just the start; put the end in Arrives.</p>' : '')+
+    '<div class="grid2 arrrow">'+f("b_arr_date","Arrives",b.arr_date||"",' type="date"')+f("b_arr_time","Time",hhmm(b.arr_time)||"",' type="time"')+'</div>'+
     '<p class="blurb small muted mv" id="b_arr_hint" style="margin:-8px 0 14px">The arrival goes on that day’s plan: when you can drop bags at the hotel and be out exploring.</p>'+
     '<div class="field"><label>Reference</label><input id="b_confirmation_no" autocapitalize="characters" value="'+esc(b.confirmation_no)+'"></div>'+
     '<div class="field"><label>Description</label><input id="b_description" value="'+esc(b.description)+'" placeholder="Filled in from the route if left blank"></div>'+
@@ -4206,7 +4221,7 @@ function bookingForm(id){
       (isNew?'':'<button class="btn danger" data-act="bk-delete" data-bid="'+esc(b.id)+'">Delete</button>')+'</div>';
   openSheet(isNew?"New booking":"Edit booking", html);
   var pb=$("#b_paste"); if(pb) pb.addEventListener("paste", function(){ setTimeout(readPasted, 0); });
-  ["b_type","b_from","b_to"].forEach(function(id){ $("#"+id).addEventListener("change", bookingFormShape); $("#"+id).addEventListener("input", bookingFormShape); });
+  ["b_type","b_from","b_to","b_open"].forEach(function(id){ $("#"+id).addEventListener("change", bookingFormShape); $("#"+id).addEventListener("input", bookingFormShape); });
   bookingFormShape();
 }
 /** Labels and fields follow the type: a hotel has check-in and check-out, a
@@ -4218,6 +4233,10 @@ function bookingFormShape(){
   set("b_number_l", t==="flight"?"Flight no.":t==="train"?"Train no.":"Sailing / no.");
   set("b_date_l", t==="hotel"?"Check-in":move?"Departs":"Date");
   set("b_arr_date_l", t==="hotel"?"Check-out":move?"Arrives":"Ends");
+  set("b_time_l", t==="ticket" ? "Entry time" : "Time");
+  set("b_open_l", move ? "Open ticket — any sailing or train that day" : t==="ticket" ? "Open — any time that day" : "Open — no fixed time");
+  document.querySelectorAll("#sheetBody .arrrow").forEach(function(e){ e.hidden=(t==="ticket"); });
+  var op=$("#b_open"), tm=$("#b_time"); if(op && tm){ tm.disabled=op.checked; if(op.checked) tm.value=""; }
   var probe={ type:t, from_place:($("#b_from")||{}).value||"", to_place:($("#b_to")||{}).value||"", tz:"", arr_tz:"" };
   var a=$("#b_tz"), c=$("#b_arr_tz");
   if(a) a.placeholder=depTz(probe); if(c) c.placeholder=arrTz(probe);
@@ -4245,11 +4264,13 @@ function saveBookingForm(id){
   b.from_place=g("from"); b.to_place=g("to");
   b.tz=g("tz").replace(/\s+/g,"_"); b.arr_tz=g("arr_tz").replace(/\s+/g,"_");
   if(!MOVE_TYPES[b.type]){ b.number=""; b.from_place=""; b.to_place=""; if(b.type!=="hotel") b.arr_tz=""; }
+  if($("#b_open") && $("#b_open").checked) b.time="open";
+  if(b.type==="ticket"){ b.arr_date=""; b.arr_time=""; }
   b.number=b.number.toUpperCase().replace(/\s+/g,"");
   var tb=$("#b_tobook") && $("#b_tobook").checked;
   b.details=tb ? (/TO BOOK/.test(b.details) ? b.details : ("TO BOOK. "+b.details).trim()) : b.details.replace(/TO BOOK\.?\s*/g,"").trim();
   if(!b.description) b.description=MOVE_TYPES[b.type] ? bkRoute(b) : "";
-  if(!b.description){ toast("Say what it is — a route, a hotel"); return; }
+  if(!b.description){ toast(b.type==="ticket" ? "Say what the ticket is for" : "Say what it is — a route, a hotel"); return; }
   if(!/^\d{4}-\d{2}-\d{2}$/.test(b.date)){ toast("Set the date"); return; }
   if(b.arr_time && !b.arr_date) b.arr_date=bkArrDate(b);
   if(b.arr_date && b.arr_date<b.date){ toast(b.type==="hotel" ? "Check-out is before check-in" : "The arrival is before the departure"); return; }
@@ -4521,7 +4542,7 @@ document.addEventListener("click", function(ev){
     case "ics-go": exportIcs(t.dataset.how); return;
     case "print": printForm(); return;
     case "print-go": printNow(); return;
-    case "bk-new": bookingForm(null); return;
+    case "bk-new": bookingForm(null, t.dataset.type); return;
     case "bk-edit": bookingForm(t.dataset.bid); return;
     case "bk-read": readPasted(); return;
     case "bk-save": saveBookingForm(t.dataset.bid); return;
