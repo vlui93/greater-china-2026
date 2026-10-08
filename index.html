@@ -2782,7 +2782,8 @@ function locationForm(id){
       return '<option value="'+esc(o)+'"'+(String(val)===String(o)?" selected":"")+'>'+esc(o)+'</option>';
     }).join("")+'</select>';
   }
-  var html = (isNew ? findBoxHTML()+linkBoxHTML() : "")+
+  linkEditing = isNew ? null : l.id;
+  var html = (isNew ? findBoxHTML()+linkBoxHTML() : linkBoxHTML(true))+
     '<div class="field"><label>Name (English)</label><input id="f_name_en" value="'+esc(l.name_en)+'" placeholder="English name"></div>'+
     '<div class="field"><label>名称 (Chinese) — required in China</label>'+
       '<input id="f_name_zh" class="zh" value="'+esc(l.name_zh)+'" placeholder="中文名" style="font-size:19px">'+
@@ -3061,12 +3062,18 @@ function nearDuplicate(pl){
   return hit;
 }
 
-function linkBoxHTML(){
-  return '<div class="field linkbox"><label for="f_link">From a map link</label>'+
+/* The place being edited, when the link box is on an existing place: a
+   pasted link then sets or moves its pin and leaves its names, city and type
+   as they are — names often carry the user's own notes, like "(FAR)". */
+var linkEditing=null;
+function linkBoxHTML(editing){
+  return '<div class="field linkbox"><label for="f_link">'+(editing ? "Set the pin from a map link" : "From a map link")+'</label>'+
     '<textarea id="f_link" rows="2" placeholder="Paste a Google Maps or Amap link — or everything the Share button copies"></textarea>'+
     '<div class="linkrow"><button class="btn sm" data-act="link-paste">Paste</button>'+
       '<button class="btn sm primary" data-act="link-fill">Fill in</button></div>'+
-    '<div class="hint" id="f_link_status" role="status">On the mainland, share from Amap — it gives you the Chinese name. '+
+    '<div class="hint" id="f_link_status" role="status">'+(editing
+      ? 'Sets or moves this place&#39;s pin; its names stay as they are. Walking and taxi times, and when to leave for a train or flight, then work from the new pin.'
+      : 'On the mainland, share from Amap — it gives you the Chinese name. ')+
       'Pins are moved from the Chinese map grid to GPS for you.</div></div>';
 }
 function setField(id, v, onlyIfEmpty){
@@ -3082,8 +3089,10 @@ function applyPlace(pl){
   setField("f_name_zh", pl.names.zh, true);
   setField("f_name_en", pl.names.en, true);
   if(pl.lat!=null){ setField("f_lat", String(pl.lat)); setField("f_lng", String(pl.lng)); }
-  if(pl.city){ setField("f_city", pl.city); setField("f_nav_app", mapAppFor(pl.city)); }
-  setField("f_type", pl.type);
+  if(!linkEditing){
+    if(pl.city){ setField("f_city", pl.city); setField("f_nav_app", mapAppFor(pl.city)); }
+    setField("f_type", pl.type);
+  }
   var n=$("#f_notes");
   if(pl.address && n && n.value.indexOf(pl.address)<0) n.value=(n.value?n.value+"\n":"")+"Address: "+pl.address;
   // Describe what the form now holds, not just what this pass changed: a
@@ -3097,7 +3106,7 @@ function applyPlace(pl){
   if(pl.shiftedM>0) msg.push("Pin moved "+pl.shiftedM+" m from the Chinese map grid to GPS.");
   if(!$("#f_name_zh").value.trim()) msg.push("<b>Add the Chinese name</b> — "+(pl.source==="google"?"Google only gave the English one.":"it's required."));
   var dup=nearDuplicate(pl);
-  if(dup) msg.push("<b>Already on your list:</b> "+esc(dup.name_en)+" "+esc(dup.name_zh)+" — to use it, add it from “+ Add a stop” instead.");
+  if(dup && dup.id!==linkEditing) msg.push("<b>Already on your list:</b> "+esc(dup.name_en)+" "+esc(dup.name_zh)+" — to use it, add it from “+ Add a stop” instead.");
   linkStatus(msg.join(" "));
 }
 function fillFromLink(){
@@ -3131,6 +3140,7 @@ function bindLinkBox(){
 }
 
 function quickAddForm(date){
+  linkEditing=null;
   var html =
     '<p class="blurb muted small" style="margin-bottom:14px">Just enough to navigate to it. Fill in the rest later.</p>'+
     findBoxHTML()+linkBoxHTML()+

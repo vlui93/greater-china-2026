@@ -507,3 +507,5 @@ During the trip the app opens on today's plan — the third day of the trip on i
 ### Map links
 
 Notes you add to a place's name — *(Optional)*, *(FAR)*, *[to replace]*, *(20:30)*, *晚上* — stay in the name but are left out of the map search. Amap goes straight to a pin only when it is precise (pasted from a map app); a rough one is searched for by its Chinese name in its city instead.
+
+To set or move the pin of a place already on the list, open it, tap *Edit this place* and paste a Google Maps or Amap link (or what their Share button copies) into **Set the pin from a map link**. The pin changes; the names, city and type stay as they are, and a missing Chinese name is filled in. Everything worked out from pins — walking and taxi times between stops, the ride to a station or airport and when to leave for it — is calculated on the phone each time, so it follows the new pin straight away, with no need to update anything else. These are distance-based estimates, not live traffic.
