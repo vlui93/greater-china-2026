@@ -218,6 +218,8 @@ console.log("10b. link columns: a booking's ticket, a place's photo and ticket")
   ok(post({key:KEY,action:"saveLocation",payload:{id:L0.id, visited:"2026-10-18"}}).ok, "a place is ticked off");
   const L2 = post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===L0.id);
   eq([L2.visited, L2.photo_url, L2.name_en], ["2026-10-18","https://upload.example.org/a.jpg",L0.name_en], "the tick is kept, nothing else changes");
+  ok(post({key:KEY,action:"saveLocation",payload:{id:L0.id, map_url:"https://surl.amap.com/abc123"}}).ok, "a map link saves");
+  eq(post({key:KEY,action:"locations"}).data.locations.find(l=>l.id===L0.id).map_url, "https://surl.amap.com/abc123", "and reads back");
 }
 
 console.log("11. shared checklist");
