@@ -1301,13 +1301,20 @@ function navUrls(loc){
     // Amap goes to the pin itself, so a rough one is searched for by name instead
     hasXY = hasXY && precisePin(loc.lat) && precisePin(loc.lng);
     var cz = cityZh(loc.city) || loc.city || "";
+    // With a pin: Amap's route planner from where you are to the place (like
+    // Google's directions). Without one: Amap's place search by name — its
+    // parameter is "name" — kept to a box round the city, so it finds the
+    // right one even from the other side of the world. dev=1: GPS coordinates.
+    var ci = cityInfo(loc.city), box = ci && ci.lat!=="" && ci.lat!=null && isFinite(+ci.lat) && isFinite(+ci.lng) && (+ci.lat||+ci.lng)
+      ? "&lat1="+(+ci.lat+0.35).toFixed(4)+"&lon1="+(+ci.lng-0.4).toFixed(4)+"&lat2="+(+ci.lat-0.35).toFixed(4)+"&lon2="+(+ci.lng+0.4).toFixed(4)
+      : "";
     return {
       app:"Amap 高德",
       scheme: hasXY
-        ? "iosamap://viewMap?sourceApplication=TripCompanion&poiname="+nm+"&lat="+lat+"&lon="+lng+"&dev=1"
-        : "iosamap://poi?sourceApplication=TripCompanion&keywords="+nm,
+        ? "iosamap://path?sourceApplication=TripCompanion&dlat="+lat+"&dlon="+lng+"&dname="+nm+"&dev=1&t=0"
+        : "iosamap://poi?sourceApplication=TripCompanion&name="+nm+box+"&dev=1",
       web: hasXY
-        ? "https://uri.amap.com/marker?position="+lng+","+lat+"&name="+nm+"&coordinate=wgs84&callnative=1&src=TripCompanion"
+        ? "https://uri.amap.com/navigation?to="+lng+","+lat+","+nm+"&mode=car&coordinate=wgs84&callnative=1&src=TripCompanion"
         : "https://uri.amap.com/search?keyword="+nm+(cz?"&city="+encodeURIComponent(cz):"")+"&callnative=1&src=TripCompanion",
       search: "https://uri.amap.com/search?keyword="+nm+(cz?"&city="+encodeURIComponent(cz):"")+"&callnative=1&src=TripCompanion",
       cls:"a"
