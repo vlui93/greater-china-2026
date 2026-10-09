@@ -196,6 +196,9 @@ nav.tabs .tz{font-size:10px;font-weight:500;line-height:1;opacity:.85;margin-top
 .stop-zh{font-size:16.5px;line-height:1.3;margin-top:1px;color:var(--ink)}
 .stop-sum{font-size:13px;color:var(--ink-2);margin-top:5px;line-height:1.42;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* A note written for this stop is shown whole, line breaks and all; only the
+   stand-in taken from the place's background is cut to two lines. */
+.stop-sum.own{display:block;-webkit-line-clamp:unset;overflow:visible;white-space:pre-line;overflow-wrap:anywhere}
 .stop-meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
 /* How to get to the next stop. Sits inside the card, not between cards, so it
    travels with its stop when the day is reordered. */
@@ -1100,18 +1103,21 @@ var store = {
   write: function(action, payload, applyLocal){
     tagTrip(action,payload);
     applyLocal();
+    this.writeGen=(this.writeGen||0)+1;
     this.persist();
     // Not connected: queue it anyway. The first sync after connecting takes
     // the Sheet's copy wholesale, so anything not queued by then — a place
     // added on this phone, say — would simply disappear.
     if(!this.configured()){ this.enqueue(action,payload); return Promise.resolve(); }
     var self=this;
-    return this.call(action,payload).then(function(){
+    var p = this.call(action,payload).then(function(){
       updateStatus();
     }).catch(function(err){
       if(isUnknownAction(err)) return;   // kept on this phone; uploaded once the backend knows it
       self.enqueue(action,payload);
     });
+    this.lastWrite = Promise.all([this.lastWrite, p]);
+    return p;
   },
 
   sync: function(opts){
@@ -1119,9 +1125,18 @@ var store = {
     if(!this.configured()) return Promise.reject(new Error("not-configured"));
     if(this.syncing) return Promise.resolve();
     this.syncing=true; updateStatus();
+    var gen;
     return this.flush()
-      .then(function(){ return self.call("all"); })
+      .then(function(){ gen=self.writeGen; return self.call("all"); })
       .then(function(d){
+        // Something was saved on this phone while the Sheet's copy was on its
+        // way, so that copy predates it and would undo it on screen. Let the
+        // save land, then fetch again.
+        if(gen!==self.writeGen){
+          self.syncing=false;
+          return (self.lastWrite||Promise.resolve()).then(function(){ return self.sync(opts); });
+        }
+        self.syncedAt=Date.now();
         if(d && d.locations){
           self.persist();
           var raw=self.raw;
@@ -1607,7 +1622,7 @@ function stopCard(entry, loc, idx, total, next, clash){
       '<div class="stop-body">'+
         '<div class="stop-en">'+esc(loc.name_en)+'</div>'+
         '<div class="stop-zh zh">'+escz(loc.name_zh)+'</div>'+
-        '<div class="stop-sum">'+escz(summary)+'</div>'+
+        '<div class="stop-sum'+(entry.notes?" own":"")+'">'+escz(summary)+'</div>'+
         '<div class="stop-meta">'+
           (been ? '<span class="pill been">Been · 已去</span>' : '')+
           (clash && !been ? '<span class="pill clash">'+esc(clash)+'</span>' : '')+
@@ -4459,6 +4474,17 @@ function updateStop(sid, patch){
   Object.keys(patch).forEach(function(k){ e[k]=patch[k]; });
   return store.write("saveScheduleEntry", e, function(){});
 }
+/* A stop's own note, in a text box: notes run to phone numbers and several
+   lines, which the browser's one-line prompt cut off and couldn't show. */
+function stopNoteForm(sid){
+  var e=store.data.schedule.filter(function(s){ return s.id===sid; })[0]; if(!e) return;
+  var l=store.loc(e.location_id)||{};
+  openSheet("Note · Day "+dayNumber(e.date),
+    '<div class="field"><label>'+esc(l.name_en||"This stop")+(l.name_zh?' · <span class="zh">'+escz(l.name_zh)+'</span>':'')+'</label>'+
+      '<textarea id="f_stopnote" style="min-height:160px" placeholder="Booking number, what to order, when to leave…">'+esc(e.notes||"")+'</textarea>'+
+      '<div class="hint">Shown in full under this stop on the day. It belongs to this day only — notes for the place itself go in Edit this place.</div></div>'+
+    '<div class="formactions"><button class="btn primary" data-act="save-stop-note" data-sid="'+esc(sid)+'">Save</button></div>');
+}
 function commitOrder(date, ids){
   ids.forEach(function(id,i){
     store.data.schedule.forEach(function(s){ if(s.id===id) s.order_index=i+1; });
@@ -4468,8 +4494,9 @@ function commitOrder(date, ids){
 function saveLocation(obj){
   return store.write("saveLocation", obj, function(){
     var found=false;
+    // Merged, not swapped: the form doesn't carry every column (the tick, the trip)
     store.data.locations = store.data.locations.map(function(l){
-      if(l.id===obj.id){ found=true; return obj; } return l;
+      if(l.id===obj.id){ found=true; return Object.assign({}, l, obj); } return l;
     });
     if(!found) store.data.locations.push(obj);
   });
@@ -4614,11 +4641,11 @@ document.addEventListener("click", function(ev){
       updateStop(sid, { planned_time:v.trim() }).then(render);
       return;
     }
-    case "note": {
-      var cur2=(store.data.schedule.filter(function(s){return s.id===sid;})[0]||{}).notes||"";
-      var v2=window.prompt("Note for this stop", cur2);
-      if(v2===null) return;
-      updateStop(sid, { notes:v2.trim() }).then(render);
+    case "note": stopNoteForm(sid); return;
+    case "save-stop-note": {
+      var v2=($("#f_stopnote")||{}).value;
+      if(v2==null) return;
+      updateStop(sid, { notes:v2.trim() }).then(function(){ closeSheet(); render(); toast("Saved"); });
       return;
     }
     case "remove": case "remove-orphan": {
@@ -4652,6 +4679,8 @@ document.addEventListener("click", function(ev){
       if(r2.error){ toast(r2.error); return; }
       saveLocation(r2.value).then(function(){
         closeSheet(); render(); toast("Saved");
+        // back to the place's page, so the change can be seen
+        if(lid && store.loc(lid)) locationDetail(lid);
       });
       return;
     }
@@ -4805,7 +4834,13 @@ window.addEventListener("online", function(){
 });
 if(store.hasData()) setTimeout(function(){ findPhotos(false); }, 4000);
 document.addEventListener("visibilitychange", function(){
-  if(!document.hidden && store.configured() && store.queue.length) store.flush().then(updateStatus).catch(function(){});
+  // An app left open isn't relaunched when you come back to it, so fetch the
+  // Sheet again then too: changes from another phone, or made in the Sheet
+  // itself, would otherwise wait for a full restart.
+  if(!document.hidden && store.configured()){
+    if(Date.now()-(store.syncedAt||0) > 2*60*1000) store.sync({quiet:true}).catch(function(){});
+    else if(store.queue.length) store.flush().then(updateStatus).catch(function(){});
+  }
   if(!document.hidden) jumpToNewDay();
 });
 /* A phone keeps the app open in the background for days. Back in front on a
