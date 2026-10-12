@@ -315,7 +315,13 @@ They open from the overview's Tickets row (which lists every upcoming flight, tr
 The **Prep** tab has three parts.
 
 - **Checklist** — dated tasks for before and during the trip, grouped by section, with the most urgent under *Next up*. Tasks can point at a place; if one isn't ticked by that day, the day's briefing flags it.
-- **Packing** — two lists. *Just me* is kept only on that phone and never syncs, since everyone packs differently. *Shared — one of us brings it* is for things the group needs once (adapters, first-aid kit); ticking one records your name, so the others can see it's covered. Set your name in ⚙ Settings.
+- **Packing** — three lists, each with its own heading so it's clear who packs what:
+  - *Each of us* — on everyone's phone (it lives in the Sheet's Checklist tab with kind `each`), but each person ticks their own copy. The ticks stay on that phone.
+  - *Group — one of us brings it* (kind `pack`) — things the group needs once, like adapters and the first-aid kit. Unticked ones say *One for the group*. Ticking one records your name (*Victor brings it*) so the others can see it's covered. Set your name in ⚙ Settings.
+  - *Just me* — extras kept only on that phone, never synced.
+
+  Editing an item lets you move it between *Each of us* and *Group*.
+- **Deleting quickly.** Swipe any item left — a task or a packing item — to show **Delete**. Swipe a section's title left to delete the whole section. There's no "are you sure"; an **Undo** shows for five seconds instead. Tap a section's title to rename it. Deleted rows stay in the Sheet marked `removed`, so another phone can't bring them back.
 - **Guide** — general advice for Hong Kong, Macau and the mainland: apps to install, staying connected, paying, getting around, power banks. Nothing in it is specific to this trip, so it ships in the page.
 
 Each day also opens with a short **briefing**: that day's bookings, including any overnight departure before 06:00 the next morning; anything still marked TO BOOK; unticked tasks for that day's stops; and a passport reminder. From 16:00 the Today tab also shows **tomorrow's** briefing, so there's time to sort things out the night before.

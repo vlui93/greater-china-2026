@@ -397,10 +397,40 @@ ul.lst li .cn{font-weight:650}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .ckgroup{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
-.ckhead{display:flex;justify-content:space-between;align-items:baseline;padding:11px 14px 4px;
+.ckhead{position:relative;overflow:hidden;
   font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
-.ckrow{display:flex;align-items:flex-start;border-top:1px solid var(--line)}
+.ckrow{position:relative;overflow:hidden;border-top:1px solid var(--line)}
 .ckhead + .ckrow{border-top:0}
+/* Swipe left to delete: the row slides over a red button. pan-y keeps the
+   page scrolling up and down; sideways moves come to the script. */
+[data-swipe]{touch-action:pan-y}
+.ckslide{display:flex;align-items:flex-start;position:relative;z-index:1;background:var(--surface);will-change:transform}
+.ckhead .ckslide{align-items:baseline;justify-content:space-between;padding:11px 14px 4px;gap:10px}
+.ckdel{position:absolute;top:0;right:0;bottom:0;width:92px;display:grid;place-items:center;
+  background:#c2352f;color:#fff;font-size:14px;font-weight:650;letter-spacing:0;text-transform:none}
+.ckhead .ckdel{width:116px;font-size:13px}
+.ckdel{visibility:hidden}
+[data-swipe].sw .ckdel{visibility:visible}
+.ckname{font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;padding:0}
+.ckname:hover{color:var(--ink)}
+.whohead{display:flex;align-items:center;gap:10px;margin:22px 0 9px}
+.whohead:first-of-type{margin-top:2px}
+.whohead .wi{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent)}
+.whohead.grp .wi{background:color-mix(in srgb,var(--ok) 16%,var(--surface));color:var(--ok)}
+.whohead.me .wi{background:var(--surface-2);color:var(--ink-2)}
+.whohead .wi .svgic{width:19px;height:19px}
+.whohead b{display:block;font-size:15.5px;color:var(--ink)}
+.whohead small{display:block;font-size:12.5px;line-height:1.35;color:var(--ink-2);margin-top:1px}
+.cktext .m .grp{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 38%,var(--line))}
+.cktext .m .grp.need{color:var(--ink-2);border-color:var(--line);border-style:dashed}
+.whopick{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.whopick label{display:flex;gap:8px;align-items:flex-start;padding:10px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);
+  font-size:13.5px;line-height:1.35;cursor:pointer}
+.whopick label:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.whopick input{margin-top:2px}
+#toast.act{pointer-events:auto;display:flex;align-items:center;gap:14px;text-align:left}
+#toast .undo{color:var(--bg);font-weight:750;text-decoration:underline;padding:4px 2px;flex:none}
 .ckbox{flex:none;width:48px;min-height:48px;display:grid;place-items:center}
 .ckbox .svgic{width:22px;height:22px;padding:2px;border-radius:7px;border:1.6px solid var(--line-strong);
   color:transparent;box-sizing:border-box}
@@ -991,9 +1021,15 @@ function tripDays(){
   return out;
 }
 var DAYS = tripDays();
-function toast(msg,ms){
-  var t=$("#toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(toast._t); toast._t=setTimeout(function(){ t.classList.remove("show"); }, ms||2100);
+function toast(msg,ms,undo){
+  var t=$("#toast"); t.textContent=msg; t.classList.toggle("act", !!undo);
+  if(undo){
+    var b=document.createElement("button"); b.className="undo"; b.textContent="Undo";
+    b.onclick=function(){ t.classList.remove("show","act"); clearTimeout(toast._t); undo(); };
+    t.appendChild(b);
+  }
+  t.classList.add("show");
+  clearTimeout(toast._t); toast._t=setTimeout(function(){ t.classList.remove("show","act"); }, ms||(undo?5000:2100));
 }
 
 /* ==========================================================================
@@ -2274,7 +2310,7 @@ function renderTrip(){
   // Before you go: checklist and packing progress
   var prep="";
   if(phase==="before"){
-    var tasks=sharedItems("task"), mine=(packing.items||[]).filter(function(i){ return !i.removed; });
+    var tasks=sharedItems("task"), mine=myPacking();
     var bar=function(label, zh, items){
       if(!items.length) return "";
       var d=items.filter(function(i){ return i.done; }).length, pct=Math.round(d/items.length*100);
@@ -2510,23 +2546,58 @@ function groupBySection(items, sortFn){
   });
   return order.map(function(k){ return { name:k, items: map[k].sort(sortFn||byOrder) }; });
 }
+/* Packing comes in three kinds. "each": on everyone's list, ticked on each
+   phone for its owner (the item is in the Sheet, the ticks aren't). "pack":
+   the group needs one, and whoever ticks it is bringing it. Just me: only
+   on this phone, never synced. */
+var EACH_KEY = "gct.each";
+function eachTicks(){ return load(EACH_KEY+"."+TRIP.id, {}); }
+function setEachTick(id, on){
+  var m=eachTicks(); if(on) m[id]=nowISO(); else delete m[id]; save(EACH_KEY+"."+TRIP.id, m);
+}
+/** Items to show, with done read from this phone for "each" ones. */
+function eachItems(){
+  var m=eachTicks();
+  return sharedItems("each").map(function(i){ return Object.assign({}, i, { done:m[i.id]||"", done_by:"" }); });
+}
 function ckRow(it, scope){
   var done=!!it.done, meta=[];
   if(it.kind==="task" && !done){ var di=dueInfo(it.due); if(di) meta.push('<span class="due '+di.cls+'">'+esc(di.label)+'</span>'); }
   if(it.location_id){ var l=store.loc(it.location_id); if(l) meta.push('<span>'+esc(l.name_en)+'</span>'); }
-  if(done && it.done_by) meta.push('<span>'+esc(it.done_by)+'</span>');
-  return '<div class="ckrow'+(done?" done":"")+'">'+
+  if(it.kind==="pack" && scope==="shared")
+    meta.push(done ? '<span class="grp">'+esc(it.done_by ? it.done_by+" brings it" : "Packed")+'</span>'
+                   : '<span class="grp need">One for the group</span>');
+  else if(done && it.done_by) meta.push('<span>'+esc(it.done_by)+'</span>');
+  return '<div class="ckrow'+(done?" done":"")+'" data-swipe="item">'+
+    '<div class="ckslide">'+
     '<button class="ckbox" data-act="ck-toggle" data-scope="'+scope+'" data-id="'+esc(it.id)+'" role="checkbox" '+
       'aria-checked="'+done+'" aria-label="'+esc(it.text)+'">'+IC.check+'</button>'+
     '<button class="cktext" data-act="ck-edit" data-scope="'+scope+'" data-id="'+esc(it.id)+'">'+
       '<span class="t">'+escz(it.text)+'</span>'+(meta.length?'<span class="m">'+meta.join("")+'</span>':'')+'</button>'+
+    '</div>'+
+    '<button class="ckdel" data-act="ck-swipe-del" data-scope="'+scope+'" data-id="'+esc(it.id)+'" tabindex="-1" aria-hidden="true">Delete</button>'+
   '</div>';
 }
-function ckGroupHTML(title, rows, addScope, addKind, count){
-  return '<div class="ckgroup"><div class="ckhead"><span>'+esc(title)+'</span>'+(count?'<span>'+count+'</span>':'')+'</div>'+
-    rows+
-    (addScope ? '<button class="ckadd" data-act="ck-add" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(title)+'">'+
+/** A section's card. With a scope, its header can be tapped (rename,
+ *  delete) or swiped left to delete the whole section. */
+function ckGroupHTML(title, rows, addScope, addKind, count, n){
+  var sec=(title==="Mine"||title==="Shared"||title==="To do"||title==="Each of us") ? "" : title;
+  var head = addScope && sec && n
+    ? '<div class="ckhead" data-swipe="section"><div class="ckslide">'+
+        '<button class="ckname" data-act="ck-section" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(sec)+'">'+esc(title)+'</button>'+
+        (count?'<span>'+count+'</span>':'')+'</div>'+
+        '<button class="ckdel" data-act="ck-section-del" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(sec)+'" tabindex="-1" aria-hidden="true">Delete all '+n+'</button></div>'
+    : '<div class="ckhead"><div class="ckslide"><span>'+esc(title)+'</span>'+(count?'<span>'+count+'</span>':'')+'</div></div>';
+  return '<div class="ckgroup">'+head+rows+
+    (addScope ? '<button class="ckadd" data-act="ck-add" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(sec)+'">'+
       IC.plus+'Add</button>' : '')+'</div>';
+}
+/** The rows of one section, as they are stored. "Other" is the blank one. */
+function sectionItems(scope, kind, sec){
+  var list = scope==="mine" ? packing.items : store.data.checklist;
+  return list.filter(function(i){
+    return !i.removed && (scope==="mine" || i.kind===kind) && (i.section||"Other")===(sec||"Other");
+  });
 }
 function countDone(items){ return items.filter(function(i){ return i.done; }).length+" / "+items.length; }
 
@@ -2554,29 +2625,43 @@ function prepChecklist(){
       '<i style="width:'+Math.round(done/tasks.length*100)+'%"></i></div>'+
     (urgent.length ? '<div class="nextup">'+ckGroupHTML("Next up", urgent.map(function(t){ return ckRow(t,"shared"); }).join(""))+'</div>' : '')+
     groupBySection(tasks, taskSort).map(function(g){
-      return ckGroupHTML(g.name, g.items.map(function(t){ return ckRow(t,"shared"); }).join(""), "shared", "task", countDone(g.items));
-    }).join("");
+      return ckGroupHTML(g.name, g.items.map(function(t){ return ckRow(t,"shared"); }).join(""), "shared", "task", countDone(g.items), g.items.length);
+    }).join("")+swipeHint();
+}
+function swipeHint(){
+  return '<p class="hint small muted" style="text-align:center;margin:4px 0 10px">Swipe an item — or a section\'s title — to the left to delete it. Tap a title to rename it.</p>';
 }
 
+var IC_ONE = '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.2" r="3.6"/><path d="M5.2 19.6c.9-3.4 3.6-5.2 6.8-5.2s5.9 1.8 6.8 5.2"/></svg>';
+var IC_GROUP = '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.6" r="3.1"/><path d="M3.4 19.2c.7-3 2.9-4.6 5.6-4.6s4.9 1.6 5.6 4.6"/><circle cx="16.6" cy="7.4" r="2.5"/><path d="M15.8 12.9c2.4-.2 4.3 1.2 4.9 3.9"/></svg>';
+/** What I still have to pack: my ticks on everyone's list, plus my own list. */
+function myPacking(){
+  return eachItems().concat(packing.items.filter(function(i){ return !i.removed; }));
+}
 function prepPacking(){
   var mine=packing.items.filter(function(i){ return !i.removed; });
-  var shared=sharedItems("pack");
-  var me=getMe();
-  var packed=mine.filter(function(i){ return i.done; }).length;
-  var html = (mine.length ? '<div class="prog"><i style="width:'+Math.round(packed/mine.length*100)+'%"></i></div>' : '');
-  html += '<div class="section-title" style="margin-top:0">Just me</div>'+
+  var each=eachItems(), shared=sharedItems("pack");
+  var me=getMe(), all=myPacking();
+  var packed=all.filter(function(i){ return i.done; }).length;
+  function groups(items, scope, kind){
+    return groupBySection(items).map(function(g){
+      return ckGroupHTML(g.name, g.items.map(function(i){ return ckRow(i,scope); }).join(""), scope, kind, countDone(g.items), g.items.length);
+    }).join("");
+  }
+  var html = (all.length ? '<div class="prog"><i style="width:'+Math.round(packed/all.length*100)+'%"></i></div>' : '');
+  html += '<div class="whohead"><span class="wi">'+IC_ONE+'</span><span><b>Each of us · 每人</b>'+
+      '<small>Everyone packs their own. Your ticks are yours — they stay on this phone.</small></span></div>';
+  html += groups(each, "each", "each") || ckGroupHTML("Each of us", "", "each", "each");
+  html += '<div class="whohead grp"><span class="wi">'+IC_GROUP+'</span><span><b>Group · 共用</b>'+
+      '<small>One of us brings it for all three. Tick it when you pack it, and the others see your name.</small></span></div>'+
+    (me ? '' : '<p class="blurb muted small" style="margin:-2px 0 10px">Add your name in ⚙ Settings so the others can see who is bringing what.</p>');
+  html += groups(shared, "shared", "pack") || ckGroupHTML("Shared", "", "shared", "pack");
+  html += '<div class="whohead me"><span class="wi">'+IC.pen+'</span><span><b>Just me · 仅我</b>'+
+      '<small>Extras only you need. Kept on this phone, never shared.</small></span></div>'+
     '<div class="toolrow"><button class="btn sm" data-act="pk-templates">Use a template</button>'+
     (mine.length ? '<button class="btn sm ghost" data-act="pk-save-template">Save as template</button>' : '')+'</div>';
-  if(!mine.length) html += '<div class="card empty small">Nothing on your list yet — import the trip notes file from ⚙ Settings, or add your own.</div>';
-  html += groupBySection(mine).map(function(g){
-    return ckGroupHTML(g.name, g.items.map(function(i){ return ckRow(i,"mine"); }).join(""), "mine", "pack", countDone(g.items));
-  }).join("") || ckGroupHTML("Mine", "", "mine", "pack");
-  html += '<div class="section-title">Shared — one of us brings it</div>'+
-    (me ? '' : '<p class="blurb muted small" style="margin:-2px 0 10px">Add your name in ⚙ Settings so the others can see who is bringing what.</p>');
-  html += groupBySection(shared).map(function(g){
-    return ckGroupHTML(g.name, g.items.map(function(i){ return ckRow(i,"shared"); }).join(""), "shared", "pack", countDone(g.items));
-  }).join("") || ckGroupHTML("Shared", "", "shared", "pack");
-  return html;
+  html += groups(mine, "mine", "pack") || ckGroupHTML("Mine", "", "mine", "pack");
+  return html+swipeHint();
 }
 
 /* For trips that don't take in China. As general as the China one: nothing
@@ -2606,7 +2691,7 @@ function prepGuide(){
 }
 
 function findItem(scope, id){
-  var list = scope==="mine" ? packing.items : store.data.checklist;
+  var list = scope==="mine" ? packing.items : store.data.checklist;   // "each" and "shared" both live in the Sheet
   return list.filter(function(i){ return i.id===id; })[0] || null;
 }
 function checklistForm(scope, id, kind, section){
@@ -2614,19 +2699,69 @@ function checklistForm(scope, id, kind, section){
   var isNew=!it; kind = it ? it.kind : kind;
   it = it || { id:"", kind:kind, section:section||"", text:"", due:"" };
   var sections={};
-  (scope==="mine" ? packing.items : store.data.checklist).forEach(function(i){ if(i.section && i.kind===kind) sections[i.section]=1; });
+  var packKinds = scope!=="mine" && kind!=="task";
+  (scope==="mine" ? packing.items : store.data.checklist).forEach(function(i){
+    if(i.section && !i.removed && (i.kind===kind || (packKinds && (i.kind==="each"||i.kind==="pack")))) sections[i.section]=1; });
   var html=
     '<div class="field"><label>'+(kind==="task"?"Task":"Item")+'</label><textarea id="c_text" style="min-height:70px">'+esc(it.text)+'</textarea></div>'+
+    (packKinds ? '<div class="field"><label>Who packs it</label><div class="whopick">'+
+      '<label><input type="radio" name="c_who" value="each"'+(kind==="each"?" checked":"")+'><span><b>Each of us</b><br>everyone brings their own</span></label>'+
+      '<label><input type="radio" name="c_who" value="pack"'+(kind==="pack"?" checked":"")+'><span><b>The group</b><br>one of us brings it</span></label>'+
+      '</div></div>' : '')+
     '<div class="field"><label>Section</label><input id="c_section" list="c_sections" value="'+esc(it.section)+'">'+
       '<datalist id="c_sections">'+Object.keys(sections).map(function(k){ return '<option value="'+esc(k)+'">'; }).join("")+'</datalist></div>'+
     (kind==="task" ? '<div class="field"><label>Due</label><input id="c_due" type="date" value="'+esc(it.due||"")+'"></div>' : '')+
-    (scope==="shared" ? '<p class="hint small muted">Shared with the others'+(kind==="pack"?" — tick it when you have packed it.":".")+'</p>'
-                      : '<p class="hint small muted">Only on this phone.</p>')+
+    (scope==="mine" ? '<p class="hint small muted">Only on this phone.</p>'
+      : kind==="task" ? '<p class="hint small muted">Shared with the others.</p>'
+      : '<p class="hint small muted">On everyone\'s phone. Ticks on an "each of us" item are your own; a group item shows who is bringing it.</p>')+
     '<div class="formactions">'+
       '<button class="btn primary" data-act="ck-save" data-scope="'+scope+'" data-kind="'+kind+'" data-id="'+esc(it.id)+'">Save</button>'+
       (isNew ? '' : '<button class="btn danger" data-act="ck-delete" data-scope="'+scope+'" data-id="'+esc(it.id)+'">Delete</button>')+
     '</div>';
   openSheet(isNew ? (kind==="task"?"New task":"New item") : "Edit", html);
+}
+
+/* Delete and rename, for one item or a whole section. Deleting is soft (removed
+   is set, so a phone that still has the item can't bring it back) and comes
+   with Undo in place of an "are you sure". The Sheet gets the rows one after
+   another: Apps Script takes one write at a time anyway. */
+function setItems(scope, items){
+  items=items.filter(Boolean);
+  if(scope==="mine"){
+    items.forEach(function(n){ var o=findItem("mine", n.id); if(o) Object.assign(o, n); });
+    packing.persist(); return;
+  }
+  var now=nowISO();
+  items.forEach(function(n){
+    n.updated=now;
+    store.data.checklist=store.data.checklist.map(function(i){ return i.id===n.id ? n : i; });
+  });
+  store.persist();
+  items.reduce(function(p, n){
+    return p.then(function(){ return store.write("saveChecklistItem", n, function(){}); });
+  }, Promise.resolve()).then(updateStatus);
+}
+function removeItems(scope, items, section){
+  items=(items||[]).filter(Boolean);
+  if(!items.length) return;
+  var before=items.map(function(i){ return Object.assign({}, i, { removed:"" }); });
+  setItems(scope, items.map(function(i){ return Object.assign({}, i, { removed:"1" }); }));
+  renderPrep(); if(ui.view!=="prep") render();
+  var what = section ? "“"+section+"” · "+items.length+" item"+(items.length===1?"":"s")
+                     : "“"+String(items[0].text).slice(0,34)+(String(items[0].text).length>34?"…":"")+"”";
+  toast("Deleted "+what, 5000, function(){
+    setItems(scope, before); renderPrep(); if(ui.view!=="prep") render(); toast("Restored");
+  });
+}
+function sectionForm(scope, kind, sec){
+  var n=sectionItems(scope, kind, sec).length;
+  openSheet("Section",
+    '<div class="field"><label>Name</label><input id="c_secname" value="'+esc(sec)+'"></div>'+
+    '<p class="hint small muted">'+n+' item'+(n===1?"":"s")+(scope==="mine" ? ", on this phone only." : ", on everyone\'s phone.")+'</p>'+
+    '<div class="formactions">'+
+      '<button class="btn primary" data-act="ck-section-save" data-scope="'+scope+'" data-kind="'+kind+'" data-section="'+esc(sec)+'">Save</button>'+
+      '<button class="btn danger" data-act="ck-section-del2" data-scope="'+scope+'" data-kind="'+kind+'" data-section="'+esc(sec)+'">Delete all '+n+'</button>'+
+    '</div>');
 }
 
 /* ---------- ticket links ----------
@@ -4531,6 +4666,7 @@ document.addEventListener("click", function(ev){
     }
     case "ck-toggle": {
       var cid=t.dataset.id;
+      if(t.dataset.scope==="each"){ setEachTick(cid, !eachTicks()[cid]); renderPrep(); return; }
       if(t.dataset.scope==="mine"){
         var pi=findItem("mine", cid); if(!pi) return;
         pi.done = pi.done ? "" : nowISO(); packing.persist(); renderPrep(); return;
@@ -4548,6 +4684,7 @@ document.addEventListener("click", function(ev){
       var text=$("#c_text").value.trim(); if(!text){ toast("Write something first"); return; }
       var section=$("#c_section").value.trim(), due=$("#c_due") ? $("#c_due").value : "";
       var scope=t.dataset.scope, kind=t.dataset.kind, eid=t.dataset.id;
+      var who=document.querySelector('input[name="c_who"]:checked'); if(who) kind=who.value;
       if(scope==="mine"){
         var mi=eid ? findItem("mine", eid) : null;
         if(!mi){ mi={ id:uid("my"), kind:"pack", done:"", order_index:packing.items.length+1 }; packing.items.push(mi); }
@@ -4557,22 +4694,26 @@ document.addEventListener("click", function(ev){
         var item=base ? JSON.parse(JSON.stringify(base))
                       : { id:uid("ck"), kind:kind, done:"", done_by:"", location_id:"", removed:"",
                           order_index:store.data.checklist.length+1 };
-        item.text=text; item.section=section; if(kind==="task") item.due=due;
+        item.text=text; item.section=section; item.kind=kind; if(kind==="task") item.due=due;
+        // moved between "each of us" and the group: the old ticks don't carry over
+        if(base && base.kind!==kind){ item.done=""; item.done_by=""; setEachTick(item.id, false); }
         saveChecklistItem(item);
       }
       closeSheet(); render(); return;
     }
-    case "ck-delete": {
-      if(!window.confirm("Delete this item?")) return;
-      if(t.dataset.scope==="mine"){
-        // soft delete, so importing the notes file again does not bring it back
-        var gm=findItem("mine", t.dataset.id); if(gm){ gm.removed="1"; packing.persist(); }
-      } else {
-        var gone=findItem("shared", t.dataset.id);
-        if(gone){ var g2=JSON.parse(JSON.stringify(gone)); g2.removed="1"; saveChecklistItem(g2); }
-      }
-      closeSheet(); render(); return;
+    case "ck-delete": closeSheet(); removeItems(t.dataset.scope, [findItem(t.dataset.scope, t.dataset.id)]); return;
+    case "ck-swipe-del": removeItems(t.dataset.scope, [findItem(t.dataset.scope, t.dataset.id)]); return;
+    case "ck-section-del": removeItems(t.dataset.scope, sectionItems(t.dataset.scope, t.dataset.kind, t.dataset.section), t.dataset.section); return;
+    case "ck-section": sectionForm(t.dataset.scope, t.dataset.kind, t.dataset.section); return;
+    case "ck-section-save": {
+      var nn=$("#c_secname").value.trim(), olds=t.dataset.section;
+      if(!nn){ toast("Give the section a name"); return; }
+      var its=sectionItems(t.dataset.scope, t.dataset.kind, olds);
+      closeSheet();
+      if(nn!==olds) setItems(t.dataset.scope, its.map(function(i){ return Object.assign({}, i, { section:nn }); }));
+      render(); return;
     }
+    case "ck-section-del2": closeSheet(); removeItems(t.dataset.scope, sectionItems(t.dataset.scope, t.dataset.kind, t.dataset.section), t.dataset.section); return;
     case "open": ev.preventDefault(); locationDetail(lid); return;
     case "nav": {
       ev.preventDefault();
@@ -4776,6 +4917,69 @@ document.querySelectorAll("nav.tabs button").forEach(function(b){
   b.addEventListener("click", function(){ setView(b.dataset.view); });
 });
 window.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSheet(); });
+
+/* ---------- Prep: swipe a row or a section title left to show Delete ----------
+   Rows carry touch-action:pan-y, so an up-and-down move stays a scroll and a
+   sideways one reaches here. One row is open at a time; a tap anywhere else
+   closes it, and the click a swipe ends with is swallowed so it doesn't tick
+   the box it started on. */
+(function(){
+  var row=null, slide=null, x0=0, y0=0, dx=0, base=0, mode="", pid=null, open=null, W=92, eat=false, eatT=0;
+  function setX(sl, x, anim){
+    sl.style.transition = anim ? "transform .2s cubic-bezier(.2,.8,.2,1)" : "none";
+    sl.style.transform = x ? "translateX("+x+"px)" : "";
+  }
+  function shut(r){
+    var sl=r && r.querySelector(".ckslide"); if(sl) setX(sl, 0, true); if(open===r) open=null;
+    if(r) setTimeout(function(){ if(open!==r) r.classList.remove("sw"); }, 220);
+  }
+  // Eats the one click this gesture ends with, and nothing after: the next
+  // touch starts a new gesture and clears it, so a quick tap on Delete counts.
+  function swallow(){ eat=true; clearTimeout(eatT); eatT=setTimeout(function(){ eat=false; }, 800); }
+  document.addEventListener("click", function(e){
+    if(eat){ eat=false; e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  document.addEventListener("pointerdown", function(e){
+    eat=false;
+    if(open && !document.contains(open)) open=null;
+    if(e.pointerType==="mouse" && e.button!==0) return;
+    var r=e.target.closest && e.target.closest("#view-prep [data-swipe]");
+    if(e.target.closest && e.target.closest(".ckdel")){ row=null; return; }
+    if(open && open!==r){ shut(open); swallow(); row=null; return; }   // first tap just closes it
+    if(!r){ row=null; return; }
+    row=r; slide=r.querySelector(".ckslide"); x0=e.clientX; y0=e.clientY; dx=0; mode=""; pid=e.pointerId;
+    var del=r.querySelector(".ckdel"); W=(del && del.offsetWidth) || 92;
+    base = r===open ? -W : 0;
+  });
+  document.addEventListener("pointermove", function(e){
+    if(!row || e.pointerId!==pid) return;
+    var mx=e.clientX-x0, my=e.clientY-y0;
+    if(!mode){
+      if(Math.abs(mx)<8 && Math.abs(my)<8) return;
+      mode = Math.abs(mx) > Math.abs(my)*1.2 ? "x" : "y";
+      if(mode==="y"){ row=null; return; }
+      row.classList.add("sw");
+      try{ row.setPointerCapture(pid); }catch(x){}
+    }
+    dx=mx;
+    var x=base+dx;
+    x = x>0 ? 0 : x<-W ? -W-(-W-x)/3 : x;     // rubber band past the button
+    setX(slide, x, false);
+  });
+  function end(e){
+    if(!row || e.pointerId!==pid) return;
+    var r=row; row=null;
+    if(mode!=="x"){
+      if(r===open){ shut(r); swallow(); }         // tapping the open row closes it
+      return;
+    }
+    swallow();
+    if(base+dx < -W*0.4 || (base===0 && dx<-60)){ setX(slide, -W, true); open=r; }
+    else shut(r);
+  }
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", function(e){ if(row && e.pointerId===pid){ shut(row); row=null; } });
+})();
 
 /* ---------- pointer drag to reorder ---------- */
 (function(){

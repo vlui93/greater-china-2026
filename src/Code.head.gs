@@ -43,7 +43,7 @@ var TABS = {
               'getting_there', 'arrive_by', 'tickets', 'photo_url', 'ticket_url', 'trip_id',
               'visited', 'map_url'],
   Schedule: ['id', 'date', 'order_index', 'location_id', 'planned_time', 'notes', 'trip_id'],
-  // Pre-trip tasks and the shared packing list. kind is 'task' or 'pack';
+  // Pre-trip tasks and the shared packing list. kind is 'task', 'pack' (the group brings one) or 'each' (everyone packs their own; each phone keeps its own ticks);
   // location_id optionally ties a task to a place, so the day briefing can
   // say "not booked yet". Personal packing never comes here — it stays on
   // each phone. Phones merge by `updated` (newest copy wins), and deleting
