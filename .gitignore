@@ -16,3 +16,8 @@ src/schedule.json
 
 # Sheet backups made before bulk edits (hold booking details)
 src/*backup*.json
+
+# QA: private word list and other local QA state
+.qa/*.local.*
+.qa/state/
+tests/e2e/out/

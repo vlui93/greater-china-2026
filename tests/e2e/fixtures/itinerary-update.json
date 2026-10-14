@@ -1,0 +1,29 @@
+{
+ "kind": "greater-china-trip-notes",
+ "version": 4,
+ "generated": "2026-09-02",
+ "note": "An invented itinerary update: three new places, a pin for a place saved without one, stops added, moved and removed, and two checklist items.",
+ "locations": [
+  { "add": true, "id": "loc-mtestn01", "name_en": "Test Tea Room", "name_zh": "測試茶室", "city": "Hong Kong", "type": "restaurant", "nav_app": "google",
+    "lat": 22.2836, "lng": 114.1556, "history_blurb": "An invented tea room, said to have opened in an invented 1930s.",
+    "recommendations": "", "dishes_to_order": "蝦餃 Har gow", "getting_there": "Test Line, exit C.", "tickets": "", "notes": "" },
+  { "add": true, "id": "loc-mtestn02", "name_en": "Test Congee Stall", "name_zh": "測試粥檔", "city": "Hong Kong", "type": "restaurant", "nav_app": "google",
+    "lat": 22.315, "lng": 114.17, "history_blurb": "An invented congee stall.", "dishes_to_order": "皮蛋瘦肉粥 Century egg congee", "getting_there": "", "tickets": "", "notes": "" },
+  { "add": true, "id": "loc-mtestn03", "name_en": "Test Bao Shop", "name_zh": "测试包子铺", "city": "Guangzhou", "type": "restaurant", "nav_app": "amap",
+    "lat": 23.123, "lng": 113.264, "history_blurb": "An invented bao shop.", "dishes_to_order": "叉烧包 Char siu bao", "getting_there": "", "tickets": "", "notes": "" },
+  { "id": "loc-mtest0101", "lat": 22.2845, "lng": 114.153 }
+ ],
+ "schedule": [
+  { "id": "sc-mtnew01", "date": "2026-10-18", "order_index": 0, "location_id": "loc-mtestn01", "planned_time": "07:30", "notes": "" },
+  { "id": "sc-mtnew02", "date": "2026-10-17", "order_index": 4, "location_id": "loc-mtestn02", "planned_time": "21:00", "notes": "" },
+  { "id": "sc-mtnew03", "date": "2026-10-22", "order_index": 0, "location_id": "loc-mtestn03", "planned_time": "08:30", "notes": "" },
+  { "id": "fx-sc-03", "date": "2026-10-17", "order_index": 3, "location_id": "fx-hk-market", "planned_time": "20:00", "notes": "" },
+  { "id": "sc-mtest0101", "date": "2026-10-17", "order_index": 5, "location_id": "loc-mtest0101", "planned_time": "20:30", "notes": "" },
+  { "id": "fx-sc-04", "date": "2026-10-18", "order_index": 1, "location_id": "fx-hk-dimsum", "planned_time": "08:00", "notes": "" }
+ ],
+ "schedule_remove": ["fx-sc-05", "sc-mtest0102"],
+ "checklist": [
+  { "id": "ck-u1", "kind": "task", "section": "Bookings", "order_index": 15, "due": "2026-10-15", "location_id": "loc-mtestn01", "text": "Book Test Tea Room for 07:30 on 18 Oct" },
+  { "id": "ck-u2", "kind": "task", "section": "Documents", "order_index": 3, "due": "2026-10-10", "location_id": "", "text": "Print the invented itinerary" }
+ ]
+}

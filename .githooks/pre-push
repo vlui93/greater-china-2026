@@ -1,0 +1,4 @@
+#!/bin/sh
+# Full gate before anything reaches GitHub (and GitHub Pages): everything in the
+# pre-commit gate plus all browser suites on the invented trip.
+exec node "$(git rev-parse --show-toplevel)/tools/qa/check.js"

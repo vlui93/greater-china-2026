@@ -740,28 +740,6 @@ var TRIP = LEGACY_TRIP;
 var TRIP_START = TRIP.start;
 var TRIP_END   = TRIP.end;
 
-/* Day names for that first trip, from before days could be renamed in the
-   app. A Days row in the Sheet wins over these. */
-var DAY_LABELS = {
-  "2026-10-16":"Sydney → Hong Kong",
-  "2026-10-17":"Hong Kong",
-  "2026-10-18":"Hong Kong",
-  "2026-10-19":"Hong Kong · Lantau",
-  "2026-10-20":"Macau day trip",
-  "2026-10-21":"Hong Kong → Guangzhou",
-  "2026-10-22":"Guangzhou",
-  "2026-10-23":"Foshan day trip",
-  "2026-10-24":"Guangzhou → Chongqing",
-  "2026-10-25":"Chongqing",
-  "2026-10-26":"Chongqing",
-  "2026-10-27":"Chongqing → Chengdu",
-  "2026-10-28":"Chengdu",
-  "2026-10-29":"Leshan day trip",
-  "2026-10-30":"Sanxingdui day trip",
-  "2026-10-31":"Chengdu · fly out tonight",
-  "2026-11-01":"Chengdu → Sydney"
-};
-
 /* Nothing about the trip ships in this file. The repo is public, so the
    locations, bookings and schedule live only in the Sheet; the app pulls
    them on first connect and caches them on the phone from then on. */
@@ -1333,7 +1311,7 @@ function switchTrip(id){
 /** Amap consumes GCJ-02 by default; dev=1 / coordinate=wgs84 tell it our
  *  coordinates are plain GPS so it does the shift itself. */
 /* Notes people add to a place's name for themselves — "(Optional)", "(FAR)",
-   "[to replace]", "(20:30)", "SKP 晚上" — stay in the name but are left out
+   "[to replace]", "(20:30)", "… 晚上" — stay in the name but are left out
    of what the map app is asked to find. */
 var NAME_NOTE = /\s*[\[(（【][^\])）】]*(?:optional|\bfar\b|can.?t find|to book|to replace|replace\]|closer|maybe|if time|\d{1,2}[:：]\d{2})[^\])）】]*[\])）】]\s*/gi;
 var ZH_NOTE = /\s+(?:早上|上午|中午|下午|晚上|傍晚|夜晚|可选|备选|待定)$/;
@@ -2187,7 +2165,6 @@ function dayLabel(date){
     return d.date===date && tripOf(d)===TRIP.id && String(d.label||"").trim();
   })[0];
   if(own) return String(own.label).trim();
-  if(TRIP.id===LEGACY_TRIP.id && TRIP.start===LEGACY_TRIP.start && DAY_LABELS[date]) return DAY_LABELS[date];
   return autoDayLabel(date);
 }
 function baseOn(date, bases){
@@ -3544,11 +3521,10 @@ function saveTripForm(id){
   if(shift && old.id===TRIP.id){
     // Day names first, while dayLabel still reads the old dates
     var named=DAYS.map(function(d){ return { d:d, label:dayLabel(d), own:(store.raw.days||[]).some(function(x){ return x.date===d && tripOf(x)===old.id && x.label; }) }; });
-    var legacy=old.id===LEGACY_TRIP.id && old.start===LEGACY_TRIP.start;
     (store.raw.days||[]).filter(function(x){ return tripOf(x)===old.id; }).forEach(function(x){ store.enqueue("deleteDay", { id:x.id }); });
     store.raw.days=(store.raw.days||[]).filter(function(x){ return tripOf(x)!==old.id; });
     named.forEach(function(n){
-      if(!n.own && !(legacy && DAY_LABELS[n.d])) return;
+      if(!n.own) return;
       var nd=addDaysISO(n.d, shift);
       var dr={ id:"day-"+old.id+"-"+nd.replace(/-/g,""), trip_id:old.id, date:nd, label:n.label };
       store.raw.days.push(dr); store.enqueue("saveDay", dr);
@@ -3927,7 +3903,7 @@ function bestOrder(date){
    ========================================================================== */
 function findBoxHTML(){
   return '<div class="field"><label for="f_find">Find by name</label>'+
-    '<div class="row" style="gap:8px"><input id="f_find" type="search" autocomplete="off" placeholder="e.g. Tim Ho Wan Sham Shui Po" style="flex:1">'+
+    '<div class="row" style="gap:8px"><input id="f_find" type="search" autocomplete="off" placeholder="e.g. noodle shop near the hotel" style="flex:1">'+
     '<button class="btn sm" data-act="find-place">Search</button></div>'+
     '<div class="hint" id="f_find_status">Searches OpenStreetMap near the city picked below. Smaller places are often missing — a map link works for anything.</div>'+
     '<div class="findres" id="f_find_results"></div></div>';

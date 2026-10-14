@@ -1,0 +1,14 @@
+{
+ "kind": "greater-china-trip-notes",
+ "version": 3,
+ "generated": "2026-09-01",
+ "note": "Invented details for one invented restaurant, saved on a phone with no pin.",
+ "locations": [
+  { "id": "loc-mtest0001", "name_zh": "测试瀑布餐厅", "lat": 23.131234, "lng": 113.271234,
+    "history_blurb": "The Test Hotel opened in an invented year, and its restaurant looks onto an invented waterfall.",
+    "recommendations": "Ask for a table by the window.",
+    "dishes_to_order": "虾饺 Har gow — invented house version\n叉烧包 Char siu bao",
+    "getting_there": "Test Line to Test Station, exit D, then five minutes' walk.",
+    "notes": "测试东路368号" }
+ ]
+}

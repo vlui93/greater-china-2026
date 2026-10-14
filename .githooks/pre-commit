@@ -1,0 +1,6 @@
+#!/bin/sh
+# Fast gate before every commit: builds, backend + QA tool tests, privacy scan of
+# what is staged, service-worker cache bump. Turned on by `git config core.hooksPath
+# .githooks` (the Claude Code SessionStart hook does it). Bypassing it with
+# --no-verify needs the person's say-so.
+exec node "$(git rev-parse --show-toplevel)/tools/qa/check.js" --fast --staged

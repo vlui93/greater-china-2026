@@ -213,6 +213,28 @@ node src/sheet.js push src/seed.json  # push the content straight to the Sheet i
 
 `node src/test-code.js` runs `Code.gs` against a mock of the Apps Script runtime — auth, seeding, idempotent setup, partial updates, day reordering, cascade deletes. It fills the empty `SEED` the same way `prepare-code.js` does, using `src/seed.json` when it is on this machine and `src/seed.fixture.json` when it is not, so it works either way.
 
+### Checks
+
+`npm run check` (or `node tools/qa/check.js`) runs everything that must pass before a change goes out:
+
+- the builds above, with their trip-content tripwire;
+- the backend tests;
+- the tests of the QA tools themselves;
+- a privacy scan of every file git would commit;
+- a check that `sw.js`'s cache name changed whenever the app did;
+- 21 browser suites (`tests/e2e/`).
+
+The browser suites drive the real `index.html` in headless Chromium against the real `Code.gs`, running in a mock Sheet. The trip they use is invented (`tests/e2e/fixtures/`), so they run on a fresh clone and never touch the real one. `node tests/e2e/run.js pack visit` runs some of them; each suite's log goes to `tests/e2e/out/`.
+
+`.githooks/` runs the fast check (everything but the browser) before each commit and the full check before each push. Turn it on once per clone with `git config core.hooksPath .githooks`; Claude Code sessions do it automatically.
+
+| File | What |
+|---|---|
+| `tools/qa/trip-scan.js` | Fails if a file that would be committed holds anything from the real trip (when `src/seed.json` is here), a word from `.qa/private-words.local.txt` (gitignored: names, emails), a day-by-day itinerary, a personal email or a long reference number |
+| `tools/qa/sheet-gate.js` | Claude Code hook (`.claude/settings.json`): no write to the Sheet without a backup tab from today and a fresh read of the tab; long numbers must go in as text; a read-back after every write |
+| `tools/qa/sheet-plan.js` | Plans Sheet writes by row id from the latest read, and verifies afterwards that only the planned cells changed |
+| `CLAUDE.md` | The working rules, each tied to the mistake that prompted it |
+
 ---
 
 ## 8. API, if you ever want it
@@ -317,7 +339,7 @@ The **Prep** tab has three parts.
 - **Checklist** — dated tasks for before and during the trip, grouped by section, with the most urgent under *Next up*. Tasks can point at a place; if one isn't ticked by that day, the day's briefing flags it.
 - **Packing** — three lists, each with its own heading so it's clear who packs what:
   - *Each of us* — on everyone's phone (it lives in the Sheet's Checklist tab with kind `each`), but each person ticks their own copy. The ticks stay on that phone.
-  - *Group — one of us brings it* (kind `pack`) — things the group needs once, like adapters and the first-aid kit. Unticked ones say *One for the group*. Ticking one records your name (*Victor brings it*) so the others can see it's covered. Set your name in ⚙ Settings.
+  - *Group — one of us brings it* (kind `pack`) — things the group needs once, like adapters and the first-aid kit. Unticked ones say *One for the group*. Ticking one records your name (*Alex brings it*) so the others can see it's covered. Set your name in ⚙ Settings.
   - *Just me* — extras kept only on that phone, never synced.
 
   Editing an item lets you move it between *Each of us* and *Group*.

@@ -1,0 +1,14 @@
+{
+  "name": "greater-china-trip-companion",
+  "private": true,
+  "description": "Trip companion PWA. No dependencies; Node runs the build and the checks.",
+  "scripts": {
+    "build": "node src/build-html.js && node src/build-code.js",
+    "check": "node tools/qa/check.js",
+    "check:fast": "node tools/qa/check.js --fast",
+    "test:backend": "node src/test-code.js",
+    "test:e2e": "node tests/e2e/run.js",
+    "test:qa": "node tools/qa/test-qa.js",
+    "scan": "node tools/qa/trip-scan.js"
+  }
+}

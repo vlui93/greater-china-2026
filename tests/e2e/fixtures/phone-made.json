@@ -1,0 +1,11 @@
+{
+ "note": "Places and stops someone added on a phone before the itinerary update. Invented.",
+ "locations": [
+  { "id": "loc-mtest0101", "name_en": "Test Lane Cafe", "name_zh": "測試巷仔茶餐廳", "city": "Hong Kong", "type": "restaurant", "lat": "", "lng": "", "nav_app": "google" },
+  { "id": "loc-mtest0102", "name_en": "Test Rice Shop", "name_zh": "测试米铺", "city": "Guangzhou", "type": "restaurant", "lat": 23.121, "lng": 113.259, "nav_app": "amap" }
+ ],
+ "schedule": [
+  { "id": "sc-mtest0101", "date": "2026-10-18", "order_index": 9, "location_id": "loc-mtest0101", "planned_time": "20:00", "notes": "" },
+  { "id": "sc-mtest0102", "date": "2026-10-22", "order_index": 9, "location_id": "loc-mtest0102", "planned_time": "12:30", "notes": "" }
+ ]
+}

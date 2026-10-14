@@ -1,0 +1,46 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git -C \"$CLAUDE_PROJECT_DIR\" config core.hooksPath .githooks && echo 'QA gates on: git hooks (.githooks), Sheet write gate (tools/qa/sheet-gate.js). Read CLAUDE.md before changing anything.'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*[Ss]heets.*__(update_values|append_values|batch_clear_values|update_formulas|insert_dimension|update_spreadsheet)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/qa/sheet-gate.js\" pre",
+            "statusMessage": "Checking the Sheet write (backup, fresh read, long numbers)"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*[Ss]heets.*__(update_values|append_values|batch_clear_values|update_formulas|insert_dimension|update_spreadsheet)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/qa/sheet-gate.js\" post"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*[Ss]heets.*__(get_values|get_spreadsheet)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/qa/sheet-gate.js\" read"
+          }
+        ]
+      }
+    ]
+  }
+}
