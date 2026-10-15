@@ -9,6 +9,7 @@
  * they are installed, the server takes a free port, and the app's cache version
  * is read from sw.js rather than written into the tests. */
 const fs = require('fs'), path = require('path'), http = require('http'), vm = require('vm');
+const DEFAULT_CLOCK = '2026-10-12T09:00:00+08:00';   // a weekday morning before the invented trip
 const ROOT = path.resolve(__dirname, '..', '..');
 const FIX = path.join(__dirname, 'fixtures');
 const OUT = path.join(__dirname, 'out');
@@ -133,6 +134,7 @@ async function setup(opts) {
     return sh.d.slice(1).filter(r => r && String(r[0] || '').trim()).map(r => { const o = {}; h.forEach((k, i) => o[k] = r[i]); return o; }); };
   env.out = name => { fs.mkdirSync(OUT, { recursive: true }); return path.join(OUT, name); };
   env.contexts = [];
+
   /** A phone: its own browser context, connected through the gate unless told not to. */
   env.phone = async function (o) {
     o = o || {};
@@ -160,6 +162,11 @@ async function setup(opts) {
     if (o.dialogs !== false) page.on('dialog', d => { if (page.listenerCount('dialog') > 1) return;
       page.dialogs.push(d.message()); const a = page.answers.length ? page.answers.shift() : true;
       if (a === false || a === null) d.dismiss(); else d.accept(typeof a === 'string' ? a : undefined); });
+    // The invented trip runs on real calendar dates, so a suite left on the real clock
+    // sees a different app once those dates arrive (the plan instead of the overview,
+    // the evening "Tomorrow" card). Unless a suite sets its own, every phone starts
+    // on the same morning before the trip; clock:false keeps the real one.
+    if (o.clock === undefined) { o.clock = DEFAULT_CLOCK; o.clockMode = 'install'; }
     if (o.clock) await page.clock[o.clockMode === 'install' ? 'install' : 'setFixedTime'](o.clockMode === 'install' ? { time: new Date(o.clock) } : new Date(o.clock));
     await page.goto(env.url); await env.wait(300);
     if (o.connect !== false) {
