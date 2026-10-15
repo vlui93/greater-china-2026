@@ -1,6 +1,6 @@
-# Greater China 2026 — trip companion
+# Trip companion
 
-A single-page trip app for **16 Oct – 1 Nov 2026**: Sydney → Hong Kong → Macau → Guangzhou → Foshan → Chongqing → Chengdu → Sydney.
+A single-page trip app for a group travelling together, built for trips through mainland China, Hong Kong and Macau, where Google is blocked for part of the way.
 
 **Live:** https://vlui93.github.io/greater-china-2026/
 
@@ -8,7 +8,7 @@ Vanilla HTML/CSS/JS, no build step, no framework. Data lives in a Google Sheet b
 
 **Nothing about the trip is in this repo.** This repository is public and GitHub Pages serves it to anyone who finds the URL, so the page ships empty: no places, no bookings, no schedule. Open it without the API key and all you get is a connect screen. The content lives in the Google Sheet, and on the phones that have connected to it. See [What is and is not in this repo](#11-what-is-and-is-not-in-this-repo).
 
-- 68 locations, every one with both an English and a Chinese name
+- Places with both an English and a Chinese name
 - Per-day schedule you can reorder, add to and edit on the phone
 - One-tap navigation that opens Amap on the mainland and Google Maps in Hong Kong and Macau
 - Tour-guide content for every seeded place: background, what to do, what to order, what to buy
@@ -158,7 +158,7 @@ Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the bac
 
 ## 5. Two things to know before you go
 
-**Google is blocked in mainland China.** Twelve of the seventeen days are in Guangzhou, Foshan, Chongqing and Chengdu. Google Sheets, Apps Script and Google Maps are all unreachable there without a VPN. The app handles this: it caches everything locally, keeps working offline, and queues any edits you make — they send themselves the next time it can reach Google (Hong Kong, or a VPN, or when you get home). The sync badge at the top of each screen tells you where you stand.
+**Google is blocked in mainland China.** Google Sheets, Apps Script and Google Maps are all unreachable there without a VPN. The app handles this: it caches everything locally, keeps working offline, and queues any edits you make — they send themselves the next time it can reach Google (Hong Kong, or a VPN, or when you get home). The sync badge at the top of each screen tells you where you stand.
 
 Practical consequence: **connect each phone to the Sheet before you leave, and open the app again on wifi in Hong Kong before you cross the border.** A phone that has never connected has an empty app and no way to fill it from the mainland. Also install **Amap 高德地图** on all three phones before you leave — Amap is the only one of the two map apps that works there.
 
@@ -515,7 +515,7 @@ The overview's **Tickets 票夹** row ends with **+ Add a ticket**: an attractio
 
 ### Departures and arrivals on the day plan
 
-A flight, train or ferry has its **number**, **from** and **to**, and a **departure** and **arrival** date and time (a hotel has **check-in** and **check-out**). Enter just an arrival time earlier than the departure and the app takes it as the next day, as an overnight flight lands. Each time is read in the time zone of where it happens — worked out from airport codes (SYD, HKG, CAN, TFU…) and your cities, and changeable under *Time zones* — so 22:20 in Sydney and 04:40 in Hong Kong are both right.
+A flight, train or ferry has its **number**, **from** and **to**, and a **departure** and **arrival** date and time (a hotel has **check-in** and **check-out**). Enter just an arrival time earlier than the departure and the app takes it as the next day, as an overnight flight lands. Each time is read in the time zone of where it happens — worked out from airport codes (SYD, HKG, CAN, TFU…) and your cities, and changeable under *Time zones* — so a departure in one time zone and an arrival in another are both right.
 
 Then the day plan uses them:
 
