@@ -342,7 +342,7 @@ The **Prep** tab has three parts.
   - *Group — one of us brings it* (kind `pack`) — things the group needs once, like adapters and the first-aid kit. Unticked ones say *One for the group*. Ticking one records your name (*Alex brings it*) so the others can see it's covered. Set your name in ⚙ Settings.
   - *Just me* — extras kept only on that phone, never synced.
 
-  Editing an item lets you move it between *Each of us* and *Group*.
+  Editing an item lets you move it between *Each of us* and *Group*. **Section** is a dropdown of that list's sections, with *＋ New section…* to start one. For a group item, **Who's bringing it** picks from everyone the app has seen on the trip — your name in ⚙ Settings, whoever has ticked or been given something — or *＋ Someone else…*. The item then reads *Sam to bring* (or *You're bringing it*) until someone ticks it. Assignments are saved in the Checklist tab's `assignee` column, which needs the updated `Code.gs`; until it is deployed, an assignment stays on the phone that made it.
 - **Deleting quickly.** Swipe any item left — a task or a packing item — to show **Delete**. Swipe a section's title left to delete the whole section. There's no "are you sure"; an **Undo** shows for five seconds instead. Tap a section's title to rename it. Deleted rows stay in the Sheet marked `removed`, so another phone can't bring them back.
 - **Guide** — general advice for Hong Kong, Macau and the mainland: apps to install, staying connected, paying, getting around, power banks. Nothing in it is specific to this trip, so it ships in the page.
 

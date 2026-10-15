@@ -424,11 +424,16 @@ ul.lst li .cn{font-weight:650}
 .whohead small{display:block;font-size:12.5px;line-height:1.35;color:var(--ink-2);margin-top:1px}
 .cktext .m .grp{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 38%,var(--line))}
 .cktext .m .grp.need{color:var(--ink-2);border-color:var(--line);border-style:dashed}
+.cktext .m .grp.to{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 38%,var(--line))}
 .whopick{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .whopick label{display:flex;gap:8px;align-items:flex-start;padding:10px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);
   font-size:13.5px;line-height:1.35;cursor:pointer}
 .whopick label:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
 .whopick input{margin-top:2px}
+/* The choices are labels inside a .field: undo the field-label caps, and keep the radio its own size */
+.field .whopick label{text-transform:none;letter-spacing:0;font-size:13.5px;font-weight:400;color:var(--ink-2);margin:0}
+.field .whopick label b{color:var(--ink);font-weight:650}
+.field .whopick input[type=radio]{width:18px;height:18px;min-height:0;flex:none;padding:0;margin:1px 0 0;accent-color:var(--accent)}
 #toast.act{pointer-events:auto;display:flex;align-items:center;gap:14px;text-align:left}
 #toast .undo{color:var(--bg);font-weight:750;text-decoration:underline;padding:4px 2px;flex:none}
 .ckbox{flex:none;width:48px;min-height:48px;display:grid;place-items:center}
@@ -924,7 +929,8 @@ var IC = {
 };
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
-           packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips" };
+           packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips",
+           assignee:"gct.assignee" };
 /* Location fields added after the first release. A blank from the Sheet never
    overwrites a value this phone already has for them, so notes imported on a
    phone survive until the backend has the columns to hold them. The cost: to
@@ -1019,6 +1025,7 @@ var store = {
   raw: null,     // every trip's rows, plus trips, cities and day names: what is cached
   data: null,    // the open trip's bookings, places, stops and checklist: what is shown
   supportsTrips: !!load(LS.trips, false),   // the backend has the Trips, Cities and Days tabs
+  supportsAssignee: !!load("gct.assignee", false),   // the backend's Checklist has the assignee column
   queue: load(LS.queue, []),
   online: false,
   syncing: false,
@@ -1164,6 +1171,7 @@ var store = {
           (d.bookings||[]).forEach(function(b){ var m=myBk[b.id]; if(!m) return;
             BK_LOCAL_FIRST.forEach(function(k){ if(!b[k] && m[k]) b[k]=m[k]; }); });
           var ck = mergeChecklist(raw.checklist||[], d.checklist);
+          if(Array.isArray(d.checklist) && d.checklist.length){ self.supportsAssignee = "assignee" in d.checklist[0]; save(LS.assignee, self.supportsAssignee); }
           // An older backend sends no trips, cities or day names: keep this phone's
           self.supportsTrips = Array.isArray(d.trips); save(LS.trips, self.supportsTrips);
           self.raw = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[],
@@ -1207,7 +1215,11 @@ function mergeChecklist(local, server){
     seen[l.id]=1;
     var s=byId[l.id];
     if(!s || String(l.updated||"") > String(s.updated||"")){ out.push(l); up.push(l); }
-    else out.push(s);
+    else {
+      // A backend from before the assignee column sends no such key: keep this phone's
+      if(!("assignee" in s) && l.assignee) s.assignee=l.assignee;
+      out.push(s);
+    }
   });
   server.forEach(function(s){ if(!seen[s.id]) out.push(s); });
   return { items: out, upload: up };
@@ -2543,7 +2555,8 @@ function ckRow(it, scope){
   if(it.location_id){ var l=store.loc(it.location_id); if(l) meta.push('<span>'+esc(l.name_en)+'</span>'); }
   if(it.kind==="pack" && scope==="shared")
     meta.push(done ? '<span class="grp">'+esc(it.done_by ? it.done_by+" brings it" : "Packed")+'</span>'
-                   : '<span class="grp need">One for the group</span>');
+         : it.assignee ? '<span class="grp to">'+esc(it.assignee===getMe() ? "You're bringing it" : it.assignee+" to bring")+'</span>'
+         : '<span class="grp need">One for the group</span>');
   else if(done && it.done_by) meta.push('<span>'+esc(it.done_by)+'</span>');
   return '<div class="ckrow'+(done?" done":"")+'" data-swipe="item">'+
     '<div class="ckslide">'+
@@ -2675,18 +2688,31 @@ function checklistForm(scope, id, kind, section){
   var it = id ? findItem(scope, id) : null;
   var isNew=!it; kind = it ? it.kind : kind;
   it = it || { id:"", kind:kind, section:section||"", text:"", due:"" };
-  var sections={};
   var packKinds = scope!=="mine" && kind!=="task";
+  // Sections already in use, per list, in the order they appear
+  var bySec={ each:[], pack:[], task:[], mine:[] };
   (scope==="mine" ? packing.items : store.data.checklist).forEach(function(i){
-    if(i.section && !i.removed && (i.kind===kind || (packKinds && (i.kind==="each"||i.kind==="pack")))) sections[i.section]=1; });
+    if(!i.section || i.removed) return;
+    var k = scope==="mine" ? "mine" : i.kind;
+    if(bySec[k] && bySec[k].indexOf(i.section)<0) bySec[k].push(i.section);
+  });
+  ckForm = { bySec:bySec, scope:scope, section:it.section };
+  var people=tripPeople();
   var html=
     '<div class="field"><label>'+(kind==="task"?"Task":"Item")+'</label><textarea id="c_text" style="min-height:70px">'+esc(it.text)+'</textarea></div>'+
     (packKinds ? '<div class="field"><label>Who packs it</label><div class="whopick">'+
       '<label><input type="radio" name="c_who" value="each"'+(kind==="each"?" checked":"")+'><span><b>Each of us</b><br>everyone brings their own</span></label>'+
       '<label><input type="radio" name="c_who" value="pack"'+(kind==="pack"?" checked":"")+'><span><b>The group</b><br>one of us brings it</span></label>'+
       '</div></div>' : '')+
-    '<div class="field"><label>Section</label><input id="c_section" list="c_sections" value="'+esc(it.section)+'">'+
-      '<datalist id="c_sections">'+Object.keys(sections).map(function(k){ return '<option value="'+esc(k)+'">'; }).join("")+'</datalist></div>'+
+    '<div class="field"><label for="c_section_sel">Section</label><select id="c_section_sel"></select>'+
+      '<input id="c_section_new" placeholder="Name the new section" autocomplete="off" style="margin-top:8px" hidden></div>'+
+    (packKinds ? '<div class="field" id="c_assign_f"'+(kind==="pack"?"":" hidden")+'><label for="c_assign">Who\'s bringing it</label>'+
+      '<select id="c_assign"><option value="">Not decided yet</option>'+
+        people.map(function(n){ return '<option value="'+esc(n)+'"'+(it.assignee===n?" selected":"")+'>'+esc(n)+(n===getMe()?" (you)":"")+'</option>'; }).join("")+
+        '<option value="__new__">＋ Someone else…</option></select>'+
+      '<input id="c_assign_new" placeholder="Their name" autocomplete="off" style="margin-top:8px" hidden>'+
+      (store.supportsAssignee ? '' : '<div class="hint">For now this shows on your phone only. Once the Sheet\'s script is updated, everyone sees it.</div>')+
+      '</div>' : '')+
     (kind==="task" ? '<div class="field"><label>Due</label><input id="c_due" type="date" value="'+esc(it.due||"")+'"></div>' : '')+
     (scope==="mine" ? '<p class="hint small muted">Only on this phone.</p>'
       : kind==="task" ? '<p class="hint small muted">Shared with the others.</p>'
@@ -2696,6 +2722,37 @@ function checklistForm(scope, id, kind, section){
       (isNew ? '' : '<button class="btn danger" data-act="ck-delete" data-scope="'+scope+'" data-id="'+esc(it.id)+'">Delete</button>')+
     '</div>';
   openSheet(isNew ? (kind==="task"?"New task":"New item") : "Edit", html);
+  fillSections(scope==="mine" ? "mine" : kind, it.section);
+  var sel=$("#c_section_sel"), nw=$("#c_section_new"), as=$("#c_assign"), asn=$("#c_assign_new");
+  sel.addEventListener("change", function(){ nw.hidden = sel.value!=="__new__"; if(!nw.hidden) nw.focus(); });
+  if(as) as.addEventListener("change", function(){ asn.hidden = as.value!=="__new__"; if(!asn.hidden) asn.focus(); });
+  document.querySelectorAll('input[name="c_who"]').forEach(function(r){ r.addEventListener("change", function(){
+    var keep = sel.value==="__new__" ? "" : sel.value;
+    fillSections(r.value, keep);
+    var f=$("#c_assign_f"); if(f) f.hidden = r.value!=="pack";
+  }); });
+}
+var ckForm=null;
+/** The section picker: the list's sections, the item's own (even if new), then "New section…". */
+function fillSections(list, current){
+  var sel=$("#c_section_sel"), nw=$("#c_section_new"); if(!sel || !ckForm) return;
+  var secs=(ckForm.bySec[list]||[]).slice();
+  if(current && secs.indexOf(current)<0) secs.unshift(current);
+  sel.innerHTML=secs.map(function(k){ return '<option value="'+esc(k)+'"'+(k===current?" selected":"")+'>'+esc(k)+'</option>'; }).join("")+
+    '<option value="__new__">＋ New section…</option>';
+  if(!secs.length){ sel.value="__new__"; nw.hidden=false; } else nw.hidden = sel.value!=="__new__";
+}
+function formSection(){
+  var sel=$("#c_section_sel"); if(!sel) return "";
+  return sel.value==="__new__" ? $("#c_section_new").value.trim() : sel.value;
+}
+/** Everyone the app has seen on this trip: your name, and whoever has ticked
+ *  or been given a group item. Names are added by typing one once. */
+function tripPeople(){
+  var seen={}, out=[];
+  [getMe()].concat(store.data.checklist.map(function(i){ return i.done_by; }), store.data.checklist.map(function(i){ return i.assignee; }))
+    .forEach(function(n){ n=String(n||"").trim(); if(n && !seen[n.toLowerCase()]){ seen[n.toLowerCase()]=1; out.push(n); } });
+  return out.sort(function(a,b){ return a===getMe() ? -1 : b===getMe() ? 1 : a.localeCompare(b); });
 }
 
 /* Delete and rename, for one item or a whole section. Deleting is soft (removed
@@ -4658,7 +4715,9 @@ document.addEventListener("click", function(ev){
     case "ck-add":  checklistForm(t.dataset.scope, "", t.dataset.kind, t.dataset.section==="Mine"||t.dataset.section==="Shared"||t.dataset.section==="To do" ? "" : t.dataset.section); return;
     case "ck-save": {
       var text=$("#c_text").value.trim(); if(!text){ toast("Write something first"); return; }
-      var section=$("#c_section").value.trim(), due=$("#c_due") ? $("#c_due").value : "";
+      var section=formSection(), due=$("#c_due") ? $("#c_due").value : "";
+      if($("#c_section_sel").value==="__new__" && !section){ toast("Name the new section"); $("#c_section_new").focus(); return; }
+      var asel=$("#c_assign"), assignee = asel ? (asel.value==="__new__" ? $("#c_assign_new").value.trim() : asel.value) : null;
       var scope=t.dataset.scope, kind=t.dataset.kind, eid=t.dataset.id;
       var who=document.querySelector('input[name="c_who"]:checked'); if(who) kind=who.value;
       if(scope==="mine"){
@@ -4671,6 +4730,7 @@ document.addEventListener("click", function(ev){
                       : { id:uid("ck"), kind:kind, done:"", done_by:"", location_id:"", removed:"",
                           order_index:store.data.checklist.length+1 };
         item.text=text; item.section=section; item.kind=kind; if(kind==="task") item.due=due;
+        if(assignee!==null) item.assignee = kind==="pack" ? assignee : "";
         // moved between "each of us" and the group: the old ticks don't carry over
         if(base && base.kind!==kind){ item.done=""; item.done_by=""; setEachTick(item.id, false); }
         saveChecklistItem(item);
