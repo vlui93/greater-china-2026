@@ -381,6 +381,7 @@ ul.lst li .cn{font-weight:650}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .statusdot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);flex:none}
 .statusdot.on{background:var(--ok)} .statusdot.off{background:var(--warn)}
+.locrow.syncerr .mt{color:var(--warn);white-space:normal}
 .banner{
   display:flex;gap:9px;align-items:flex-start;padding:11px 13px;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--warn) 12%,var(--surface));
@@ -1083,14 +1084,32 @@ var store = {
     if(!this.configured()) return Promise.reject(new Error("not-configured"));
     var body = JSON.stringify({ key:this.cfg.key, action:action, payload:payload||null });
     // text/plain keeps this a CORS "simple request" so Apps Script needs no preflight
-    return fetch(this.cfg.url, {
+    var url=this.cfg.url;
+    return fetch(url, {
       method:"POST", body:body, redirect:"follow",
       headers:{ "Content-Type":"text/plain;charset=utf-8" }
-    }).then(function(r){ return r.json(); }).then(function(j){
-      if(!j || !j.ok) throw new Error((j && j.error) || "Request failed");
-      self.online = true;
+    }).then(function(r){
+      return r.text().then(function(t){
+        try{ return JSON.parse(t); }
+        catch(e){ throw callError("page", "not JSON (HTTP "+r.status+")"); }
+      });
+    }, function(e){
+      // The request failed outright. That's no connection, or a reply the
+      // browser won't hand over: Google's sign-in page when the deployment
+      // isn't open to Anyone, or an error page from a script that didn't
+      // save. Ask the same address plainly — if anything answers, the network
+      // is fine and the problem is the deployment.
+      return fetch(url, { mode:"no-cors", cache:"no-store" }).then(
+        function(){ throw callError("page", e.message); },
+        function(){ throw callError("net", e.message); });
+    }).then(function(j){
+      if(!j || !j.ok){
+        var m=(j && j.error) || "Request failed";
+        throw callError(/API key|not configured/i.test(m) ? "key" : "server", m);
+      }
+      self.online = true; self.lastError = null;
       return j.data;
-    }).catch(function(err){ self.online=false; throw err; });
+    }).catch(function(err){ self.online=false; self.lastError=err; throw err; });
   },
 
   enqueue: function(action,payload){
@@ -1194,13 +1213,29 @@ var store = {
       })
       .catch(function(err){
         self.syncing=false; self.online=false; updateStatus();
-        if(!opts.quiet) toast(err.message==="not-configured" ? "Backend not set up yet" : "Offline — using saved copy");
+        if(!opts.quiet) toast(err.message==="not-configured" ? "Backend not set up yet" : syncProblem(err), err.kind && err.kind!=="net" ? 9000 : 0);
         throw err;
       });
   }
 };
 
 function isUnknownAction(err){ return /Unknown action/.test(String(err && err.message || err)); }
+/** A failed call, labelled with why: net (no connection), page (something
+ *  answered, but not the trip), key (the API key), server (the script's own
+ *  error). The message stays the server's, which other code matches on. */
+function callError(kind, msg){ var e=new Error(msg); e.kind=kind; return e; }
+/** Why a sync failed, in words that say what to do. Every failure used to
+ *  read "Offline", so a wrong key after redeploying looked like no signal. */
+function syncProblem(err){
+  var k=err && err.kind, m=String(err && err.message || "");
+  if(k==="key") return /not configured/i.test(m)
+    ? "Can't sync: Code.gs has no API key. Put yours back on the API_KEY line, then Deploy › Manage deployments › edit › New version."
+    : "Can't sync: the API key in ⚙ Settings doesn't match the one in Code.gs.";
+  if(k==="page") return "Can't sync: the Sheet's script answered, but not with the trip. In Apps Script, Deploy › Manage deployments: "+
+    "access must be “Anyone”, and the URL must match the one in ⚙ Settings. If you just pasted Code.gs, check it saved.";
+  if(k==="server") return "Can't sync: the Sheet's script said “"+m+"”";
+  return "Offline — using saved copy";
+}
 
 /** Checklist sync. Each copy of an item carries `updated`; the newer one wins,
  *  in either direction. An item only this phone has is kept and uploaded.
@@ -1563,9 +1598,11 @@ function dayNumber(date){ return DAYS.indexOf(date)+1; }
 
 function updateStatus(){
   var cls = store.syncing ? "" : (store.configured() ? (store.online?"on":"off") : "off");
+  var stuck = store.lastError && store.lastError.kind && store.lastError.kind!=="net";
   var txt = !store.configured() ? (store.queue.length ? "Local only · "+store.queue.length+" to upload" : "Local only")
           : store.syncing ? "Syncing…"
           : store.online ? (store.queue.length ? store.queue.length+" queued" : "Synced")
+          : stuck ? "Can't sync"+(store.queue.length ? " · "+store.queue.length+" waiting" : "")
           : (store.queue.length ? store.queue.length+" waiting to send" : "Offline");
   var html = '<span class="statusdot '+cls+'"></span>'+esc(txt);
   document.querySelectorAll(".syncbadge").forEach(function(b){ b.innerHTML = html; });
@@ -3457,6 +3494,8 @@ function settingsForm(){
       '<button class="btn primary" data-act="save-cfg">Save &amp; connect</button>'+
       '<button class="btn" data-act="test-cfg">Test</button>'+
     '</div>'+
+    (store.lastError && store.lastError.kind ? '<div class="loclist" style="margin-top:12px"><div class="locrow syncerr"><div class="lb"><div class="en">Last sync</div>'+
+      '<div class="mt">'+esc(syncProblem(store.lastError))+'</div></div></div></div>' : '')+
     tripsSectionHTML()+citiesSectionHTML()+
     '<div class="section-title">Data</div>'+
     '<div class="loclist">'+
@@ -4789,7 +4828,8 @@ document.addEventListener("click", function(ev){
         } else { toast("Trip downloaded"); }
       }).catch(function(e){
         $("#gateBtn").disabled=false; $("#gateBtn").textContent="Try again";
-        err.textContent = "Could not reach the Sheet. Check the URL and the key, and that you have a connection.";
+        err.textContent = e && e.kind && e.kind!=="net" ? syncProblem(e)
+          : "Could not reach the Sheet. Check the URL and the key, and that you have a connection.";
       });
       return;
     }
@@ -4878,7 +4918,7 @@ document.addEventListener("click", function(ev){
       var cfg={ url:$("#s_url").value.trim(), key:$("#s_key").value.trim() };
       var old=store.cfg; store.cfg=cfg;
       store.call("ping").then(function(){ toast("Connected"); })
-        .catch(function(e){ store.cfg=old; toast("Could not connect: "+e.message); });
+        .catch(function(e){ store.cfg=old; toast(e.kind ? syncProblem(e) : "Could not connect: "+e.message, 9000); });
       return;
     }
     case "bk-ticket": setBookingTicket(t.dataset.bid); return;

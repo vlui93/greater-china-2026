@@ -158,7 +158,7 @@ Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the bac
 
 ## 5. Two things to know before you go
 
-**Google is blocked in mainland China.** Google Sheets, Apps Script and Google Maps are all unreachable there without a VPN. The app handles this: it caches everything locally, keeps working offline, and queues any edits you make — they send themselves the next time it can reach Google (Hong Kong, or a VPN, or when you get home). The sync badge at the top of each screen tells you where you stand.
+**Google is blocked in mainland China.** Google Sheets, Apps Script and Google Maps are all unreachable there without a VPN. The app handles this: it caches everything locally, keeps working offline, and queues any edits you make — they send themselves the next time it can reach Google (Hong Kong, or a VPN, or when you get home). The sync badge at the top of each screen tells you where you stand. *Offline* means the phone couldn't reach Google at all; *Can't sync* means it could, but the Sheet's script didn't hand over the trip — tap **Sync** (or ⚙ Settings › Test) and it says why: the API key doesn't match Code.gs, Code.gs has no key (pasting a new version replaces it), or the deployment isn't open to *Anyone*. Edits stay queued either way.
 
 Practical consequence: **connect each phone to the Sheet before you leave, and open the app again on wifi in Hong Kong before you cross the border.** A phone that has never connected has an empty app and no way to fill it from the mainland. Also install **Amap 高德地图** on all three phones before you leave — Amap is the only one of the two map apps that works there.
 
