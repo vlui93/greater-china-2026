@@ -390,6 +390,7 @@ ul.lst li .cn{font-weight:650}
 }
 .banner .bi{flex:none;color:var(--warn);margin-top:1px}
 .banner button{text-decoration:underline;font-weight:650;color:var(--ink)}
+.banner[hidden]{display:none}
 
 /* Prep: checklist, packing, guide */
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;margin:2px 0 14px;
@@ -931,7 +932,7 @@ var IC = {
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
            packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips",
-           assignee:"gct.assignee" };
+           assignee:"gct.assignee", synced:"gct.synced" };
 /* Location fields added after the first release. A blank from the Sheet never
    overwrites a value this phone already has for them, so notes imported on a
    phone survive until the backend has the columns to hold them. The cost: to
@@ -1176,7 +1177,7 @@ var store = {
           self.syncing=false;
           return (self.lastWrite||Promise.resolve()).then(function(){ return self.sync(opts); });
         }
-        self.syncedAt=Date.now();
+        self.syncedAt=Date.now(); save(LS.synced, self.syncedAt);
         if(d && d.locations){
           self.persist();
           var raw=self.raw;
@@ -1606,6 +1607,24 @@ function updateStatus(){
           : (store.queue.length ? store.queue.length+" waiting to send" : "Offline");
   var html = '<span class="statusdot '+cls+'"></span>'+esc(txt);
   document.querySelectorAll(".syncbadge").forEach(function(b){ b.innerHTML = html; });
+  var stale = staleText();
+  document.querySelectorAll(".stalebar").forEach(function(b){
+    b.hidden = !stale;
+    b.innerHTML = stale ? '<span class="bi">'+IC.info+'</span><span>'+esc(stale)+
+      ' <button data-act="sync">Sync now</button></span>' : "";
+  });
+}
+/* The saved copy can be days old with nothing but "Offline" to show for it,
+   while the others change the plan. Say so once it's been over 12 hours.
+   Nothing until this phone has synced once since this was added. */
+var STALE_HOURS = 12;
+function staleText(){
+  var at = load(LS.synced, 0);
+  if(!store.configured() || store.syncing || !at) return "";
+  var h = (Date.now()-at)/3600000;
+  if(h <= STALE_HOURS) return "";
+  var ago = h < 48 ? Math.floor(h)+" h" : Math.floor(h/24)+" days";
+  return "Last synced with the Sheet "+ago+" ago — changes the others made since then aren't on this phone.";
 }
 
 function setView(v){
@@ -1651,7 +1670,8 @@ function render(){
 function statusBar(){
   return '<div class="spread small muted" style="margin:2px 0 12px">'+
     '<span class="syncbadge row" style="gap:6px"></span>'+
-    '<button class="btn sm ghost" data-act="sync">Sync</button></div>';
+    '<button class="btn sm ghost" data-act="sync">Sync</button></div>'+
+    '<div class="banner stalebar" role="status" hidden></div>';
 }
 /* Booked or still to book, read off the checklist: a task tied to this place
    that starts "Book", "Reserve" or "Arrange". All ticked means booked. */
@@ -5121,7 +5141,7 @@ document.addEventListener("visibilitychange", function(){
     if(Date.now()-(store.syncedAt||0) > 2*60*1000) store.sync({quiet:true}).catch(function(){});
     else if(store.queue.length) store.flush().then(updateStatus).catch(function(){});
   }
-  if(!document.hidden) jumpToNewDay();
+  if(!document.hidden){ updateStatus(); jumpToNewDay(); }
 });
 /* A phone keeps the app open in the background for days. Back in front on a
    new date, it moves to that day's plan, as it would on a fresh start. */
