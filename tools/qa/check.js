@@ -47,7 +47,7 @@ step('privacy scan (tools/qa/trip-scan.js)', () => { const r = node(['tools/qa/t
   return { ok: r.ok, note: r.ok ? r.out.trim() : 'see above' }; });
 // 5. Phones only pick up a new app when the service worker's cache name changes.
 step('service-worker cache bumped when the app changed', () => {
-  const shell = /^(index\.html|map\.js|t2s\.js|manifest\.json|sw\.js|vendor\/|icons\/)/;
+  const shell = /^(index\.html|map\.js|extras\.js|t2s\.js|manifest\.json|sw\.js|vendor\/|icons\/)/;
   const changed = (sh('git diff --name-only HEAD') + sh('git diff --name-only --cached')).split('\n').filter(f => shell.test(f) && f !== 'sw.js');
   if (!changed.length) return { ok: true, note: 'no app files changed' };
   const cur = (fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8').match(/CACHE\s*=\s*"([^"]+)"/) || [])[1];

@@ -1,12 +1,14 @@
 /* Deleting places quickly, and getting them back. Swipe a place left in
    Locations to show Delete; it goes from every day (All Days and Home) and
-   from the Sheet, with Undo, and into "Recently deleted" on the phone, where
-   Restore puts it back on the same days. */
+   from the Sheet, with Undo, and into "Recently deleted", where Restore puts
+   it back on the same days. With the current backend the bin is the Sheet's
+   Bin tab, shared by every phone; with an older one it stays on the phone. */
 const { suite, trip } = require('./lib');
 
 suite({}, async (env) => {
   const { ok, wait, rows } = env;
   const page = await env.phone({ clock: '2026-10-18T09:00:00+08:00', clockMode: 'install', context: { hasTouch: true, isMobile: true } });
+  await page.evaluate(() => { save(LS.me, 'Alex'); });
   const T = trip();
   const cdp = await page.ctx.newCDPSession(page);
   const rowSel = id => `#placeResults .locwrap:has([data-lid="${id}"])`;
@@ -49,10 +51,13 @@ suite({}, async (env) => {
   ok(/Recently deleted \(1\)/.test(await page.textContent('#placeResults')), 'the list links to Recently deleted (1)');
   await page.click('[data-act="bin"]'); await wait(300);
   ok(new RegExp(stopsBefore.length + ' stop').test(await page.textContent('#sheetBody')) && await page.$('#sheetBody [data-act="bin-restore"]'), 'the bin lists it, with its stops');
+  ok(/by Alex/.test(await page.textContent('#sheetBody')) && /any phone/.test(await page.textContent('#sheetBody')), 'says who deleted it, and that the bin is shared');
+  const binRow = rows('Bin').find(b => JSON.parse(b.location).id === victim);
+  ok(binRow && binRow.deleted_by === 'Alex' && JSON.parse(binRow.stops).length === stopsBefore.length, 'the Sheet\'s Bin tab holds it, with its stops');
   await page.screenshot({ path: env.out('bin-sheet.png') });
   await page.click('#sheetBody [data-act="bin-restore"]'); await wait(800);
   ok(/Restored .* to \d+ day/.test(await page.textContent('#toast')), 'toast: "' + (await page.textContent('#toast')).trim() + '"');
-  ok(/Nothing deleted on this phone/.test(await page.textContent('#sheetBody')), 'the bin is empty again');
+  ok(/Nothing in the bin/.test(await page.textContent('#sheetBody')), 'the bin is empty again');
   const stopsAfter = await page.evaluate(id => store.data.schedule.filter(s => s.location_id === id).map(s => s.id + '@' + s.date).sort(), victim);
   ok(JSON.stringify(stopsAfter) === JSON.stringify(stopsBefore), 'back on the same days: ' + stopsAfter.join(', '));
   ok(rows('Locations').some(l => l.id === victim) && rows('Schedule').filter(s => s.location_id === victim).length === stopsBefore.length, 'and back in the Sheet, stops too');
@@ -72,11 +77,37 @@ suite({}, async (env) => {
   await swipe(other); await page.click(rowSel(other) + ' .ckdel'); await wait(600);
   await page.click('[data-act="bin"]'); await wait(300);
   await page.click('#sheetBody [data-act="bin-forget"]'); await wait(300);
-  ok(/Nothing deleted on this phone/.test(await page.textContent('#sheetBody')), 'removing it from the bin empties it');
+  ok(/Nothing in the bin/.test(await page.textContent('#sheetBody')), 'removing it from the bin empties it');
+  ok(!rows('Bin').length, 'and the Sheet\'s Bin tab too');
   await page.evaluate(() => closeSheet()); await wait(200);
   const tapId = T.locations.find(l => l.type === 'attraction').id;
   await page.$eval(rowSel(tapId), e => e.scrollIntoView({ block: 'center' })); await wait(100);
   await page.tap(rowSel(tapId) + ' .lb'); await wait(400);
   ok(await page.$('#sheet.open') && await page.evaluate(id => store.loc(id) && true, tapId), 'a tap opens the place, nothing deleted');
-  ok(!page.errs.length, 'no JS errors ' + page.errs.join('; '));
+
+  console.log('\n5. another phone restores it');
+  await page.evaluate(() => { closeSheet(); setView('places'); }); await wait(300);
+  await swipe(victim); await page.click(rowSel(victim) + ' .ckdel'); await wait(700);
+  const other2 = await env.phone({ clock: '2026-10-18T10:00:00+08:00', clockMode: 'install' });
+  await other2.evaluate(() => setView('places')); await wait(300);
+  ok(await other2.evaluate(id => !store.loc(id), victim), 'the second phone doesn\'t have it either');
+  await other2.click('[data-act="bin"]'); await wait(300);
+  ok(/by Alex/.test(await other2.textContent('#sheetBody')), 'its bin shows the place the first phone deleted');
+  await other2.click('#sheetBody [data-act="bin-restore"]'); await wait(800);
+  ok(await other2.evaluate(id => store.data.schedule.filter(s => s.location_id === id).length, victim) === stopsBefore.length, 'restored there, with its stops');
+  ok(rows('Locations').some(l => l.id === victim) && !rows('Bin').length, 'the Sheet has it back, and the Bin row is gone');
+  await page.evaluate(() => store.sync({ quiet: true })); await wait(800);
+  ok(await page.evaluate(id => !!store.loc(id), victim) && !/Recently deleted/.test(await page.textContent('#placeResults')), 'the first phone sees it back after a sync, bin empty');
+
+  console.log('\n6. with an older backend, the bin stays on the phone');
+  const old = await env.phone({ clock: '2026-10-18T11:00:00+08:00', clockMode: 'install',
+    filter: (out, body) => { if (body.action === 'all' && out.data) delete out.data.bin; return out; } });
+  await old.evaluate(() => setView('places')); await wait(300);
+  const tid = T.locations.find(l => l.type === 'shopping').id;
+  await old.evaluate(id => deletePlace(id), tid); await wait(700);
+  await old.click('[data-act="bin"]'); await wait(300);
+  ok(/Places deleted on this phone/.test(await old.textContent('#sheetBody')), 'its bin says it is this phone\'s');
+  await old.click('#sheetBody [data-act="bin-restore"]'); await wait(800);
+  ok(await old.evaluate(id => !!store.loc(id), tid) && rows('Locations').some(l => l.id === tid), 'and restores from there');
+  ok(!page.errs.length && !other2.errs.length && !old.errs.length, 'no JS errors ' + page.errs.concat(other2.errs, old.errs).join('; '));
 });

@@ -4,7 +4,10 @@
  *
  * SETUP (full detail in README.md):
  *   1. Create a new Google Sheet, Extensions > Apps Script, paste this file.
- *   2. Edit API_KEY below to a long random string of your own.
+ *   2. Edit API_KEY below to a long random string of your own. The first
+ *      request with it saves it in the script's own settings (Project
+ *      Settings > Script properties), so later versions of this file can be
+ *      pasted over it with the placeholder left in and keep working.
  *   3. Run setup() once and authorise it. This creates and seeds the tabs.
  *   4. Deploy > New deployment > Web app.
  *        Execute as: Me
@@ -17,7 +20,9 @@
  */
 
 // ---------------------------------------------------------------------------
-// CHANGE THIS before running setup(). Any long random string.
+// CHANGE THIS before running setup(). Any long random string. Once it has
+// been used, it is remembered (see apiKey_), so pasting a newer Code.gs with
+// this line left as it is doesn't lock the phones out.
 var API_KEY = 'CHANGE-ME-to-a-long-random-string';
 // ---------------------------------------------------------------------------
 
@@ -62,7 +67,11 @@ var TABS = {
            'currency', 'round', 'flag', 'flag_km', 'per_km', 'high_at', 'per_km_high', 'transit', 'car'],
   // An optional label per day ("Macau day trip"); without one the app names
   // the day after its cities.
-  Days: ['id', 'trip_id', 'date', 'label']
+  Days: ['id', 'trip_id', 'date', 'label'],
+  // Deleted places, so anyone can put one back: the place and its stops as
+  // JSON, as they were when it was deleted. Restoring writes them back and
+  // removes the row. The id is made by the phone that deleted it.
+  Bin: ['id', 'trip_id', 'deleted_at', 'deleted_by', 'name', 'location', 'stops']
 };
 
 var NUMERIC = { lat: true, lng: true, order_index: true };
@@ -87,12 +96,27 @@ function doPost(e) {
   return handle_(e, body);
 }
 
+/* The key in this file wins; once one has been used it is kept in the
+ * script's properties too, and used whenever this file still carries the
+ * placeholder — which is what pasting a new version leaves (the last upgrade
+ * locked every phone out until the key was typed in again). */
+function apiKey_() {
+  var props = typeof PropertiesService !== 'undefined' ? PropertiesService.getScriptProperties() : null;
+  var mine = String(API_KEY);
+  if (mine.indexOf('CHANGE-ME') !== 0) {
+    if (props && props.getProperty('API_KEY') !== mine) props.setProperty('API_KEY', mine);
+    return mine;
+  }
+  return (props && props.getProperty('API_KEY')) || '';
+}
+
 function handle_(e, req) {
   try {
-    if (String(API_KEY).indexOf('CHANGE-ME') === 0) {
+    var key = apiKey_();
+    if (!key) {
       return json_({ ok: false, error: 'Server not configured: set API_KEY in Code.gs and redeploy.' });
     }
-    if (!req.key || String(req.key) !== String(API_KEY)) {
+    if (!req.key || String(req.key) !== key) {
       return json_({ ok: false, error: 'Bad or missing API key.' });
     }
 
@@ -128,6 +152,8 @@ function route_(action, req) {
 
     case 'saveLocation':        return { location: upsert_('Locations', payload, 'loc') };
     case 'deleteLocation':      return deleteLocation_(payload);
+    case 'restoreLocation':     return restoreLocation_(payload);
+    case 'deleteBinItem':       return { deleted: remove_('Bin', payload && payload.id) };
     case 'saveBooking':         return { booking: upsert_('Bookings', payload, 'bk') };
     case 'deleteBooking':       return { deleted: remove_('Bookings', payload && payload.id) };
 
@@ -271,6 +297,7 @@ function readAll_() {
     trips: readTab_('Trips'),
     cities: readTab_('Cities'),
     days: readTab_('Days'),
+    bin: readTab_('Bin'),
     fetched_at: new Date().toISOString()
   };
 }
@@ -329,6 +356,14 @@ function remove_(name, id) {
 function deleteLocation_(payload) {
   var id = payload && payload.id;
   if (!id) throw new Error('No id supplied.');
+  // Into the bin first, with its stops, so it can be put back on the same days
+  var loc = readTab_('Locations').filter(function (l) { return l.id === String(id); })[0];
+  if (loc) {
+    var stops = readTab_('Schedule').filter(function (s) { return s.location_id === String(id); });
+    upsert_('Bin', { id: (payload.bin_id && String(payload.bin_id)) || '', trip_id: loc.trip_id || '',
+      deleted_at: new Date().toISOString(), deleted_by: payload.by || '', name: loc.name_en || loc.name_zh || id,
+      location: JSON.stringify(loc), stops: JSON.stringify(stops) }, 'bin');
+  }
   // remove any schedule entries pointing at it, bottom-up so indices stay valid
   var sh = sheet_('Schedule');
   var last = sh.getLastRow();
@@ -342,6 +377,19 @@ function deleteLocation_(payload) {
   var res = remove_('Locations', id);
   res.schedule_entries_removed = removedEntries;
   return res;
+}
+
+/** Put a binned place back, with its stops, and empty its bin row. */
+function restoreLocation_(payload) {
+  var id = payload && payload.id;
+  if (!id) throw new Error('No id supplied.');
+  var row = readTab_('Bin').filter(function (b) { return b.id === String(id); })[0];
+  if (!row) return { id: id, restored: false };
+  var loc = JSON.parse(row.location), stops = JSON.parse(row.stops || '[]');
+  upsert_('Locations', loc, 'loc');
+  stops.forEach(function (s) { upsert_('Schedule', s, 'sc'); });
+  remove_('Bin', id);
+  return { id: id, restored: true, location: loc.id, stops: stops.length };
 }
 
 function setDayOrder_(payload) {

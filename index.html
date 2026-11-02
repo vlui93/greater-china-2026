@@ -941,7 +941,7 @@ var IC = {
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
            packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips",
-           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin" };
+           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin", binOK:"gct.binok" };
 /* Location fields added after the first release. A blank from the Sheet never
    overwrites a value this phone already has for them, so notes imported on a
    phone survive until the backend has the columns to hold them. The cost: to
@@ -1069,7 +1069,8 @@ var store = {
   cfg: load(LS.cfg, { url:"", key:"" }),
   raw: null,     // every trip's rows, plus trips, cities and day names: what is cached
   data: null,    // the open trip's bookings, places, stops and checklist: what is shown
-  supportsTrips: !!load(LS.trips, false),   // the backend has the Trips, Cities and Days tabs
+  supportsTrips: !!load(LS.trips, false),
+  supportsBin: !!load(LS.binOK, false),     // the backend has the Bin tab (shared Recently deleted)   // the backend has the Trips, Cities and Days tabs
   supportsAssignee: !!load("gct.assignee", false),   // the backend's Checklist has the assignee column
   queue: load(LS.queue, []),
   online: false,
@@ -1237,11 +1238,13 @@ var store = {
           if(Array.isArray(d.checklist) && d.checklist.length){ self.supportsAssignee = "assignee" in d.checklist[0]; save(LS.assignee, self.supportsAssignee); }
           // An older backend sends no trips, cities or day names: keep this phone's
           self.supportsTrips = Array.isArray(d.trips); save(LS.trips, self.supportsTrips);
+          self.supportsBin = Array.isArray(d.bin); save(LS.binOK, self.supportsBin);
           self.raw = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[],
                        checklist:ck.items,
                        trips:  self.supportsTrips ? d.trips : raw.trips||[],
                        cities: Array.isArray(d.cities) ? d.cities : raw.cities||[],
-                       days:   Array.isArray(d.days) ? d.days : raw.days||[] };
+                       days:   Array.isArray(d.days) ? d.days : raw.days||[],
+                       bin:    Array.isArray(d.bin) ? d.bin : raw.bin||[] };
           self.data = null;   // rebuilt from raw: persist must not fold the old copy back in
           applyTrip();
           self.persist();
@@ -2550,16 +2553,17 @@ function planProgress(ix){
 
 function binSheet(){
   var items=binItems();
-  var html = items.length ? '<p class="blurb small muted" style="margin:12px 0 12px">Places deleted on this phone. Restore puts a place back, '+
-      'with its stops on the days they were on.</p><div class="loclist">'+items.map(function(it){
+  var html = items.length ? '<p class="blurb small muted" style="margin:12px 0 12px">'+
+      (store.supportsBin ? 'Places deleted on any phone on this trip.' : 'Places deleted on this phone.')+
+      ' Restore puts a place back, with its stops on the days they were on.</p><div class="loclist">'+items.map(function(it){
       var l=it.loc, n=it.stops.length;
       return '<div class="locrow"><div class="thumb">'+typeIcon(l.type)+'</div>'+
         '<div class="lb"><div class="en">'+esc(l.name_en||"")+'</div><div class="zh zh">'+escz(l.name_zh||"")+'</div>'+
-        '<div class="mt">'+esc(l.city||"")+' · deleted '+esc(fmtDate(it.at.slice(0,10),false))+(n?' · '+n+' stop'+(n>1?'s':''):'')+'</div></div>'+
+        '<div class="mt">'+esc(l.city||"")+' · deleted '+esc(fmtDate(it.at.slice(0,10),false))+(it.by?' by '+esc(it.by):'')+(n?' · '+n+' stop'+(n>1?'s':''):'')+'</div></div>'+
         '<button class="btn sm primary" data-act="bin-restore" data-bid="'+esc(it.id)+'">Restore</button>'+
         '<button class="btn sm ghost" data-act="bin-forget" data-bid="'+esc(it.id)+'" aria-label="Remove from the bin">'+IC.close+'</button></div>';
     }).join("")+'</div>'
-    : '<div class="card empty" style="margin-top:12px">Nothing deleted on this phone.</div>';
+    : '<div class="card empty" style="margin-top:12px">'+(store.supportsBin ? 'Nothing in the bin.' : 'Nothing deleted on this phone.')+'</div>';
   openSheet("Recently deleted", html);
 }
 
@@ -3631,7 +3635,7 @@ function settingsForm(){
       esc(TRIP.name)+': '+esc(tripRange())+'.</p>';
   openSheet("Settings", html);
   var fi=$("#importFile");
-  if(fi) fi.addEventListener("change", function(){ importNotes(this.files && this.files[0]); });
+  if(fi) fi.addEventListener("change", function(){ var f=this.files && this.files[0]; withExtras(function(){ importNotes(f); }); });
   var meIn=$("#s_me");
   if(meIn) meIn.addEventListener("change", function(){ save(LS.me, this.value.trim()); toast("Saved"); });
 }
@@ -3818,145 +3822,6 @@ function saveCityForm(oldName){
   }).then(function(){ closeSheet(); render(); toast("Saved"); });
 }
 
-/* Merges getting_there / arrive_by / tickets into places this phone already
- * has, matched by id. Local only: the Sheet gets them from a laptop, with
- * sheet.js push, once the backend has the columns (see README). A full
- * seed.json works here too — only these three fields are read from it. */
-function importNotes(file){
-  if(!file) return;
-  var r=new FileReader();
-  r.onload=function(){
-    var j; try{ j=JSON.parse(r.result); }catch(e){ toast("That file is not valid JSON"); return; }
-    var rows=(j && j.locations) || [];
-    if(!rows.length && !(j && (j.checklist||j.packing||j.schedule||j.schedule_remove))){ toast("Nothing to import in that file"); return; }
-    // Places added on a phone have ids nobody else knows, so a row can also
-    // name its place. Long-form details only ever fill an empty field — an
-    // import never overwrites what someone has written.
-    var byId={}, byZh={}, byEn={};
-    store.data.locations.forEach(function(l){
-      byId[l.id]=l; if(l.name_zh) byZh[l.name_zh]=l; if(l.name_en) byEn[l.name_en.toLowerCase()]=l;
-    });
-    var DETAILS=["history_blurb","recommendations","dishes_to_order","souvenirs"];
-    var n=0, miss=0, sent=0, added=0;
-    rows.forEach(function(x){
-      if(!x) return;
-      var l=(x.id && byId[x.id]) || (x.name_zh && byZh[x.name_zh]) || (x.name_en && byEn[String(x.name_en).toLowerCase()]);
-      // A row marked "add" is a new place: created here with the file's id, so
-      // an itinerary in the same file can point at it.
-      if(!l && x.add && x.id && x.name_en && x.city){
-        var fresh={};
-        LOC_FIELDS.forEach(function(k){ fresh[k]=(x[k]==null ? "" : x[k]); });
-        store.data.locations.push(fresh);
-        byId[fresh.id]=fresh; if(fresh.name_zh) byZh[fresh.name_zh]=fresh; byEn[fresh.name_en.toLowerCase()]=fresh;
-        store.enqueue("saveLocation", fresh); added++; sent++;
-        return;
-      }
-      if(!l){ miss++; return; }
-      var changed=false, part={ id:l.id }, detail=false;
-      LOCAL_FIRST.forEach(function(k){
-        if(typeof x[k]==="string" && x[k]!==(l[k]||"")){ l[k]=x[k]; part[k]=x[k]; changed=true; }
-      });
-      DETAILS.forEach(function(k){
-        if(typeof x[k]==="string" && x[k] && !String(l[k]||"").trim()){ l[k]=x[k]; part[k]=x[k]; changed=detail=true; }
-      });
-      // A pin only ever fills a place that has none — never moves one.
-      if(x.lat!=null && x.lng!=null && isFinite(+x.lat) && isFinite(+x.lng) && !hasXY(l)){
-        l.lat=+x.lat; l.lng=+x.lng; part.lat=l.lat; part.lng=l.lng; changed=detail=true;
-      }
-      if(typeof x.notes==="string" && x.notes && String(l.notes||"").indexOf(x.notes)<0){
-        l.notes=(l.notes ? l.notes+"\n" : "")+x.notes; part.notes=l.notes; changed=detail=true;
-      }
-      if(changed) n++;
-      // Details go to the Sheet (queued, so this works unconnected too). Only
-      // for these: the three LOCAL_FIRST fields are kept safe on the phone,
-      // and queueing all 68 places on every import would stall the first sync.
-      if(detail){ store.enqueue("saveLocation", part); sent++; }
-    });
-    // Itinerary: stops in the file are added or updated by id, and listed ids
-    // are removed. This rewrites the plan everyone sees, so ask first.
-    var sc=(j && j.schedule) || [], scGone=(j && j.schedule_remove) || [], scN=0;
-    if(sc.length || scGone.length){
-      var have={}; store.data.schedule.forEach(function(s){ have[s.id]=s; });
-      var SCF=["date","order_index","location_id","planned_time","notes"];
-      // Only what would actually change counts, so importing the same file on
-      // a phone that already has the new plan asks nothing and does nothing.
-      sc=sc.filter(function(x){
-        if(!x || !x.id || !store.loc(x.location_id)) return false;
-        var e=have[x.id]; if(!e) return true;
-        return SCF.some(function(k){ return x[k]!==undefined && String(x[k])!==String(e[k]==null?"":e[k]); });
-      });
-      scGone=scGone.filter(function(id){ return have[id]; });
-      var upd=sc.filter(function(x){ return have[x.id]; }).length;
-      var msg="This file also updates the itinerary:\n"+
-        (sc.length-upd ? "• "+(sc.length-upd)+" stops added\n" : "")+
-        (upd ? "• "+upd+" stops moved or retimed\n" : "")+
-        (scGone.length ? "• "+scGone.length+" stops removed\n" : "")+
-        "\nApply it? It changes the plan for everyone once synced.";
-      if((sc.length || scGone.length) && confirm(msg)){
-        sc.forEach(function(x){
-          var e=have[x.id];
-          if(!e){ e={ id:x.id, date:"", order_index:0, location_id:"", planned_time:"", notes:"" }; store.data.schedule.push(e); have[x.id]=e; }
-          SCF.forEach(function(k){ if(x[k]!==undefined) e[k]=x[k]; });
-          store.enqueue("saveScheduleEntry", e); scN++;
-        });
-        scGone.forEach(function(id){
-          store.data.schedule=store.data.schedule.filter(function(s){ return s.id!==id; });
-          store.enqueue("deleteScheduleEntry", { id:id }); scN++;
-        });
-      }
-    }
-    // Checklist and packing: add what is new, update wording and dates, and
-    // never touch whether something has been ticked — importing a newer file
-    // must not undo anyone's progress.
-    var ckN=0, pkN=0;
-    ((j && j.checklist) || []).forEach(function(x){
-      if(!x || !x.id || !x.text) return;
-      var cur=findItem("shared", x.id);
-      if(!cur){
-        store.data.checklist.push({ id:x.id, kind:x.kind||"task", section:x.section||"", text:x.text,
-          due:x.due||"", location_id:x.location_id||"", done:"", done_by:"", order_index:x.order_index||0,
-          updated:"", removed:"" });
-        ckN++; return;
-      }
-      var changed=false;
-      ["kind","section","text","due","location_id","order_index"].forEach(function(k){
-        if(x[k]!==undefined && String(x[k])!==String(cur[k]==null?"":cur[k])){ cur[k]=x[k]; changed=true; }
-      });
-      if(changed){ cur.updated=nowISO(); ckN++; }
-    });
-    ((j && j.packing) || []).forEach(function(x){
-      if(!x || !x.id || !x.text) return;
-      var mine=findItem("mine", x.id);
-      if(!mine){
-        packing.items.push({ id:x.id, kind:"pack", section:x.section||"", text:x.text, done:"", removed:"",
-                             order_index:x.order_index||packing.items.length+1 });
-        pkN++; return;
-      }
-      // Same rule as the shared list: a newer file can reword or regroup an
-      // item, but never untick it, and never bring back one you deleted.
-      if(mine.removed) return;
-      var moved=false;
-      ["section","text","order_index"].forEach(function(k){
-        if(x[k]!==undefined && String(x[k])!==String(mine[k]==null?"":mine[k])){ mine[k]=x[k]; moved=true; }
-      });
-      if(moved) pkN++;
-    });
-    packing.persist();
-    store.persist(); closeSheet(); render();
-    var parts=[];
-    if(added) parts.push(added+" new place"+(added===1?"":"s"));
-    if(n) parts.push(n+" place"+(n===1?"":"s"));
-    if(scN) parts.push(scN+" itinerary change"+(scN===1?"":"s"));
-    if(ckN) parts.push(ckN+" checklist item"+(ckN===1?"":"s"));
-    if(pkN) parts.push(pkN+" packing item"+(pkN===1?"":"s"));
-    toast(parts.length ? "Updated "+parts.join(" · ")+(miss?" · "+miss+" places not on this phone":"")
-                       : "Nothing new in that file", 3400);
-    if((ckN || sent || scN) && store.configured()) store.sync({quiet:true}).catch(function(){});
-  };
-  r.onerror=function(){ toast("Could not read that file"); };
-  r.readAsText(file);
-}
-
 /* ==========================================================================
    Maps — Leaflet and OpenStreetMap tiles, loaded from map.js the first time a
    map is opened. Every place's own colour is its type's.
@@ -3974,6 +3839,19 @@ function dropMap(which){
   maps[which]=null;
 }
 var mapJs=null;
+/* The file importers (trip notes; places from My Maps or Takeout) live in
+   extras.js, loaded the first time a file is picked — index.html has a size
+   ceiling, and these run rarely. The service worker caches it for offline. */
+var extrasJs=null;
+function withExtras(fn){
+  if(window.importNotes && window.importPlacesFile) return fn();
+  if(!extrasJs) extrasJs=new Promise(function(res, rej){
+    var s=document.createElement("script"); s.src="extras.js";
+    s.onload=function(){ res(); }; s.onerror=function(){ extrasJs=null; rej(new Error("extras-load")); };
+    document.head.appendChild(s);
+  });
+  extrasJs.then(fn, function(){ toast("Couldn't load the importer — try again with a connection"); });
+}
 function loadMapJs(){
   if(window.TripMap) return window.TripMap.load();
   if(!mapJs) mapJs=new Promise(function(res, rej){
@@ -4165,151 +4043,6 @@ function pickFound(i){
   applyPlace(p);
   var box=$("#f_find_results"); if(box) box.innerHTML="";
   var st=$("#f_find_status"); if(st) st.textContent="Filled in from OpenStreetMap — check the names below.";
-}
-
-/* ==========================================================================
-   Import places from a file
-   - Google My Maps: Export to KML/KMZ (a list of pins with names and notes)
-   - Google Takeout, Maps (your places): "Saved Places.json"
-   - Google Takeout, Saved: one .csv per list (Title, Note, URL)
-   Read on the phone; nothing is uploaded except the places you add.
-   ========================================================================== */
-function unzipFirst(buf, want){
-  var u8=new Uint8Array(buf), dv=new DataView(buf), eocd=-1;
-  for(var i=u8.length-22;i>=Math.max(0,u8.length-66000);i--) if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; }
-  if(eocd<0) return Promise.reject(new Error("not a zip"));
-  var count=dv.getUint16(eocd+10,true), p=dv.getUint32(eocd+16,true), dec=new TextDecoder();
-  for(var k=0;k<count;k++){
-    if(dv.getUint32(p,true)!==0x02014b50) break;
-    var method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true), nlen=dv.getUint16(p+28,true),
-        xlen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true), off=dv.getUint32(p+42,true);
-    var name=dec.decode(u8.subarray(p+46,p+46+nlen));
-    p+=46+nlen+xlen+clen;
-    if(!want.test(name)) continue;
-    var start=off+30+dv.getUint16(off+26,true)+dv.getUint16(off+28,true), data=u8.subarray(start,start+csize);
-    if(method===0) return Promise.resolve(dec.decode(data));
-    if(method!==8 || typeof DecompressionStream==="undefined") return Promise.reject(new Error("can't unzip"));
-    return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
-  }
-  return Promise.reject(new Error("no kml inside"));
-}
-function stripTags(h){
-  var d=document.createElement("div"); d.innerHTML=String(h||"").replace(/<br\s*\/?>/gi,"\n");
-  return (d.textContent||"").replace(/\n{3,}/g,"\n\n").trim();
-}
-function parseKml(text){
-  var doc=new DOMParser().parseFromString(text,"application/xml"), out=[];
-  var pms=doc.getElementsByTagName("Placemark");
-  for(var i=0;i<pms.length;i++){
-    var pm=pms[i], get=function(tag){ var e=pm.getElementsByTagName(tag)[0]; return e ? e.textContent.trim() : ""; };
-    if(!pm.getElementsByTagName("Point").length) continue;   // a route or an area, not a place
-    var c=get("coordinates").split(/\s+/)[0].split(",");
-    out.push({ name:get("name"), note:stripTags(get("description")), lng:c.length>1?+c[0]:null, lat:c.length>1?+c[1]:null });
-  }
-  return out;
-}
-function parseGeoJson(j){
-  var fs=(j && j.features) || (j && j.type==="Feature" ? [j] : []);
-  return fs.map(function(f){
-    var p=f.properties||{}, loc=p.location||p.Location||{}, g=f.geometry||{}, c=g.coordinates||[];
-    var lat=+c[1], lng=+c[0];
-    if(!(isFinite(lat)&&isFinite(lng)) || (lat===0&&lng===0)){
-      var gc=loc["Geo Coordinates"]||{}; lat=+gc.Latitude; lng=+gc.Longitude;
-    }
-    var url=p.google_maps_url||p["Google Maps URL"]||"";
-    if(!(isFinite(lat)&&isFinite(lng)) || (lat===0&&lng===0)){ var m=parseMapText(url); lat=m.lat; lng=m.lng; }
-    var addr=loc.address||loc.Address||"";
-    return { name:loc.name||loc["Business Name"]||p.Title||p.title||p.name||"", note:[p.Comment||p.comment||"", addr?"Address: "+addr:""].filter(Boolean).join("\n"),
-             lat:isFinite(lat)&&lat!==null?lat:null, lng:isFinite(lng)&&lng!==null?lng:null };
-  });
-}
-function parseCsv(text){
-  var rows=[], row=[], f="", q=false;
-  text=String(text).replace(/^﻿/,"");
-  for(var i=0;i<text.length;i++){
-    var ch=text[i];
-    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=ch; continue; }
-    if(ch==='"') q=true;
-    else if(ch===","){ row.push(f); f=""; }
-    else if(ch==="\n"||ch==="\r"){ if(ch==="\r"&&text[i+1]==="\n") i++; row.push(f); rows.push(row); row=[]; f=""; }
-    else f+=ch;
-  }
-  if(f||row.length){ row.push(f); rows.push(row); }
-  return rows.filter(function(r){ return r.some(function(x){ return String(x).trim(); }); });
-}
-function parseCsvPlaces(text){
-  var rows=parseCsv(text); if(rows.length<2) return [];
-  var h=rows[0].map(function(x){ return String(x).trim().toLowerCase(); });
-  var col=function(re){ for(var i=0;i<h.length;i++) if(re.test(h[i])) return i; return -1; };
-  var cn=col(/^(title|name)$/), cnote=col(/^(note|notes|comment|description)$/), cu=col(/^url$/), cla=col(/^(lat|latitude)$/), clo=col(/^(lng|lon|long|longitude)$/);
-  if(cn<0) cn=0;
-  return rows.slice(1).map(function(r){
-    var lat=cla>=0?parseFloat(r[cla]):NaN, lng=clo>=0?parseFloat(r[clo]):NaN;
-    if(!(isFinite(lat)&&isFinite(lng)) && cu>=0){ var m=parseMapText(r[cu]||""); lat=m.lat; lng=m.lng; }
-    return { name:String(r[cn]||"").trim(), note:cnote>=0?String(r[cnote]||"").trim():"",
-             lat:isFinite(lat)&&lat!==null?lat:null, lng:isFinite(lng)&&lng!==null?lng:null };
-  }).filter(function(x){ return x.name; });
-}
-function readPlacesFile(file){
-  var n=String(file.name||"").toLowerCase();
-  if(/\.kmz$/.test(n)) return file.arrayBuffer().then(function(b){ return unzipFirst(b,/\.kml$/i); }).then(parseKml);
-  return file.text().then(function(t){
-    if(/^\s*</.test(t)) return parseKml(t);
-    if(/^\s*[\[{]/.test(t)) return parseGeoJson(JSON.parse(t));
-    return parseCsvPlaces(t);
-  });
-}
-var importing=[];
-function importPlacesFile(file){
-  if(!file) return;
-  readPlacesFile(file).then(function(rows){
-    rows=rows.filter(function(r){ return r.name || r.lat!=null; });
-    if(!rows.length){ toast("No places found in that file", 2800); return; }
-    importing=rows.map(function(r){
-      var names=splitNames(r.name||"Unnamed place"), has=r.lat!=null&&r.lng!=null&&isFinite(r.lat)&&isFinite(r.lng);
-      var dup=nearDuplicate({ names:names, lat:has?r.lat:null, lng:has?r.lng:null });
-      return { names:names, raw:r.name, note:r.note||"", lat:has?+r.lat:null, lng:has?+r.lng:null,
-               city:has?cityFor(+r.lat,+r.lng):"", type:guessType(r.name), dup:dup };
-    });
-    var mainland=importing.some(function(x){ return x.lat!=null && regionOf(x.lat,x.lng)==="mainland"; });
-    var newOnes=importing.filter(function(x){ return !x.dup; }).length;
-    var opts=cityOptions();
-    openSheet("Import places",
-      '<p class="blurb small muted" style="margin:12px 0">'+importing.length+' in '+esc(file.name)+'. '+
-        (importing.length-newOnes ? (importing.length-newOnes)+' already on your list (unticked). ' : '')+
-        'They go into '+esc(TRIP.name)+'; add them to days afterwards.</p>'+
-      (mainland ? '<label class="row small" style="gap:8px;margin:0 0 12px;align-items:flex-start"><input type="checkbox" id="imp_shift" checked style="margin-top:2px"> '+
-        'Pins in mainland China came from Google Maps or Amap — move them to GPS (leave ticked unless the file came from somewhere else)</label>' : '')+
-      '<div class="field"><label>City for places outside the cities you have</label><select id="imp_city">'+
-        opts.map(function(c){ return '<option>'+esc(c)+'</option>'; }).join("")+'</select></div>'+
-      '<div class="implist">'+importing.map(function(x,i){
-        return '<label><input type="checkbox" data-i="'+i+'"'+(x.dup?'':' checked')+'><span><div class="en">'+esc(x.names.en||x.names.zh)+
-          (x.names.en&&x.names.zh?' <span class="zh">'+escz(x.names.zh)+'</span>':'')+'</div>'+
-          '<div class="mt">'+esc([x.city||"", x.type, x.lat==null?"no pin":"", x.dup?"already on your list":""].filter(Boolean).join(" · "))+'</div></span></label>';
-      }).join("")+'</div>'+
-      '<div class="formactions"><button class="btn primary block" data-act="import-apply">Add the ticked places</button></div>');
-  }).catch(function(e){
-    toast(/zip|unzip|kml inside/.test(String(e&&e.message)) ? "Couldn't open that KMZ — export it as KML instead" : "Couldn't read that file", 3200);
-  });
-}
-function applyImport(){
-  var shift=$("#imp_shift") && $("#imp_shift").checked, fallback=($("#imp_city")||{}).value||"";
-  var picked=[].slice.call(document.querySelectorAll('.implist input[type="checkbox"]')).filter(function(c){ return c.checked; })
-    .map(function(c){ return importing[+c.dataset.i]; }).filter(Boolean);
-  if(!picked.length){ toast("Nothing ticked"); return; }
-  var base=uid("loc");
-  picked.forEach(function(x,i){
-    var lat=x.lat, lng=x.lng;
-    if(lat!=null && shift && regionOf(lat,lng)==="mainland"){ var w=gcjToWgs(lat,lng); lat=+w[0].toFixed(6); lng=+w[1].toFixed(6); }
-    var city=(lat!=null ? cityFor(lat,lng) : "") || fallback;
-    var l={}; LOC_FIELDS.forEach(function(k){ l[k]=""; });
-    l.id=base+i.toString(36); l.name_en=x.names.en||x.names.zh; l.name_zh=x.names.zh; l.city=city; l.type=x.type;
-    l.lat=lat==null?"":lat; l.lng=lng==null?"":lng; l.nav_app=mapAppFor(city); l.notes=x.note;
-    store.data.locations.push(l); store.enqueue("saveLocation", l);
-  });
-  store.persist(); closeSheet(); render();
-  toast("Added "+picked.length+" place"+(picked.length===1?"":"s"));
-  if(store.configured()) store.flush().then(updateStatus).catch(function(){});
 }
 
 /* ==========================================================================
@@ -4816,13 +4549,27 @@ function saveLocation(obj){
     if(!found) store.data.locations.push(obj);
   });
 }
-/* Recently deleted. A deleted place goes into a bin on this phone with the
-   stops it had, so it can be put back on the same days later — Undo only
-   lasts a few seconds. The bin is per phone (the Sheet keeps no deleted rows):
-   whoever deleted it can restore it. Oldest go once there are BIN_MAX. */
+/* Recently deleted. A deleted place goes into a bin with the stops it had, so
+   it can be put back on the same days later — Undo only lasts a few seconds.
+   With a backend that has the Bin tab the bin is shared: it lives in the
+   Sheet and any phone can restore from it. With an older backend it's kept
+   on the phone that deleted the place (the last BIN_MAX), as before; items
+   left there from then still show and restore. */
 var BIN_MAX = 60;
 function binAll(){ var b=load(LS.bin, []); return Array.isArray(b) ? b : []; }
-function binItems(){ return binAll().filter(function(x){ return x.trip===TRIP.id; }); }
+/** A Bin row from the Sheet, in the same shape as a phone's own bin item. */
+function binNorm(b){
+  try{
+    return { id:b.id, trip:tripOf(b), at:String(b.deleted_at||""), by:b.deleted_by||"", shared:true,
+             loc: typeof b.location==="string" ? JSON.parse(b.location) : b.location,
+             stops: typeof b.stops==="string" ? JSON.parse(b.stops||"[]") : (b.stops||[]) };
+  }catch(e){ return null; }
+}
+function binItems(){
+  var shared = store.supportsBin ? (store.raw.bin||[]).map(binNorm).filter(function(x){ return x && x.loc && x.trip===TRIP.id; }) : [];
+  var mine = binAll().filter(function(x){ return x.trip===TRIP.id; });
+  return shared.concat(mine).sort(function(a,b){ return a.at<b.at ? 1 : -1; });
+}
 function binPut(loc, stops){
   var item={ id:uid("bin"), trip:TRIP.id, at:new Date().toISOString(),
              loc:JSON.parse(JSON.stringify(loc)), stops:JSON.parse(JSON.stringify(stops)) };
@@ -4832,8 +4579,16 @@ function binPut(loc, stops){
 function binDrop(bid){ save(LS.bin, binAll().filter(function(x){ return x.id!==bid; })); }
 /** Put a deleted place back, with its stops on the days they were on. */
 function restorePlace(bid){
-  var it=binAll().filter(function(x){ return x.id===bid; })[0];
+  var it=binItems().filter(function(x){ return x.id===bid; })[0];
   if(!it) return Promise.resolve(null);
+  if(it.shared){
+    // The backend puts it back from its Bin row; this phone does the same now
+    return store.write("restoreLocation", { id:bid }, function(){
+      store.raw.bin=(store.raw.bin||[]).filter(function(b){ return b.id!==bid; });
+      if(!store.loc(it.loc.id)) store.data.locations.push(it.loc);
+      it.stops.forEach(function(st){ if(!store.data.schedule.some(function(x){ return x.id===st.id; })) store.data.schedule.push(st); });
+    }).then(function(){ return it; });
+  }
   binDrop(bid);
   return saveLocation(it.loc).then(function(){
     return Promise.all(it.stops.map(function(st){
@@ -4855,9 +4610,18 @@ function deletePlace(lid){
   });
 }
 function deleteLocation(id){
-  var l=store.loc(id);
-  var item = l ? binPut(l, store.data.schedule.filter(function(s){ return s.location_id===id; })) : null;
-  return store.write("deleteLocation", {id:id}, function(){
+  var l=store.loc(id), stops=store.data.schedule.filter(function(s){ return s.location_id===id; });
+  var item=null, payload={ id:id };
+  if(l && store.supportsBin){
+    // The backend files it in the Bin under this id, so a restore made before
+    // the delete has even reached the Sheet still finds it
+    var row={ id:uid("bin"), trip_id:l.trip_id||"", deleted_at:new Date().toISOString(), deleted_by:getMe(),
+              name:l.name_en||l.name_zh||id, location:JSON.stringify(l), stops:JSON.stringify(stops) };
+    payload={ id:id, bin_id:row.id, by:getMe() };
+    store.raw.bin=(store.raw.bin||[]).concat([row]);
+    item=binNorm(row);
+  } else if(l) item=binPut(l, stops);
+  return store.write("deleteLocation", payload, function(){
     store.data.locations = store.data.locations.filter(function(l){ return l.id!==id; });
     store.data.schedule  = store.data.schedule.filter(function(s){ return s.location_id!==id; });
   }).then(function(){ return item; });
@@ -4959,7 +4723,13 @@ document.addEventListener("click", function(ev){
         if(!it) return; render(); binSheet();
         var n=it.stops.length; toast("Restored "+(it.loc.name_en||it.loc.name_zh)+(n ? " to "+n+" day"+(n>1?"s":"") : "")); });
       return;
-    case "bin-forget": binDrop(t.dataset.bid); binSheet(); return;
+    case "bin-forget": {
+      var bf=t.dataset.bid;
+      if(binAll().some(function(x){ return x.id===bf; })){ binDrop(bf); binSheet(); return; }
+      store.write("deleteBinItem", { id:bf }, function(){ store.raw.bin=(store.raw.bin||[]).filter(function(b){ return b.id!==bf; }); })
+        .then(function(){ binSheet(); render(); });
+      return;
+    }
     case "on-plan": ui.onPlan=!ui.onPlan; save(LS.ui,ui); render(); return;
     case "mild": ui.mild=!ui.mild; save(LS.ui,ui); render(); return;
     case "add-today": {
@@ -5149,7 +4919,7 @@ document.addEventListener("click", function(ev){
   }
 });
 
-$("#placesFile").addEventListener("change", function(){ importPlacesFile(this.files && this.files[0]); });
+$("#placesFile").addEventListener("change", function(){ var f=this.files && this.files[0]; withExtras(function(){ importPlacesFile(f); }); });
 $("#btnSettings").innerHTML = IC.gear;
 $("#sheetBack").innerHTML = IC.back;
 $("#btnSettings").addEventListener("click", settingsForm);

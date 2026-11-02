@@ -306,5 +306,52 @@ console.log("13. trips, cities and day names");
   ok(post({key:KEY,action:"deleteCity",payload:{id:post({key:KEY,action:"all"}).data.cities[0].id}}).data.deleted.removed, "a city deletes");
 }
 
+console.log("15. the key survives pasting a new Code.gs");
+{
+  const props = {};
+  sandbox.PropertiesService = { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = v; } }) };
+  ok(post({key:KEY,action:"ping"}).ok, "a request with the key in the file works");
+  eq(props.API_KEY, KEY, "and remembers the key in the script's properties");
+  sandbox.API_KEY = "CHANGE-ME-to-a-long-random-string";   // what a fresh paste leaves
+  ok(post({key:KEY,action:"ping"}).ok, "after a paste with the placeholder, the phones' key still works");
+  eq(post({key:"wrong",action:"ping"}).error, "Bad or missing API key.", "and a wrong key is still refused");
+  sandbox.API_KEY = "a-new-key-456";
+  ok(post({key:"a-new-key-456",action:"ping"}).ok && !post({key:KEY,action:"ping"}).ok, "a new key typed into the file replaces it");
+  eq(props.API_KEY, "a-new-key-456", "and is remembered instead");
+  sandbox.API_KEY = KEY; post({key:KEY,action:"ping"});
+}
+
+console.log("16. deleted places go to the Bin, and come back");
+{
+  const loc = post({key:KEY,action:"saveLocation",payload:{name_en:"Bin Test Cafe",name_zh:"测试咖啡",city:"Testville",type:"restaurant",lat:1.5,lng:2.5,notes:"Spice: none",visited:"2026-10-20"}}).data.location;
+  const s1 = post({key:KEY,action:"saveScheduleEntry",payload:{date:"2026-10-20",order_index:3,location_id:loc.id,planned_time:"12:00",notes:"lunch"}}).data.entry;
+  const s2 = post({key:KEY,action:"saveScheduleEntry",payload:{date:"2026-10-22",order_index:1,location_id:loc.id,notes:"OPTIONAL — again"}}).data.entry;
+  const NS0 = post({key:KEY,action:"schedule"}).data.schedule.length;
+  const B0 = post({key:KEY,action:"all"}).data.bin.length;   // earlier sections deleted places too
+  const mine = () => post({key:KEY,action:"all"}).data.bin.filter(b => b.name === "Bin Test Cafe");
+  const r = post({key:KEY,action:"deleteLocation",payload:{id:loc.id, bin_id:"bin-test1", by:"Alex"}});
+  ok(r.ok && r.data.removed && r.data.schedule_entries_removed === 2, "delete removes the place and its 2 stops");
+  const bin = mine();
+  eq([bin.length, post({key:KEY,action:"all"}).data.bin.length], [1, B0 + 1], "one row in the Bin");
+  eq([bin[0].id, bin[0].name, bin[0].deleted_by], ["bin-test1", "Bin Test Cafe", "Alex"], "with the phone's id, the name and who deleted it");
+  eq(JSON.parse(bin[0].location).name_zh, "测试咖啡", "the place is kept whole");
+  eq(JSON.parse(bin[0].stops).map(s => s.id).sort(), [s1.id, s2.id].sort(), "and its stops");
+  const back = post({key:KEY,action:"restoreLocation",payload:{id:"bin-test1"}});
+  ok(back.ok && back.data.restored && back.data.stops === 2, "restore says 2 stops came back");
+  const l2 = post({key:KEY,action:"locations"}).data.locations.find(l => l.id === loc.id);
+  eq([l2.name_zh, l2.lat, l2.lng, l2.notes, l2.visited], ["测试咖啡", 1.5, 2.5, "Spice: none", "2026-10-20"], "the place is back as it was, tick included");
+  const sc = post({key:KEY,action:"schedule"}).data.schedule.filter(s => s.location_id === loc.id).map(s => [s.id, s.date, s.planned_time, s.notes]).sort();
+  eq(sc, [[s1.id, "2026-10-20", "12:00", "lunch"], [s2.id, "2026-10-22", "", "OPTIONAL — again"]].sort(), "its stops are back on the same days, same ids");
+  eq(post({key:KEY,action:"schedule"}).data.schedule.length, NS0, "and nothing else changed");
+  eq([mine().length, post({key:KEY,action:"all"}).data.bin.length], [0, B0], "the Bin row is gone");
+  eq(post({key:KEY,action:"restoreLocation",payload:{id:"bin-test1"}}).data.restored, false, "restoring twice does nothing");
+  post({key:KEY,action:"deleteLocation",payload:{id:loc.id}});
+  const b2 = mine();
+  ok(b2.length === 1 && /^bin-/.test(b2[0].id) && b2[0].id !== "bin-test1", "an older phone (no bin_id) still gets a Bin row");
+  ok(post({key:KEY,action:"deleteBinItem",payload:{id:b2[0].id}}).data.deleted.removed && !mine().length, "a Bin row can be removed for good");
+  post({key:KEY,action:"deleteLocation",payload:{id:"no-such-place"}});
+  eq(post({key:KEY,action:"all"}).data.bin.length, B0, "deleting a place that isn't there bins nothing");
+}
+
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));
 process.exit(fails ? 1 : 0);
