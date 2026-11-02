@@ -534,6 +534,8 @@ The tick beside each stop (and each place in Places) marks it as **been**: the c
 
 **Planning on the road.** Locations shows how far through the plan you are — *On the plan · 12 of 30 planned visited* (per city when a city is picked; places that are only `OPTIONAL — …` alternatives count as extras). Each row says which day the place is planned for. *On the plan* narrows the list to places on the schedule; with *Hide visited* it's what's left to see. During the trip, a place's page has **Add to today**, with Undo.
 
+**Deleting and Recently deleted.** Swipe a place to the left in Locations to show **Delete** (or *Edit this place → Delete*). It goes from every day — Home and All Days — and from the Sheet, stops included, with **Undo** for a few seconds. It also goes into **Recently deleted** (the link under the list), where **Restore** puts it back with its stops on the same days. The bin is kept on the phone that deleted the place (the last 60), not in the Sheet, so restore from that phone.
+
 **Spice.** A first line of `Spice: none`, `Spice: mild options — …` or `Spice: spicy` in a food place's notes shows as a tag (*Not spicy*, *Mild options*, *Spicy*), and *Mild-friendly* in Locations keeps only the first two. Add it in *Edit this place*, or in the Sheet's `notes` column; the `trip-prep` skill writes one for every food place.
 
 ### Opening on today

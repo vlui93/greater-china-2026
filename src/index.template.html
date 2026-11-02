@@ -419,6 +419,9 @@ ul.lst li .cn{font-weight:650}
 .ckhead .ckdel{width:116px;font-size:13px}
 .ckdel{visibility:hidden}
 [data-swipe].sw .ckdel{visibility:visible}
+.locwrap{position:relative;overflow:hidden;border-radius:var(--radius-sm);box-shadow:var(--shadow)}
+.locwrap > .locrow{align-items:center;box-shadow:none}
+.locwrap .ckdel{border-radius:0 var(--radius-sm) var(--radius-sm) 0}
 .ckname{font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;padding:0}
 .ckname:hover{color:var(--ink)}
 .whohead{display:flex;align-items:center;gap:10px;margin:22px 0 9px}
@@ -938,7 +941,7 @@ var IC = {
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
            packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips",
-           assignee:"gct.assignee", synced:"gct.synced" };
+           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin" };
 /* Location fields added after the first release. A blank from the Sheet never
    overwrites a value this phone already has for them, so notes imported on a
    phone survive until the backend has the columns to hold them. The cost: to
@@ -2545,6 +2548,21 @@ function planProgress(ix){
     (pl.length ? '<div class="prog"><i style="width:'+pct+'%"></i></div>' : '')+'</div>';
 }
 
+function binSheet(){
+  var items=binItems();
+  var html = items.length ? '<p class="blurb small muted" style="margin:12px 0 12px">Places deleted on this phone. Restore puts a place back, '+
+      'with its stops on the days they were on.</p><div class="loclist">'+items.map(function(it){
+      var l=it.loc, n=it.stops.length;
+      return '<div class="locrow"><div class="thumb">'+typeIcon(l.type)+'</div>'+
+        '<div class="lb"><div class="en">'+esc(l.name_en||"")+'</div><div class="zh zh">'+escz(l.name_zh||"")+'</div>'+
+        '<div class="mt">'+esc(l.city||"")+' · deleted '+esc(fmtDate(it.at.slice(0,10),false))+(n?' · '+n+' stop'+(n>1?'s':''):'')+'</div></div>'+
+        '<button class="btn sm primary" data-act="bin-restore" data-bid="'+esc(it.id)+'">Restore</button>'+
+        '<button class="btn sm ghost" data-act="bin-forget" data-bid="'+esc(it.id)+'" aria-label="Remove from the bin">'+IC.close+'</button></div>';
+    }).join("")+'</div>'
+    : '<div class="card empty" style="margin-top:12px">Nothing deleted on this phone.</div>';
+  openSheet("Recently deleted", html);
+}
+
 function placeResults(q){
   var all=store.data.locations, ix=planIndex(), keep=placeFilter(ix);
   var list=all.filter(function(l){ return matches(l,q) && keep(l); });
@@ -2555,7 +2573,7 @@ function placeResults(q){
       '<button class="btn sm ghost" data-act="new-location">+ New place</button></span></div>'+
     (list.length ? '<div class="loclist">'+list.map(function(l){
       var u=navUrls(l);
-      return '<div class="locrow'+(isVisited(l)?" been":"")+'">'+
+      return '<div class="locwrap" data-swipe="place"><div class="locrow ckslide'+(isVisited(l)?" been":"")+'">'+
         (photoOf(l) ? '<button class="thumb photo" data-act="open" data-lid="'+esc(l.id)+'" style="border:0;'+bgStyle(photoOf(l))+'" aria-label="'+esc(l.name_en)+'"></button>'
                     : '<button class="thumb" data-act="open" data-lid="'+esc(l.id)+'" style="border:0">'+typeIcon(l.type)+'</button>')+
         '<button class="lb" data-act="open" data-lid="'+esc(l.id)+'" style="text-align:left;background:none">'+
@@ -2567,8 +2585,11 @@ function placeResults(q){
         '</button>'+
         visitBtn(l)+
         '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(l.id)+'" aria-label="Navigate">'+IC.nav+'</button>'+
-      '</div>';
-    }).join("")+'</div>' : '<div class="card empty">No match for &ldquo;'+esc(q)+'&rdquo;.<br><span class="small">Try part of the Chinese name — two or three characters is enough</span></div>');
+      '</div><button class="ckdel" data-act="loc-swipe-del" data-lid="'+esc(l.id)+'" tabindex="-1" aria-hidden="true">Delete</button></div>';
+    }).join("")+'</div>'+
+    '<p class="hint small muted" style="text-align:center;margin:12px 0 4px">Swipe a place to the left to delete it.'+
+      (binItems().length ? ' <button class="linkbtn" data-act="bin">Recently deleted ('+binItems().length+')</button>' : '')+'</p>'
+    : '<div class="card empty">No match for &ldquo;'+esc(q)+'&rdquo;.<br><span class="small">Try part of the Chinese name — two or three characters is enough</span></div>');
 }
 
 function svgIc(d){ return '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true">'+d+'</svg>'; }
@@ -4795,11 +4816,51 @@ function saveLocation(obj){
     if(!found) store.data.locations.push(obj);
   });
 }
+/* Recently deleted. A deleted place goes into a bin on this phone with the
+   stops it had, so it can be put back on the same days later — Undo only
+   lasts a few seconds. The bin is per phone (the Sheet keeps no deleted rows):
+   whoever deleted it can restore it. Oldest go once there are BIN_MAX. */
+var BIN_MAX = 60;
+function binAll(){ var b=load(LS.bin, []); return Array.isArray(b) ? b : []; }
+function binItems(){ return binAll().filter(function(x){ return x.trip===TRIP.id; }); }
+function binPut(loc, stops){
+  var item={ id:uid("bin"), trip:TRIP.id, at:new Date().toISOString(),
+             loc:JSON.parse(JSON.stringify(loc)), stops:JSON.parse(JSON.stringify(stops)) };
+  save(LS.bin, [item].concat(binAll()).slice(0, BIN_MAX));
+  return item;
+}
+function binDrop(bid){ save(LS.bin, binAll().filter(function(x){ return x.id!==bid; })); }
+/** Put a deleted place back, with its stops on the days they were on. */
+function restorePlace(bid){
+  var it=binAll().filter(function(x){ return x.id===bid; })[0];
+  if(!it) return Promise.resolve(null);
+  binDrop(bid);
+  return saveLocation(it.loc).then(function(){
+    return Promise.all(it.stops.map(function(st){
+      return store.write("saveScheduleEntry", st, function(){
+        if(!store.data.schedule.some(function(x){ return x.id===st.id; })) store.data.schedule.push(st);
+      });
+    }));
+  }).then(function(){ return it; });
+}
+/** Delete a place from everywhere (its stops too), into the bin, with Undo. */
+function deletePlace(lid){
+  var l=store.loc(lid); if(!l) return Promise.resolve();
+  var n=store.data.schedule.filter(function(s){ return s.location_id===lid; }).length;
+  return deleteLocation(lid).then(function(item){
+    render();
+    toast("Deleted "+(l.name_en||l.name_zh)+(n ? " and its "+n+" stop"+(n>1?"s":"") : ""), 6000, function(){
+      restorePlace(item.id).then(function(){ render(); toast("Restored"); });
+    });
+  });
+}
 function deleteLocation(id){
+  var l=store.loc(id);
+  var item = l ? binPut(l, store.data.schedule.filter(function(s){ return s.location_id===id; })) : null;
   return store.write("deleteLocation", {id:id}, function(){
     store.data.locations = store.data.locations.filter(function(l){ return l.id!==id; });
     store.data.schedule  = store.data.schedule.filter(function(s){ return s.location_id!==id; });
-  });
+  }).then(function(){ return item; });
 }
 
 /* ==========================================================================
@@ -4892,6 +4953,13 @@ document.addEventListener("click", function(ev){
     }
     case "hide-visited": ui.hideVisited=!ui.hideVisited; save(LS.ui,ui); render(); return;
     case "no-link": ui.noLink=!ui.noLink; save(LS.ui,ui); render(); return;
+    case "loc-swipe-del": deletePlace(t.dataset.lid); return;
+    case "bin": binSheet(); return;
+    case "bin-restore": restorePlace(t.dataset.bid).then(function(it){
+        if(!it) return; render(); binSheet();
+        var n=it.stops.length; toast("Restored "+(it.loc.name_en||it.loc.name_zh)+(n ? " to "+n+" day"+(n>1?"s":"") : "")); });
+      return;
+    case "bin-forget": binDrop(t.dataset.bid); binSheet(); return;
     case "on-plan": ui.onPlan=!ui.onPlan; save(LS.ui,ui); render(); return;
     case "mild": ui.mild=!ui.mild; save(LS.ui,ui); render(); return;
     case "add-today": {
@@ -5000,8 +5068,7 @@ document.addEventListener("click", function(ev){
       return;
     }
     case "delete-location": {
-      if(!window.confirm("Delete this place and remove it from every day?")) return;
-      deleteLocation(lid).then(function(){ closeSheet(); render(); toast("Deleted"); });
+      closeSheet(); deletePlace(lid);
       return;
     }
 
@@ -5092,7 +5159,7 @@ document.querySelectorAll("nav.tabs button").forEach(function(b){
 });
 window.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSheet(); });
 
-/* ---------- Prep: swipe a row or a section title left to show Delete ----------
+/* ---------- Prep and Locations: swipe a row (or a Prep section title) left to show Delete ----------
    Rows carry touch-action:pan-y, so an up-and-down move stays a scroll and a
    sideways one reaches here. One row is open at a time; a tap anywhere else
    closes it, and the click a swipe ends with is swallowed so it doesn't tick
@@ -5117,7 +5184,7 @@ window.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSheet(
     eat=false;
     if(open && !document.contains(open)) open=null;
     if(e.pointerType==="mouse" && e.button!==0) return;
-    var r=e.target.closest && e.target.closest("#view-prep [data-swipe]");
+    var r=e.target.closest && e.target.closest("#view-prep [data-swipe], #view-places [data-swipe]");
     if(e.target.closest && e.target.closest(".ckdel")){ row=null; return; }
     if(open && open!==r){ shut(open); swallow(); row=null; return; }   // first tap just closes it
     if(!r){ row=null; return; }
