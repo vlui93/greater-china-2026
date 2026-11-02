@@ -1,0 +1,34 @@
+Sure! Here's a plan for your trip, in the format you asked for:
+
+```json
+{
+ "kind": "trip-ai-plan", "version": 1,
+ "places": [
+  {"name_en": "Test Harbour Noodles", "name_zh": "測試海港麵家", "city": "Hong Kong", "type": "restaurant", "area": "Central",
+   "background": "An invented noodle shop for the tests.", "what_to_do": "", "what_to_order": ["Wonton noodles", "Beef brisket"],
+   "what_to_buy": "", "spice": "none", "mild_dishes": "", "hours": "check", "booking": "Walk in", "getting_there": "", "tickets": "",
+   "source": "https://example.com/test-noodles"},
+  {"name_en": "Test Peak", "name_zh": "測試山頂", "city": "Hong Kong", "type": "attraction", "source": "https://example.com/peak"},
+  {"name_en": "Test Hotpot Garden", "name_zh": "测试火锅园", "city": "Chengdu", "type": "Food", "spice": "MILD",
+   "mild_dishes": "clear-broth pot, steamed fish", "source": ""},
+  {"name_en": "Test Tea Village", "name_zh": "测试茶村", "city": "Test Mountain Town", "type": "attraction",
+   "background": "An invented tea village.", "source": "https://example.com/tea", "lat": 30.1, "lng": 103.2}
+ ],
+ "days": [
+  {"date": "2026-10-18", "label": "Kowloon food day", "load": "light", "stops": [
+    {"place": "Test Peak", "time": "9:00", "optional": false, "note": "early"},
+    {"place": "Test Harbour Noodles", "time": "12:30", "optional": false, "note": "lunch"},
+    {"place": "Nowhere Cafe", "time": "15:00"}]},
+  {"date": "2026-10-28", "label": "", "load": "heavy", "stops": [
+    {"place": "Test Hotpot Garden", "time": "19:00", "optional": true, "note": "mild alternative"},
+    {"place": "Test Tea Village", "time": "10:00"}]},
+  {"date": "2030-01-01", "label": "Not in the trip", "stops": [{"place": "Test Peak", "time": "10:00"}]},
+ ],
+ "tasks": [
+  {"text": "Book the test cable car", "due": "2026-10-10", "section": "Bookings"},
+  {"text": "Check the tea village opening", "due": "soon"}
+ ]
+}
+```
+
+Let me know if you'd like changes!

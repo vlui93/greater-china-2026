@@ -641,6 +641,12 @@ a.btn{text-decoration:none}
 .implist input{margin-top:3px;width:18px;height:18px;flex:none}
 .implist .en{font-weight:650;font-size:14px}
 .implist .mt{font-size:12.5px;color:var(--ink-3)}
+.impr{display:flex;gap:10px;align-items:flex-start;padding:8px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);margin-top:6px;font-size:13.5px}
+.impr.muted{opacity:.6}
+.impr input{margin-top:2px;width:18px;height:18px;flex:none}
+.impday{margin:10px 0 4px}
+.impdh{font-size:13.5px;display:flex;flex-wrap:wrap;align-items:center}
+.pill.ai{color:#6b4bb8;border-color:color-mix(in srgb,#6b4bb8 40%,var(--line))}
 /* Travel on the day plan: departures and arrivals between the stops */
 .travel{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin:0 0 12px;border-radius:var(--radius);
   background:color-mix(in srgb,var(--accent) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line))}
@@ -994,7 +1000,10 @@ function spiceOf(l){
   return "";
 }
 var SPICE_LABEL={ none:"Not spicy", mild:"Mild options", spicy:"Spicy" };
-function spicePill(l){ var k=spiceOf(l); return k ? '<span class="pill spice-'+k+'">'+SPICE_LABEL[k]+'</span>' : ""; }
+function spicePill(l){ var k=spiceOf(l); return (k ? '<span class="pill spice-'+k+'">'+SPICE_LABEL[k]+'</span>' : "")+aiPill(l); }
+/** Imported from an AI reply and not checked yet: delete the "AI draft" line
+ *  from the notes once it has been. */
+function aiPill(l){ return /^\s*AI draft\b/im.test(l && l.notes || "") ? ' <span class="pill ai">AI draft</span>' : ""; }
 function toggleVisited(id){
   var l=store.loc(id); if(!l) return Promise.resolve(false);
   var v=isVisited(l) ? "no" : todayISO();
@@ -2490,7 +2499,7 @@ function renderDays(){
   $("#viewTitle").textContent="All Days · 每日行程";
   $("#viewSub").textContent=tripRange()+" · "+DAYS.length+" days";
   var html = statusBar()+
-    '<div class="toolrow"><button class="btn sm" data-act="ics">Add to calendar</button>'+
+    '<div class="toolrow"><button class="btn sm primary" data-act="ai-plan">Plan with AI</button><button class="btn sm" data-act="ics">Add to calendar</button>'+
     '<button class="btn sm" data-act="print">Print itinerary</button></div>'+
     '<div class="loclist">'+DAYS.map(function(d,i){
     var stops=store.dayStops(d);
@@ -2634,7 +2643,7 @@ function placeResults(q){
           '<div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
           '<div class="mt">'+(isVisited(l)?'<b style="color:var(--ok)">Been · 已去</b> · ':'')+
             (planText(ix[l.id]) ? '<b>'+esc(planText(ix[l.id]))+'</b> · ' : '')+esc(l.city)+' · '+esc(l.type)+' · '+esc(mapLinkOf(l) ? mapLinkApp(mapLinkOf(l))+' link' : u.app)+
-            (spiceOf(l) ? ' '+spicePill(l) : '')+'</div>'+
+            (spicePill(l) ? ' '+spicePill(l) : '')+'</div>'+
         '</button>'+
         visitBtn(l)+
         '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(l.id)+'" aria-label="Navigate">'+IC.nav+'</button>'+
@@ -3114,7 +3123,7 @@ function locationDetail(id){
       '<div class="ph">'+esc(l.type)+(TYPE_ZH[l.type]?' · <span class="zh">'+TYPE_ZH[l.type]+'</span>':'')+'</div>'+
       '<div class="hz zh">'+escz(l.name_zh)+'</div>'+
       '<div class="he">'+esc(l.name_en)+'</div>'+
-      '<div class="hm">'+esc(l.city)+' · '+esc(l.type)+' · opens in '+esc(u.app)+(spiceOf(l) ? ' '+spicePill(l) : '')+'</div>'+
+      '<div class="hm">'+esc(l.city)+' · '+esc(l.type)+' · opens in '+esc(u.app)+(spicePill(l) ? ' '+spicePill(l) : '')+'</div>'+
     '</div>'+
     (cr ? '<div class="credit">Photo: <a href="'+esc(cr.href)+'" target="_blank" rel="noopener">'+esc(cr.text)+'</a></div>' : '')+
     '<div class="navrow">'+
@@ -4807,6 +4816,11 @@ document.addEventListener("click", function(ev){
     case "hide-visited": ui.hideVisited=!ui.hideVisited; save(LS.ui,ui); render(); return;
     case "no-link": ui.noLink=!ui.noLink; save(LS.ui,ui); render(); return;
     case "loc-swipe-del": deletePlace(t.dataset.lid); return;
+    case "ai-plan": withExtras(function(){ aiForm(); }); return;
+    case "ai-copy": aiCopy(); return;
+    case "ai-read": aiRead(); return;
+    case "ai-back": aiForm(); return;
+    case "ai-import": aiImport(); return;
     case "bin": binSheet(); return;
     case "bin-restore": restorePlace(t.dataset.bid).then(function(it){
         if(!it) return; render(); binSheet();

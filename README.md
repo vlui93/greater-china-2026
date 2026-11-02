@@ -481,6 +481,18 @@ The Chinese name is required for places in mainland China, Hong Kong and Macau, 
 
 ## 14. Reuse, export and paste-a-booking
 
+### Plan with any AI
+
+All Days → **Plan with AI** drafts a trip with whichever AI app you have — ChatGPT, Gemini, Apple Intelligence, Claude — with no key and nothing sent anywhere by the app itself.
+
+1. **Fill in the form**: the days to plan (a city at a time keeps replies short), cities and dates (filled in from the plan to start with), what's booked, must-dos, interests, and any Xiaohongshu or blog posts to use as leads. The *You* part — who's going, languages, spice, diet, budget, pace — is remembered for every trip.
+2. **Copy the prompt** into the AI app. It asks for JSON only, a source for every fact, no coordinates, the famous sights first, a meal for every slot with an alternative, the places already in the plan (so they aren't suggested again), and your pace rules.
+3. **Paste the reply** back and tap **Read the reply**. Chat around the data, code fences and a trailing comma are fine; a reply that was cut off says so.
+4. **Check and import.** The preview counts new places and spots ones already in the trip, flags cities the trip doesn't have yet, missing sources, stops at places that aren't anywhere, and days outside the trip. Untick what you don't want — unticking a place unticks its stops. **Import ticked** adds the places, their stops (alternatives as `OPTIONAL — …`), day names with *light*, *heavy* or *flex*, and checklist tasks.
+
+Every imported place starts its notes with **AI draft — check before relying on it**, plus its spice level, hours, booking note and **Source**, and shows an *AI draft* tag in Locations until that line is deleted (*Edit this place*). Pins are never taken from an AI reply — they're usually made up; paste a map link into the place, or use *Search* in its edit form.
+
+
 ### Places from other trips
 
 Every trip's places are on each phone, so **Locations → Other trips** lists the places from your other trips (search in English or 中文). **Copy** puts a new place into the open trip with all its notes, tickets and photo; editing the copy leaves the original alone. Places already in this trip show **Here**. The same list opens from **+ Add a stop** → *Copy a place from another trip*.
