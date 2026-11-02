@@ -726,8 +726,8 @@ a.btn{text-decoration:none}
         placeholder="the API_KEY you set in Code.gs"></div>
     <p class="gerr" id="gateErr" role="alert"></p>
     <button class="btn primary block" id="gateBtn" data-act="gate-connect">Connect</button>
-    <p class="ghint">Both are kept on this phone only, never in the repo. Setting up the
-      Sheet takes about ten minutes and is written up in the project README.</p>
+    <p class="ghint">Got an invite? Open its link, or paste the whole message into the
+      first box. Both are kept on this phone only, never in the repo.</p>
   </div>
 </div>
 
@@ -1183,7 +1183,7 @@ var store = {
     }).then(function(j){
       if(!j || !j.ok){
         var m=(j && j.error) || "Request failed";
-        throw callError(/API key|not configured/i.test(m) ? "key" : "server", m);
+        throw callError(/API key|not configured|key has been removed/i.test(m) ? "key" : ACCESS_RE.test(m) ? "access" : "server", m);
       }
       self.online = true; self.lastError = null;
       return j.data;
@@ -1210,6 +1210,10 @@ var store = {
         // An action this backend predates would sit at the head of the queue
         // forever and hold up everything behind it. Drop it; the phone keeps
         // the change and the next sync against an upgraded backend uploads it.
+        if(err && err.kind==="access"){
+          self.queue.shift(); save(LS.queue, self.queue); self.refused=(self.refused||0)+1;
+          toast(syncProblem(err), 6000); return step();
+        }
         if(!isUnknownAction(err)) throw err;
         self.queue.shift(); save(LS.queue, self.queue); return step();
       });
@@ -1232,6 +1236,13 @@ var store = {
       updateStatus();
     }).catch(function(err){
       if(isUnknownAction(err)) return;   // kept on this phone; uploaded once the backend knows it
+      if(err && err.kind==="access"){
+        // Refused for this key: it would never go, so it isn't queued — say so,
+        // and put the Sheet's version back on screen
+        toast(syncProblem(err), 6000);
+        setTimeout(function(){ self.sync({ quiet:true }).catch(function(){}); }, 50);
+        return;
+      }
       self.enqueue(action,payload);
     });
     this.lastWrite = Promise.all([this.lastWrite, p]);
@@ -1287,7 +1298,11 @@ var store = {
                        cities: Array.isArray(d.cities) ? d.cities : raw.cities||[],
                        days:   Array.isArray(d.days) ? d.days : raw.days||[],
                        bin:    Array.isArray(d.bin) ? d.bin : raw.bin||[],
-                       index:  d.places_per_trip || null };
+                       index:  d.places_per_trip || null,
+                       me:     d.me || null,
+                       default_trip: d.default_trip || "" };
+          // A key that isn't on the trip this phone had open lands on one it is
+          if(d.scope && d.scope.trip && !allTrips().some(function(t){ return t.id===ui.trip; })){ ui.trip=d.scope.trip; save(LS.ui, ui); }
           self.data = null;   // rebuilt from raw: persist must not fold the old copy back in
           applyTrip();
           // The trips list can make a different trip the open one (first connect,
@@ -1323,10 +1338,44 @@ function isUnknownAction(err){ return /Unknown action/.test(String(err && err.me
  *  answered, but not the trip), key (the API key), server (the script's own
  *  error). The message stays the server's, which other code matches on. */
 function callError(kind, msg){ var e=new Error(msg); e.kind=kind; return e; }
+/* The backend refusing a change this key may not make (another trip, view
+   only, the owner's job). Such a change is dropped from the queue — it would
+   never go — and the next sync puts the Sheet's version back on screen. */
+var ACCESS_RE = /can't see that trip|View only|Only the trip owner|isn't on any trip/i;
 /** Why a sync failed, in words that say what to do. Every failure used to
  *  read "Offline", so a wrong key after redeploying looked like no signal. */
+/** An invite — a link with #join=…, or the whole invite message — as {u,k,n}. */
+function inviteFrom(text){
+  var m=/#join=([A-Za-z0-9_-]+)/.exec(String(text||"")); if(!m) return null;
+  try{
+    var b=m[1].replace(/-/g,"+").replace(/_/g,"/"); while(b.length%4) b+="=";
+    var j=JSON.parse(decodeURIComponent(escape(atob(b))));
+    return j && j.u && j.k ? j : null;
+  }catch(e){ return null; }
+}
+/** Opening an invite link: fill in the connection, after asking. The link is
+ *  cleared from the address bar first, so the key doesn't stay in history. */
+function joinFromLink(){
+  if(!/^#join=/.test(location.hash||"")) return false;
+  var j=inviteFrom(location.hash);
+  try{ history.replaceState(null, "", location.pathname+location.search); }catch(e){ location.hash=""; }
+  if(!j){ toast("That invite link is damaged — ask for a new one", 6000); return false; }
+  if(store.cfg.url===j.u && store.cfg.key===j.k) return false;
+  var had=store.configured() || store.hasData();
+  var who=j.n || "the invited guest";
+  if(!window.confirm(had ? "Switch this phone to "+who+"'s access? Its copy of the trip is replaced"+
+      (store.queue.length ? ", and "+store.queue.length+" unsent change"+(store.queue.length===1?" is":"s are")+" dropped" : "")+"."
+      : "Connect this phone as "+who+"?")) return false;
+  store.cfg={ url:j.u, key:j.k }; save(LS.cfg, store.cfg);
+  if(had){ store.queue=[]; save(LS.queue, []); store.raw=JSON.parse(JSON.stringify(EMPTY)); save(LS.cache, store.raw); ui.trip=""; save(LS.ui, ui); store.data=null; applyTrip(); }
+  render();
+  store.sync({ quiet:true }).then(function(){ toast("Connected as "+who); }, function(e){ applyGate(); toast(syncProblem(e), 8000); });
+  return true;
+}
 function syncProblem(err){
   var k=err && err.kind, m=String(err && err.message || "");
+  if(k==="key" && /has been removed/i.test(m)) return "Can't sync: this key has been removed — ask the trip owner for a new invite.";
+  if(k==="access") return "Not saved: "+m;
   if(k==="key") return /not configured/i.test(m)
     ? "Can't sync: Code.gs has no API key. Put yours back on the API_KEY line, then Deploy › Manage deployments › edit › New version."
     : "Can't sync: the API key in ⚙ Settings doesn't match the one in Code.gs.";
@@ -1395,13 +1444,21 @@ function allTrips(){
   return list.length ? list : [LEGACY_TRIP];
 }
 function defaultTripId(){
+  // The backend says which trip blank rows belong to — it may be one this key
+  // isn't on (then its rows never arrive, and new rows here get tagged)
+  if(store.raw && store.raw.default_trip) return store.raw.default_trip;
   var t=allTrips(), d=t.filter(function(x){ return x.is_default && !/^(0|false)$/i.test(x.is_default); })[0];
   return (d||t[0]).id;
 }
+/** Who this phone's key is. With a backend from before personal keys (no
+ *  "me"), the one key is the owner's. */
+function whoAmI(){ return (store.raw && store.raw.me) || { owner:true, role:"owner", name:"" }; }
+function isOwner(){ return !!whoAmI().owner; }
+function isViewer(){ return whoAmI().role==="viewer"; }
 function tripOf(row){ return (row && row.trip_id) || defaultTripId(); }
 function curTrip(){
   var t=allTrips(), want=(typeof ui!=="undefined" && ui && ui.trip) || "";
-  return t.filter(function(x){ return x.id===want; })[0] || t.filter(function(x){ return x.id===defaultTripId(); })[0];
+  return t.filter(function(x){ return x.id===want; })[0] || t.filter(function(x){ return x.id===defaultTripId(); })[0] || t[0];
 }
 var TRIP_ACTIONS = { saveBooking:1, saveLocation:1, saveScheduleEntry:1, saveChecklistItem:1 };
 /** New rows go into the open trip. The default trip's stay untagged, as before. */
@@ -1714,6 +1771,7 @@ function updateStatus(){
           : store.online ? (store.queue.length ? store.queue.length+" queued" : "Synced")
           : stuck ? "Can't sync"+(store.queue.length ? " · "+store.queue.length+" waiting" : "")
           : (store.queue.length ? store.queue.length+" waiting to send" : "Offline");
+  if(store.raw && store.raw.me && store.raw.me.role==="viewer") txt+=" · view only";
   var html = '<span class="statusdot '+cls+'"></span>'+esc(txt);
   document.querySelectorAll(".syncbadge").forEach(function(b){ b.innerHTML = html; });
   var stale = storageText() || staleText();
@@ -3672,7 +3730,7 @@ function settingsForm(){
     '</div>'+
     (store.lastError && store.lastError.kind ? '<div class="loclist" style="margin-top:12px"><div class="locrow syncerr"><div class="lb"><div class="en">Last sync</div>'+
       '<div class="mt">'+esc(syncProblem(store.lastError))+'</div></div></div></div>' : '')+
-    tripsSectionHTML()+citiesSectionHTML()+
+    peopleSectionHTML()+tripsSectionHTML()+citiesSectionHTML()+
     '<div class="section-title">Data</div>'+
     '<div class="loclist">'+
       '<div class="locrow"><div class="lb"><div class="en">Pending changes</div>'+
@@ -3707,6 +3765,18 @@ function settingsForm(){
 /* ---------- trips and cities (Settings) ---------- */
 var NEEDS_UPGRADE = '<p class="blurb small muted">Adding trips and cities needs the one-off update to the Sheet’s '+
   'script — see the README, section 12. Until then this phone has the one trip.</p>';
+function peopleSectionHTML(){
+  if(!store.configured() || !(store.raw && store.raw.me)) return "";
+  var me=whoAmI();
+  if(!me.owner){
+    var n=me.trips==="*" ? "every trip" : (me.trips||[]).length+" trip"+((me.trips||[]).length===1?"":"s");
+    return '<div class="section-title">Signed in</div><p class="blurb small">As <b>'+esc(me.name||"a guest")+'</b> · '+
+      (me.role==="viewer" ? "view only" : "can edit")+' · '+esc(n)+'. The trip owner decides who sees which trip.</p>';
+  }
+  return '<div class="section-title">People</div>'+
+    '<p class="blurb small muted" style="margin:-2px 0 10px">Who can see which trip. Each person gets their own key; remove someone and only their access stops.</p>'+
+    '<div class="formactions" style="margin-top:0"><button class="btn" data-act="people">Manage people</button></div>';
+}
 function isArchived(t){ return /^(1|true|yes)$/i.test(String(t && t.archived || "")); }
 /** The backend has the Trips tab's archived column. */
 function canArchive(){ return store.supportsTrips && (store.raw.trips||[]).some(function(t){ return "archived" in t; }); }
@@ -3728,9 +3798,9 @@ function tripsSectionHTML(){
       var open=t.id===TRIP.id, n=placesIn(t), arch=isArchived(t);
       return '<div class="locrow"><div class="lb"><div class="en">'+esc(t.name)+(t.name_zh?' <span class="zh">'+escz(t.name_zh)+'</span>':'')+'</div>'+
         '<div class="mt">'+esc(rangeText(t.start,t.end))+(n!==null?' · '+n+' place'+(n===1?'':'s'):'')+(open?' · open now':'')+'</div></div>'+
-        (open ? (store.supportsTrips ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
+        (open ? (store.supportsTrips && isOwner() ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
               : '<button class="btn sm primary" data-act="trip-open" data-tid="'+esc(t.id)+'">Open</button>')+
-        (!open && canArchive() && t.id!==defaultTripId()
+        (!open && canArchive() && isOwner() && t.id!==defaultTripId()
           ? '<button class="btn sm ghost" data-act="'+(arch?'trip-unarchive':'trip-archive')+'" data-tid="'+esc(t.id)+'">'+(arch?'Unarchive':'Archive')+'</button>' : '')+
         '</div>';
     };
@@ -3738,7 +3808,7 @@ function tripsSectionHTML(){
   var gone=list.filter(function(t){ return isArchived(t) && t.id!==TRIP.id; });
   return '<div class="section-title">Trips</div><div class="loclist">'+live.map(row).join("")+'</div>'+
     (gone.length ? '<details class="archived"><summary>Archived trips ('+gone.length+')</summary><div class="loclist">'+gone.map(row).join("")+'</div></details>' : '')+
-    (store.supportsTrips ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="trip-new">+ New trip</button></div>' : NEEDS_UPGRADE);
+    (store.supportsTrips ? (isOwner() ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="trip-new">+ New trip</button></div>' : '') : NEEDS_UPGRADE);
 }
 function citiesSectionHTML(){
   var here=cityOptions(), list=cityList().slice().sort(function(a,b){
@@ -4994,6 +5064,12 @@ document.addEventListener("click", function(ev){
     case "trip-archive": setArchived(t.dataset.tid, true); return;
     case "trip-unarchive": setArchived(t.dataset.tid, false); return;
     case "trip-new": tripForm(null); return;
+    case "people": withExtras(function(){ peopleSheet(); }); return;
+    case "person-new": personForm(null); return;
+    case "person-edit": personForm(t.dataset.mid); return;
+    case "person-save": savePerson(t.dataset.mid); return;
+    case "person-invite": copyInvite(t.dataset.mid); return;
+    case "person-remove": removePerson(t.dataset.mid); return;
     case "trip-edit": tripForm(t.dataset.tid); return;
     case "trip-save": saveTripForm(t.dataset.tid); return;
     case "trip-delete": deleteTrip(t.dataset.tid); return;
@@ -5150,7 +5226,20 @@ window.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSheet(
 /* ---------- boot ---------- */
 store.init();
 setView(ui.view||"today");
-if(store.configured()){
+// Pasting a whole invite into the URL box fills in both boxes
+["#g_url","#s_url"].forEach(function(sel){
+  document.addEventListener("input", function(e){
+    if(!e.target.matches || !e.target.matches(sel)) return;
+    var j=inviteFrom(e.target.value); if(!j) return;
+    e.target.value=j.u; var k=$(sel==="#g_url" ? "#g_key" : "#s_key"); if(k) k.value=j.k;
+    toast("Invite read"+(j.n ? " — connecting as "+j.n : "")+". Tap "+(sel==="#g_url"?"Connect":"Save & connect")+".");
+  });
+});
+// An invite opened while the app is already open in this tab changes only the
+// part after #, which doesn't reload the page
+window.addEventListener("hashchange", function(){ joinFromLink(); });
+if(joinFromLink()){ /* connecting from an invite */ }
+else if(store.configured()){
   if(gateNeeded()){ $("#gateBtn").disabled=true; $("#gateBtn").textContent="Connecting…"; }
   store.sync({quiet:true}).catch(function(){ applyGate(); });
 }

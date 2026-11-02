@@ -99,7 +99,7 @@ function backend(SS, which, seed) {
   const box = { SpreadsheetApp: { getActive: () => SS },
     ContentService: { MimeType: { JSON: 'j' }, createTextOutput: t => ({ _t: t, setMimeType() { return this; } }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    Utilities: { formatDate: d => d.toISOString().slice(0, 10) }, Logger: { log() {} }, console,
+    Utilities: { formatDate: d => d.toISOString().slice(0, 10), getUuid: () => require('crypto').randomUUID() }, Logger: { log() {} }, console,
     UrlFetchApp: { fetch(u) { const r = NET[u] || [404, {}, '']; return { getResponseCode: () => r[0], getHeaders: () => r[1], getContentText: () => r[2] }; } } };
   vm.createContext(box);
   vm.runInContext(injectSeed(fs.readFileSync(CODE[which || 'current'], 'utf8'), seed || trip()), box);

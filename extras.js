@@ -366,9 +366,9 @@ function aiForm(){
     tick("inc_guide",v.inc.guide,"Background, what to do, order and buy for each place")+
     tick("inc_tasks",v.inc.tasks,"Things to book ahead, for the checklist")+
     '<div class="formactions" style="margin-top:14px"><button class="btn primary" data-act="ai-copy">Copy the prompt</button></div>'+
-    '<textarea id="ai_prompt" readonly style="min-height:90px;font-size:12px;margin-top:10px" aria-label="The prompt"></textarea>'+
+    '<div class="field" style="margin-top:10px"><textarea id="ai_prompt" readonly style="min-height:90px;font-size:12px" aria-label="The prompt"></textarea></div>'+
     '<div class="section-title">4 · Paste the reply</div>'+
-    '<textarea id="ai_reply" style="min-height:110px;font-size:12.5px" placeholder="Paste the AI\'s whole reply here"></textarea>'+
+    '<div class="field"><textarea id="ai_reply" style="min-height:110px;font-size:12.5px" placeholder="Paste the AI\'s whole reply here"></textarea></div>'+
     '<div class="formactions" style="margin-top:10px"><button class="btn primary" data-act="ai-read">Read the reply</button></div>'+
     '<div id="ai_err" class="hint" style="color:var(--warn)"></div></div>';
   openSheet("Plan with AI", html);
@@ -549,4 +549,113 @@ function aiImport(){
   toast("Imported "+n.p+" place"+(n.p===1?"":"s")+", "+n.s+" stop"+(n.s===1?"":"s")+(n.t?", "+n.t+" task"+(n.t===1?"":"s"):"")+(n.d?", "+n.d+" day name"+(n.d===1?"":"s"):"")+
     (n.skip?" — "+n.skip+" stop"+(n.skip===1?"":"s")+" left out with their place":""), 6000);
   if(store.configured()) store.flush().then(updateStatus).catch(function(){});
+}
+
+/* ==========================================================================
+   People (the owner's ⚙ Settings › People)
+   Each person gets their own key from the backend, for the trips ticked and
+   either "can edit" or "view only". Their invite is a link to this app with
+   the connection after # (the part of a link no server ever sees); opening it
+   connects their phone after asking. Removing someone stops their key at
+   once. All of this needs a connection: nothing about people is kept on the
+   phone except while this sheet is open.
+   ========================================================================== */
+var people=[];
+function peopleSheet(){
+  openSheet("People", '<p class="blurb small muted" style="margin:12px 0">Loading…</p>');
+  store.call("members").then(function(d){ people=(d && d.members) || []; peopleList(); }, function(err){
+    $("#sheetBody").innerHTML='<div class="card empty" style="margin-top:12px">'+
+      (err && err.kind && err.kind!=="net" ? esc(syncProblem(err)) : "People can only be managed with a connection.")+'</div>';
+  });
+}
+function tripNames(trips){
+  if(String(trips).trim()==="*") return "Every trip, including new ones";
+  var ids=String(trips||"").split(/\s*,\s*/).filter(Boolean);
+  return ids.length ? ids.map(function(id){ return tripName(id); }).join(", ") : "No trips yet";
+}
+function peopleList(){
+  var live=people.filter(function(m){ return !m.revoked; }), gone=people.filter(function(m){ return m.revoked; });
+  var row=function(m){
+    return '<div class="locrow"><div class="lb"><div class="en">'+esc(m.name)+'</div>'+
+      '<div class="mt">'+(m.role==="viewer"?"View only":"Can edit")+' · '+esc(tripNames(m.trips))+'</div></div>'+
+      '<button class="btn sm primary" data-act="person-invite" data-mid="'+esc(m.id)+'">Invite</button>'+
+      '<button class="btn sm ghost" data-act="person-edit" data-mid="'+esc(m.id)+'">Edit</button></div>';
+  };
+  openSheet("People",
+    '<p class="blurb small muted" style="margin:12px 0">You see every trip. Everyone else sees only the trips ticked for them. '+
+      '<b>Don\'t share the Google Sheet itself</b> — anyone with the Sheet sees all of it.</p>'+
+    (live.length ? '<div class="loclist">'+live.map(row).join("")+'</div>' : '<div class="card empty">Nobody added yet.</div>')+
+    '<div class="formactions"><button class="btn primary" data-act="person-new">+ Add person</button></div>'+
+    (gone.length ? '<details class="archived"><summary>Removed ('+gone.length+')</summary><div class="loclist">'+gone.map(function(m){
+      return '<div class="locrow"><div class="lb"><div class="en">'+esc(m.name)+'</div><div class="mt">Removed '+esc(fmtDate(String(m.revoked).slice(0,10),false))+'</div></div></div>';
+    }).join("")+'</div></details>' : ''));
+}
+function personForm(id){
+  var m=id ? people.filter(function(x){ return x.id===id; })[0] : null;
+  var all=String(m && m.trips || "").trim()==="*", mine=String(m && m.trips || "").split(/\s*,\s*/);
+  var trips=allTrips().slice().sort(function(a,b){ return a.start<b.start?-1:1; });
+  openSheet(m ? "Edit "+m.name : "Add a person",
+    '<div style="height:12px"></div>'+
+    '<div class="field"><label>Name</label><input id="pp_name" value="'+esc(m ? m.name : "")+'" placeholder="Sam"></div>'+
+    '<div class="field"><label>They can</label><select id="pp_role">'+
+      '<option value="member"'+(!m||m.role!=="viewer"?" selected":"")+'>See and edit their trips</option>'+
+      '<option value="viewer"'+(m&&m.role==="viewer"?" selected":"")+'>Only look</option></select></div>'+
+    '<div class="field"><label>Trips</label><div class="implist" style="margin-top:4px">'+
+      trips.map(function(t){
+        return '<label><input type="checkbox" class="pp_trip" value="'+esc(t.id)+'"'+(all||mine.indexOf(t.id)>=0?" checked":"")+'><span><span class="en">'+esc(t.name)+'</span><span class="mt"> · '+esc(rangeText(t.start,t.end))+'</span></span></label>';
+      }).join("")+
+      '<label><input type="checkbox" id="pp_all"'+(all?" checked":"")+'><span><span class="en">Every trip</span><span class="mt"> · including ones you add later</span></span></label>'+
+    '</div></div>'+
+    '<div class="formactions"><button class="btn primary" data-act="person-save" data-mid="'+esc(m ? m.id : "")+'">'+(m ? "Save" : "Add and get invite")+'</button>'+
+      (m ? '<button class="btn danger" data-act="person-remove" data-mid="'+esc(m.id)+'">Remove</button>' : '')+'</div>');
+}
+function savePerson(id){
+  var name=$("#pp_name").value.trim();
+  if(!name){ toast("Give them a name"); return; }
+  var trips = $("#pp_all").checked ? "*" : [].slice.call(document.querySelectorAll(".pp_trip")).filter(function(c){ return c.checked; }).map(function(c){ return c.value; }).join(",");
+  if(!trips){ toast("Tick at least one trip"); return; }
+  var first = Promise.resolve();
+  // A Sheet still on its one built-in trip gets that trip's row first, so the
+  // backend knows the trip a person is being given
+  if(!(store.raw.trips||[]).length){
+    var lt={}; ["id","name","name_zh","start","end","tz","zh_script","is_default","notes"].forEach(function(k){ lt[k]=LEGACY_TRIP[k]||""; });
+    lt.updated=nowISO(); first=store.call("saveTrip", lt).then(function(){ store.raw.trips=[lt]; });
+  }
+  first.then(function(){ return store.call("saveMember", { id:id||"", name:name, trips:trips, role:$("#pp_role").value }); }).then(function(d){
+    var m=d && d.member; if(!m) return;
+    people=people.filter(function(x){ return x.id!==m.id; }).concat([m]);
+    if(id){ peopleList(); toast("Saved"); } else inviteSheet(m);
+  }, function(err){ toast(err && err.kind ? syncProblem(err) : "Couldn't save — check the connection", 6000); });
+}
+function inviteLink(m){
+  var j=JSON.stringify({ u:store.cfg.url, k:m.key, n:m.name });
+  var b=btoa(unescape(encodeURIComponent(j))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+  return location.origin+location.pathname+"#join="+b;
+}
+function inviteText(m){
+  return "Hi "+m.name+" — this opens our trip app on your phone, connected as you:\n"+inviteLink(m)+
+    "\n\nAlready have the app on your home screen? Copy this whole message and paste it into the app's first box (Web App URL)."+
+    "\n\nKeep it to yourself: anyone with this link sees what you see.";
+}
+function inviteSheet(m){
+  openSheet("Invite "+m.name,
+    '<p class="blurb small" style="margin:12px 0"><b>'+esc(m.name)+'</b> can '+(m.role==="viewer"?"look at":"see and edit")+': '+esc(tripNames(m.trips))+'.</p>'+
+    '<p class="blurb small muted">Send this privately (WeChat, WhatsApp, Messages). Anyone with it sees what '+esc(m.name)+' sees; remove '+esc(m.name)+' here to stop it.</p>'+
+    '<div class="field"><textarea id="pp_invite" readonly style="min-height:170px;font-size:13px">'+esc(inviteText(m))+'</textarea></div>'+
+    '<div class="formactions"><button class="btn primary" data-act="person-invite" data-mid="'+esc(m.id)+'">Copy invite</button><button class="btn" data-act="people">Done</button></div>');
+}
+function copyInvite(id){
+  var m=people.filter(function(x){ return x.id===id; })[0]; if(!m) return;
+  if(!$("#pp_invite")) { inviteSheet(m); }
+  var t=inviteText(m), done=function(){ toast("Invite copied — send it to "+m.name+" privately", 4000); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function(){ $("#pp_invite").select(); try{ document.execCommand("copy"); done(); }catch(e){ toast("Select the invite and copy it"); } });
+  else { $("#pp_invite").select(); try{ document.execCommand("copy"); done(); }catch(e){ toast("Select the invite and copy it"); } }
+}
+function removePerson(id){
+  var m=people.filter(function(x){ return x.id===id; })[0]; if(!m) return;
+  if(!window.confirm("Remove "+m.name+"? Their key stops working straight away. To let them back in later, add them again for a new invite.")) return;
+  store.call("revokeMember", { id:id }).then(function(d){
+    people=people.map(function(x){ return x.id===id ? Object.assign({}, x, d.member) : x; });
+    peopleList(); toast(m.name+" removed");
+  }, function(err){ toast(err && err.kind ? syncProblem(err) : "Couldn't remove — check the connection", 6000); });
 }

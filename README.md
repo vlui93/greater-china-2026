@@ -407,6 +407,18 @@ One Sheet holds every trip. The app shows one at a time; switch in ⚙ Settings 
 
 **Archiving.** ⚙ Settings → Trips → **Archive** moves a finished trip under *Archived trips*, out of the list; it stays in the Sheet (`archived` = 1 in Trips) and **Unarchive** brings it back. The default trip and the open one can't be archived.
 
+### Who sees which trip
+
+The key in Code.gs is the **owner's**: it sees every trip and is the only one that can add trips and manage people. Everyone else gets **their own key**, for the trips you tick:
+
+1. ⚙ Settings → **People** → **+ Add person**: a name, *See and edit their trips* or *Only look*, and the trips (or *Every trip*, which includes ones added later).
+2. **Copy invite** and send it privately. The link opens the app connected as them, after asking; the key sits after the `#`, which no server ever sees, and is cleared from the address bar as soon as the app reads it. If they already have the app on the home screen (which on an iPhone keeps its own storage, separate from Safari), they paste the whole message into the connect screen's first box.
+3. To stop someone: People → **Edit** → **Remove**. Their key stops at once; nobody else's changes.
+
+The backend checks every request against the key's trips: a person's phone receives only their trips' places, stops, bookings, checklist, day names, bin and place counts, and any change to another trip — or moving a row into or out of one — is refused (*Not saved: This key can't see that trip*), and so is every change from a view-only key. People are kept in the Sheet's **Members** tab.
+
+**Moving over from one shared key:** after deploying, add each person and send their invite; then change `API_KEY` in Code.gs to a new long random string, deploy a new version, and enter the new key in ⚙ Settings on your own phone — the old shared key stops working for everyone else. **Don't share the Google Sheet file itself**: anyone with access to the Sheet sees every tab, keys and all.
+
 **If a phone can't save its copy** (its storage is full, or blocked), a red note under the sync badge says so — edits made with no signal may not survive closing the app until it can.
 
 ### What goes where

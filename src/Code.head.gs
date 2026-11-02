@@ -71,7 +71,11 @@ var TABS = {
   // Deleted places, so anyone can put one back: the place and its stops as
   // JSON, as they were when it was deleted. Restoring writes them back and
   // removes the row. The id is made by the phone that deleted it.
-  Bin: ['id', 'trip_id', 'deleted_at', 'deleted_by', 'name', 'location', 'stops']
+  Bin: ['id', 'trip_id', 'deleted_at', 'deleted_by', 'name', 'location', 'stops'],
+  // People with their own key (see caller_). trips is a comma list of trip ids,
+  // or * for every trip; role is member (sees and changes those trips) or
+  // viewer (only looks). revoked, once set, stops the key.
+  Members: ['id', 'name', 'key', 'trips', 'role', 'added', 'revoked']
 };
 
 var NUMERIC = { lat: true, lng: true, order_index: true };
@@ -116,9 +120,10 @@ function handle_(e, req) {
     if (!key) {
       return json_({ ok: false, error: 'Server not configured: set API_KEY in Code.gs and redeploy.' });
     }
-    if (!req.key || String(req.key) !== key) {
-      return json_({ ok: false, error: 'Bad or missing API key.' });
-    }
+    var who = caller_(req.key, key);
+    if (!who) return json_({ ok: false, error: 'Bad or missing API key.' });
+    if (who.revoked) return json_({ ok: false, error: 'This key has been removed — ask the trip owner for a new invite.' });
+    REQ_ = { who: who, dflt: null };
 
     // Resolving a map link is a slow outbound fetch that touches no rows, so it
     // runs before the lock is taken rather than holding up everyone's edits.
@@ -139,42 +144,122 @@ function handle_(e, req) {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Who's calling. The owner key (API_KEY, remembered in the script's
+   properties) can do anything. Everyone else has a personal key in the
+   Members tab, which says which trips they can see and whether they can
+   change anything (member) or only look (viewer). Every action checks the
+   trips it touches — the trip a row is written to and, for a row that
+   already exists, the trip it is in now — so nothing in a trip a key isn't on
+   can be read, changed, or moved in or out. Revoking a member stops their key
+   at once; nobody else's changes.
+   --------------------------------------------------------------------------- */
+var REQ_ = null;
+var DENIED = "This key can't see that trip.";
+function caller_(given, ownerKey) {
+  given = String(given || '');
+  if (!given) return null;
+  if (given === ownerKey) return { owner: true, role: 'owner', name: '', trips: '*' };
+  var m = readTab_('Members').filter(function (x) { return x.key && x.key === given; })[0];
+  if (!m) return null;
+  if (String(m.revoked || '').trim()) return { revoked: true };
+  var t = String(m.trips || '').trim();
+  return { owner: false, id: m.id, name: m.name, role: m.role === 'viewer' ? 'viewer' : 'member',
+           trips: t === '*' ? '*' : t.split(/\s*,\s*/).filter(Boolean) };
+}
+/** The trip that rows with a blank trip_id belong to — as the app works it out. */
+function defaultTrip_() {
+  var ok = /^\d{4}-\d{2}-\d{2}$/;
+  var t = readTab_('Trips').filter(function (x) { return x.id && ok.test(x.start) && ok.test(x.end); });
+  var d = t.filter(function (x) { var v = String(x.is_default || '').trim().toLowerCase(); return v && v !== '0' && v !== 'false'; })[0] || t[0];
+  return d ? d.id : '';
+}
+function dflt_() { if (REQ_.dflt === null) REQ_.dflt = defaultTrip_(); return REQ_.dflt; }
+function allowed_(tripId) {
+  var w = REQ_.who;
+  if (w.owner || w.trips === '*') return true;
+  var t = String(tripId || '') || dflt_();
+  return !!t && w.trips.indexOf(t) >= 0;
+}
+function mineOnly_(rows) { return REQ_.who.owner ? rows : rows.filter(function (r) { return allowed_(r.trip_id); }); }
+function ownerOnly_() { if (!REQ_.who.owner) throw new Error('Only the trip owner can do that.'); }
+function noViewer_() { if (REQ_.who.role === 'viewer') throw new Error("View only: this key can't make changes."); }
+/** The trip an existing row is in, or null when there's no such row. */
+function rowTrip_(name, id) {
+  if (!id) return null;
+  var r = rowIndexById_(name, id);
+  if (r < 0) return null;
+  return String(sheet_(name).getRange(r, TABS[name].indexOf('trip_id') + 1, 1, 1).getValues()[0][0] || '');
+}
+/** A write to a row of `name`: allowed only inside the caller's trips — both
+ *  where the row is now and where it would end up. */
+function canWrite_(name, payload) {
+  noViewer_();
+  var w = REQ_.who;
+  if (w.owner || w.trips === '*') return;
+  var p = payload || {}, cur = rowTrip_(name, p.id);
+  if (cur !== null && !allowed_(cur)) throw new Error(DENIED);
+  var target = Object.prototype.hasOwnProperty.call(p, 'trip_id') ? p.trip_id : (cur !== null ? cur : '');
+  if (!allowed_(target)) throw new Error(DENIED);
+}
+function newKey_() {
+  var u = function () { return Utilities.getUuid().replace(/-/g, ''); };
+  return 'm-' + u() + u();
+}
+/** Add or change a person (owner only). A new person gets a key, returned once
+ *  here and in the owner's members list; changing trips or role keeps it. */
+function saveMember_(p) {
+  if (!p || !String(p.name || '').trim()) throw new Error('A person needs a name.');
+  var trips = Array.isArray(p.trips) ? p.trips.join(',') : String(p.trips || '');
+  var row = { id: p.id || '', name: String(p.name).trim(), trips: trips, role: p.role === 'viewer' ? 'viewer' : 'member' };
+  if (!row.id || rowIndexById_('Members', row.id) < 0) { row.key = newKey_(); row.added = new Date().toISOString(); row.revoked = ''; }
+  return upsert_('Members', row, 'mem');
+}
+
 function route_(action, req) {
   var payload = req.payload;
   if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch (x) {} }
 
   switch (action) {
     case 'ping':                return { pong: true, time: new Date().toISOString() };
+    case 'whoami':              return me_();
     case 'all':                 return readAll_(payload);
-    case 'locations':           return { locations: readTab_('Locations') };
-    case 'bookings':            return { bookings: readTab_('Bookings') };
-    case 'schedule':            return { schedule: readTab_('Schedule') };
+    case 'locations':           return { locations: mineOnly_(readTab_('Locations')) };
+    case 'bookings':            return { bookings: mineOnly_(readTab_('Bookings')) };
+    case 'schedule':            return { schedule: mineOnly_(readTab_('Schedule')) };
 
-    case 'saveLocation':        return { location: upsert_('Locations', payload, 'loc') };
-    case 'deleteLocation':      return deleteLocation_(payload);
-    case 'restoreLocation':     return restoreLocation_(payload);
-    case 'deleteBinItem':       return { deleted: remove_('Bin', payload && payload.id) };
-    case 'saveBooking':         return { booking: upsert_('Bookings', payload, 'bk') };
-    case 'deleteBooking':       return { deleted: remove_('Bookings', payload && payload.id) };
+    case 'saveLocation':        canWrite_('Locations', payload); return { location: upsert_('Locations', payload, 'loc') };
+    case 'deleteLocation':      canWrite_('Locations', { id: payload && payload.id }); return deleteLocation_(payload);
+    case 'restoreLocation':     canWrite_('Bin', { id: payload && payload.id }); return restoreLocation_(payload);
+    case 'deleteBinItem':       canWrite_('Bin', { id: payload && payload.id }); return { deleted: remove_('Bin', payload && payload.id) };
+    case 'saveBooking':         canWrite_('Bookings', payload); return { booking: upsert_('Bookings', payload, 'bk') };
+    case 'deleteBooking':       canWrite_('Bookings', { id: payload && payload.id }); return { deleted: remove_('Bookings', payload && payload.id) };
 
-    case 'saveScheduleEntry':   return { entry: upsert_('Schedule', payload, 'sc') };
-    case 'deleteScheduleEntry': return { deleted: remove_('Schedule', payload && payload.id) };
-    case 'setDayOrder':         return setDayOrder_(payload);
+    case 'saveScheduleEntry':   canWrite_('Schedule', payload); return { entry: upsert_('Schedule', payload, 'sc') };
+    case 'deleteScheduleEntry': canWrite_('Schedule', { id: payload && payload.id }); return { deleted: remove_('Schedule', payload && payload.id) };
+    case 'setDayOrder':
+      noViewer_();
+      ((payload && payload.ids) || []).forEach(function (id) { var t = rowTrip_('Schedule', id); if (t !== null && !allowed_(t)) throw new Error(DENIED); });
+      return setDayOrder_(payload);
 
-    case 'checklist':           return { checklist: readTab_('Checklist') };
-    case 'saveChecklistItem':   return { item: upsert_('Checklist', payload, 'ck') };
-    case 'deleteChecklistItem': return { deleted: remove_('Checklist', payload && payload.id) };
+    case 'checklist':           return { checklist: mineOnly_(readTab_('Checklist')) };
+    case 'saveChecklistItem':   canWrite_('Checklist', payload); return { item: upsert_('Checklist', payload, 'ck') };
+    case 'deleteChecklistItem': canWrite_('Checklist', { id: payload && payload.id }); return { deleted: remove_('Checklist', payload && payload.id) };
 
-    case 'trips':               return { trips: readTab_('Trips') };
-    case 'saveTrip':            return { trip: upsert_('Trips', payload, 'trip') };
-    case 'deleteTrip':          return deleteTrip_(payload);
-    case 'saveCity':            return { city: upsert_('Cities', payload, 'city') };
-    case 'deleteCity':          return { deleted: remove_('Cities', payload && payload.id) };
-    case 'saveDay':             return { day: upsert_('Days', payload, 'day') };
-    case 'deleteDay':           return { deleted: remove_('Days', payload && payload.id) };
+    case 'trips':               return { trips: REQ_.who.owner ? readTab_('Trips') : readTab_('Trips').filter(function (t) { return allowed_(t.id); }) };
+    case 'saveTrip':            ownerOnly_(); return { trip: upsert_('Trips', payload, 'trip') };
+    case 'deleteTrip':          ownerOnly_(); return deleteTrip_(payload);
+    case 'saveCity':            noViewer_(); return { city: upsert_('Cities', payload, 'city') };
+    case 'deleteCity':          ownerOnly_(); return { deleted: remove_('Cities', payload && payload.id) };
+    case 'saveDay':             canWrite_('Days', payload); return { day: upsert_('Days', payload, 'day') };
+    case 'deleteDay':           canWrite_('Days', { id: payload && payload.id }); return { deleted: remove_('Days', payload && payload.id) };
 
-    case 'reseed':              return seedAll_(true);
-    case 'setupTabs':           return ensureTabs_();
+    case 'members':             ownerOnly_(); return { members: readTab_('Members') };
+    case 'saveMember':          ownerOnly_(); return { member: saveMember_(payload) };
+    case 'revokeMember':        ownerOnly_(); return { member: upsert_('Members', { id: payload && payload.id, revoked: new Date().toISOString() }, 'mem') };
+
+    case 'reseed':              ownerOnly_(); return seedAll_(true);
+    case 'setupTabs':           ownerOnly_(); return ensureTabs_();
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -294,26 +379,44 @@ function readTab_(name) {
  * Sheet holds — plus every trip's name and a count of its places. A blank
  * trip_id is the default trip's, so those rows come with is_default. A phone
  * that names no trip (an older app) gets everything, as before. */
+/** Who this key is, for the app: never the key itself. */
+function me_() {
+  var w = REQ_.who;
+  return { owner: !!w.owner, role: w.role, name: w.name || '', trips: w.trips };
+}
 function readAll_(scope) {
   var trip = scope && scope.trip ? String(scope.trip) : '';
   var dflt = !!(scope && scope.is_default);
+  var allTrips = readTab_('Trips');
+  if (!REQ_.who.owner) {
+    // A member always gets one trip they're on: the one asked for if allowed,
+    // else the default trip, else their first. Which trip blank rows belong to
+    // is worked out here, never taken from the phone.
+    var onTrips = allTrips.filter(function (t) { return allowed_(t.id); });
+    if (!trip || !allowed_(trip)) trip = allowed_('') && dflt_() ? dflt_() : (onTrips[0] && onTrips[0].id) || '';
+    if (!trip) throw new Error("This key isn't on any trip yet — ask the trip owner.");
+    dflt = trip === dflt_();
+    allTrips = onTrips;
+  }
   var mine = function (rows) {
     if (!trip) return rows;
     return rows.filter(function (r) { var t = String(r.trip_id || ''); return t === trip || (!t && dflt); });
   };
   var locations = readTab_('Locations'), index = {};
-  locations.forEach(function (l) { var t = String(l.trip_id || ''); index[t] = (index[t] || 0) + 1; });
+  locations.forEach(function (l) { var t = String(l.trip_id || ''); if (allowed_(t)) index[t] = (index[t] || 0) + 1; });
   return {
     bookings: mine(readTab_('Bookings')),
     locations: mine(locations),
     schedule: mine(readTab_('Schedule')),
     checklist: mine(readTab_('Checklist')),
-    trips: readTab_('Trips'),
+    trips: allTrips,
     cities: readTab_('Cities'),
     days: mine(readTab_('Days')),
     bin: mine(readTab_('Bin')),
     scope: trip ? { trip: trip, is_default: dflt } : null,
     places_per_trip: index,
+    me: me_(),
+    default_trip: dflt_(),
     fetched_at: new Date().toISOString()
   };
 }

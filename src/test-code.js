@@ -91,7 +91,7 @@ const sandbox = {
     createTextOutput: (t) => ({ _t: t, setMimeType(){ return this; }, getContent(){ return this._t; } })
   },
   LockService: { getScriptLock: () => ({ waitLock(){}, releaseLock(){} }) },
-  Utilities: { formatDate: (d) => d.toISOString().slice(0,10) },
+  Utilities: { formatDate: (d) => d.toISOString().slice(0,10), getUuid: () => require('crypto').randomUUID() },
   Logger: { log(){} },
   console
 };
@@ -375,6 +375,89 @@ console.log("17. a phone gets only its open trip");
   const tr = post({key:KEY,action:"saveTrip",payload:{id:"t-other",archived:"1"}}).data.trip;
   eq([tr.archived, tr.name], ["1", "Other"], "a trip can be archived, keeping its other fields");
   post({key:KEY,action:"deleteTrip",payload:{id:"t-other"}});
+}
+
+console.log("18. personal keys: each person sees only their trips");
+{
+  const P = (k, action, payload) => post({ key: k, action, payload });
+  P(KEY, "saveTrip", { id: "tA", name: "Trip A", start: "2027-03-01", end: "2027-03-05" });
+  P(KEY, "saveTrip", { id: "tB", name: "Trip B", start: "2027-04-01", end: "2027-04-05" });
+  const la = P(KEY, "saveLocation", { name_en: "A Place", name_zh: "甲地", city: "Aville", type: "attraction", trip_id: "tA" }).data.location;
+  const lb = P(KEY, "saveLocation", { name_en: "B Place", name_zh: "乙地", city: "Bville", type: "attraction", trip_id: "tB" }).data.location;
+  const lb2 = P(KEY, "saveLocation", { name_en: "B Two", name_zh: "乙二", city: "Bville", type: "restaurant", trip_id: "tB" }).data.location;
+  const sa = P(KEY, "saveScheduleEntry", { date: "2027-03-02", order_index: 1, location_id: la.id, trip_id: "tA" }).data.entry;
+  const sb = P(KEY, "saveScheduleEntry", { date: "2027-04-02", order_index: 1, location_id: lb.id, trip_id: "tB" }).data.entry;
+  const bb = P(KEY, "saveBooking", { type: "hotel", date: "2027-04-01", description: "B hotel", trip_id: "tB" }).data.booking;
+  const cb = P(KEY, "saveChecklistItem", { kind: "task", text: "B task", trip_id: "tB" }).data.item;
+  P(KEY, "saveDay", { id: "day-tB-20270402", trip_id: "tB", date: "2027-04-02", label: "B day" });
+  P(KEY, "deleteLocation", { id: lb2.id, bin_id: "bin-b2" });
+  const add = (name, trips, role) => P(KEY, "saveMember", { name, trips, role }).data.member;
+  const sam = add("Sam", ["tA"], "member"), vic = add("Vic", ["tA"], "viewer"), ann = add("Ann", "*", "member"), nob = add("Nobody", [], "member");
+  ok(/^m-[0-9a-f]{64}$/.test(sam.key) && sam.key !== vic.key, "each person gets their own long random key");
+  eq(P(KEY, "members").data.members.map(m => m.name), ["Sam", "Vic", "Ann", "Nobody"], "the owner lists them");
+  const S = sam.key, V = vic.key;
+  const me = P(S, "whoami").data;
+  eq([me.owner, me.role, me.name, me.trips], [false, "member", "Sam", ["tA"]], "whoami says who the key is");
+  ok(!("key" in me), "and never gives the key back");
+
+  console.log("   reads");
+  for (const asked of [{ trip: "tB", is_default: false }, { trip: "gc", is_default: true }, null]) {
+    const d = P(S, "all", asked).data;
+    ok(d.scope.trip === "tA" && d.locations.every(l => l.trip_id === "tA") && d.locations.length === 1, "all " + JSON.stringify(asked) + " → only Trip A's places");
+    ok(d.schedule.every(s => s.trip_id === "tA") && !d.bookings.length && !d.checklist.length && !d.days.length && !d.bin.length, "  and its stops; none of B's bookings, checklist, day names or bin");
+    eq(d.trips.map(t => t.id), ["tA"], "  the trips list holds only Trip A");
+    eq(Object.keys(d.places_per_trip), ["tA"], "  place counts only for Trip A");
+    ok(!JSON.stringify(d).includes(V) && !JSON.stringify(d).includes(ann.key), "  no one's key anywhere in it");
+  }
+  ok(P(S, "locations").data.locations.every(l => l.trip_id === "tA") && P(S, "schedule").data.schedule.every(s => s.trip_id === "tA")
+     && !P(S, "bookings").data.bookings.length && !P(S, "checklist").data.checklist.length, "locations, schedule, bookings, checklist: Trip A only");
+  eq(P(S, "trips").data.trips.map(t => t.id), ["tA"], "trips: Trip A only");
+
+  console.log("   writes");
+  const denied = (r, why) => ok(!r.ok && /can't see that trip/.test(r.error), why + " — refused");
+  ok(P(S, "saveLocation", { name_en: "A New", city: "Aville", type: "attraction", trip_id: "tA" }).ok, "adding a place to Trip A works");
+  denied(P(S, "saveLocation", { name_en: "Sneak", trip_id: "tB" }), "adding a place to Trip B");
+  denied(P(S, "saveLocation", { name_en: "Sneak" }), "adding a place with no trip (the default trip)");
+  denied(P(S, "saveLocation", { id: lb.id, name_en: "Mine now", trip_id: "tA" }), "moving B's place into Trip A");
+  denied(P(S, "saveLocation", { id: lb.id, notes: "changed" }), "editing B's place by id");
+  denied(P(S, "saveLocation", { id: la.id, trip_id: "tB" }), "moving A's place out to Trip B");
+  denied(P(S, "deleteLocation", { id: lb.id }), "deleting B's place");
+  denied(P(S, "saveScheduleEntry", { id: sb.id, notes: "x" }), "editing B's stop");
+  denied(P(S, "deleteScheduleEntry", { id: sb.id }), "deleting B's stop");
+  denied(P(S, "setDayOrder", { date: "2027-04-02", ids: [sb.id] }), "reordering B's day");
+  denied(P(S, "saveBooking", { id: bb.id, details: "x" }), "editing B's booking");
+  denied(P(S, "deleteBooking", { id: bb.id }), "deleting B's booking");
+  denied(P(S, "saveChecklistItem", { id: cb.id, done: "x" }), "ticking B's checklist");
+  denied(P(S, "deleteChecklistItem", { id: cb.id }), "deleting B's checklist item");
+  denied(P(S, "saveDay", { id: "day-tB-20270402", trip_id: "tB", date: "2027-04-02", label: "x" }), "renaming B's day");
+  denied(P(S, "deleteDay", { id: "day-tB-20270402" }), "deleting B's day name");
+  denied(P(S, "restoreLocation", { id: "bin-b2" }), "restoring B's deleted place");
+  denied(P(S, "deleteBinItem", { id: "bin-b2" }), "emptying B's bin");
+  ok(P(KEY, "locations").data.locations.find(l => l.id === lb.id).notes !== "changed" && P(KEY, "bookings").data.bookings.some(b => b.id === bb.id), "and Trip B is untouched");
+  for (const a of ["saveTrip", "deleteTrip", "members", "saveMember", "revokeMember", "reseed", "setupTabs", "deleteCity"]) {
+    const r = P(S, a, { id: "tA", name: "x" });
+    ok(!r.ok && /Only the trip owner/.test(r.error), a + " is the owner's only");
+  }
+  ok(P(S, "saveCity", { name: "Aville", tz: "Asia/Tokyo" }).ok, "a member can add a city (shared reference data)");
+  ok(P(S, "ping").ok, "ping works");
+
+  console.log("   view only, everything, nothing, removed");
+  ok(P(V, "all", { trip: "tA" }).data.locations.length >= 1, "a viewer can read Trip A");
+  for (const [a, p] of [["saveLocation", { name_en: "v", trip_id: "tA" }], ["deleteLocation", { id: la.id }], ["saveScheduleEntry", { id: sa.id, notes: "v" }],
+                        ["setDayOrder", { date: "2027-03-02", ids: [sa.id] }], ["saveCity", { name: "V" }], ["saveChecklistItem", { kind: "task", text: "v", trip_id: "tA" }]]) {
+    const r = P(V, a, p); ok(!r.ok && /View only/.test(r.error), "a viewer can't " + a);
+  }
+  const all = P(ann.key, "all", { trip: "tB" }).data;
+  ok(all.scope.trip === "tB" && all.locations.some(l => l.id === lb.id) && all.trips.length >= 3, "a person on every trip (*) can open Trip B");
+  const r0 = P(nob.key, "all", null);
+  ok(!r0.ok && /isn't on any trip yet/.test(r0.error), "a person on no trip is told so");
+  ok(P(KEY, "revokeMember", { id: sam.id }).ok, "the owner removes Sam");
+  const r1 = P(S, "all", { trip: "tA" });
+  ok(!r1.ok && /This key has been removed/.test(r1.error), "Sam's key stops at once: " + r1.error);
+  ok(P(V, "ping").ok, "nobody else's key changes");
+  const own = P(KEY, "all", null).data;
+  ok(own.scope === null && own.trips.length >= 3 && own.me.owner === true, "the owner, from an older app, still gets everything");
+  ["tA", "tB"].forEach(id => P(KEY, "deleteTrip", { id }));
 }
 
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));

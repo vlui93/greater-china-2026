@@ -45,6 +45,10 @@ suite({}, async (env) => {
     await page.waitForTimeout(500);
     await check('Plan with AI, the check before importing', t => { document.getElementById('ai_reply').value = t; aiRead(); }, fs.readFileSync(fixturePath('ai-reply.txt'), 'utf8'));
     await check('Recently deleted', () => { closeSheet(); deletePlace(store.data.locations[2].id).then(() => binSheet()); });
+    await check('People', () => { closeSheet(); peopleSheet(); });
+    await page.waitForTimeout(500);
+    await check('Add a person', () => personForm(null));
+    await check('An invite', () => inviteSheet({ id: 'm1', name: 'Alexandra Example', trips: '*', role: 'member', key: 'm-' + '0'.repeat(64) }));
     if (w === 390) { await page.evaluate(() => { closeSheet(); setView('days'); document.querySelector('[data-act="ai-plan"]').click(); }); await page.waitForTimeout(500); await page.screenshot({ path: env.out('layout-ai-dates.png') }); }
     ok(!page.errs.length, 'no JS errors ' + page.errs.join('; '));
   }
