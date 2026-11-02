@@ -403,11 +403,17 @@ The per-city `src/seed-loc-*.json` files are the authoring split, not something 
 
 One Sheet holds every trip. The app shows one at a time; switch in ⚙ Settings → **Trips**.
 
+**Only the open trip comes to the phone.** Each sync brings the open trip's rows, plus every trip's name and how many places it has — so a sync, and the copy each phone keeps for offline use, stay one trip's size however many trips the Sheet collects (the Sheet itself can hold thousands; Google's limit is 10 million cells). Opening another trip fetches it, so do that with a connection; with none, the trip that's open stays open. *Other trips* in Locations fetches the other trips' places when you tap it. A phone on a backend from before this still gets every trip, and keeps only the open one.
+
+**Archiving.** ⚙ Settings → Trips → **Archive** moves a finished trip under *Archived trips*, out of the list; it stays in the Sheet (`archived` = 1 in Trips) and **Unarchive** brings it back. The default trip and the open one can't be archived.
+
+**If a phone can't save its copy** (its storage is full, or blocked), a red note under the sync badge says so — edits made with no signal may not survive closing the app until it can.
+
 ### What goes where
 
 | Tab | One row per | Notes |
 |---|---|---|
-| **Trips** | trip | `id`, `name`, `name_zh`, `start`, `end` (yyyy-mm-dd), `tz`, `zh_script`, `is_default`, `notes`. Exactly one has `is_default` = 1. |
+| **Trips** | trip | `id`, `name`, `name_zh`, `start`, `end` (yyyy-mm-dd), `tz`, `zh_script`, `is_default`, `notes`, `updated`, `archived`. Exactly one has `is_default` = 1. |
 | **Cities** | city | `name`, `name_zh`, centre (`lat`, `lng`), `tz`, `region`, `map_app`, and optional taxi fares (`currency`, `round`, `flag`, `flag_km`, `per_km`, `high_at`, `per_km_high`, `transit`, `car`). Shared by every trip. |
 | **Days** | named day | `trip_id`, `date`, `label`. Only days you have renamed. |
 

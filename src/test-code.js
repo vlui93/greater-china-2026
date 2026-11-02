@@ -353,5 +353,29 @@ console.log("16. deleted places go to the Bin, and come back");
   eq(post({key:KEY,action:"all"}).data.bin.length, B0, "deleting a place that isn't there bins nothing");
 }
 
+console.log("17. a phone gets only its open trip");
+{
+  const full = post({key:KEY,action:"all"}).data;
+  ok(full.scope === null, "an older app (no trip named) gets everything, as before");
+  post({key:KEY,action:"saveTrip",payload:{id:"t-other",name:"Other",start:"2027-01-01",end:"2027-01-05"}});
+  const ol = post({key:KEY,action:"saveLocation",payload:{name_en:"Other Place",name_zh:"别处",city:"Elsewhere",type:"attraction",trip_id:"t-other"}}).data.location;
+  post({key:KEY,action:"saveScheduleEntry",payload:{date:"2027-01-02",order_index:1,location_id:ol.id,trip_id:"t-other"}});
+  post({key:KEY,action:"saveChecklistItem",payload:{kind:"task",text:"Other trip task",trip_id:"t-other"}});
+  post({key:KEY,action:"saveDay",payload:{id:"day-t-other-20270102",trip_id:"t-other",date:"2027-01-02",label:"Other day"}});
+  const all = post({key:KEY,action:"all"}).data;
+  const def = post({key:KEY,action:"all",payload:{trip:"gc",is_default:true}}).data;
+  ok(def.locations.length === all.locations.length - 1 && !def.locations.some(l => l.id === ol.id), "the default trip gets its rows (blank trip_id) and not the other trip's");
+  ok(!def.schedule.some(s => s.location_id === ol.id) && !def.checklist.some(c => c.trip_id === "t-other") && !def.days.some(d => d.trip_id === "t-other"), "stops, checklist and day names too");
+  const oth = post({key:KEY,action:"all",payload:{trip:"t-other",is_default:false}}).data;
+  eq([oth.locations.map(l => l.id), oth.schedule.length, oth.checklist.length, oth.days.length], [[ol.id], 1, 1, 1], "the other trip gets only its own rows");
+  eq(oth.scope, { trip: "t-other", is_default: false }, "and says which trip it is");
+  ok(oth.trips.length === all.trips.length && oth.cities.length === all.cities.length, "every trip's name and every city still come back");
+  eq(oth.places_per_trip["t-other"], 1, "with a count of places per trip");
+  eq(oth.places_per_trip[""], def.locations.length, "(blank = the default trip)");
+  const tr = post({key:KEY,action:"saveTrip",payload:{id:"t-other",archived:"1"}}).data.trip;
+  eq([tr.archived, tr.name], ["1", "Other"], "a trip can be archived, keeping its other fields");
+  post({key:KEY,action:"deleteTrip",payload:{id:"t-other"}});
+}
+
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));
 process.exit(fails ? 1 : 0);

@@ -107,7 +107,8 @@ suite({}, async (env) => {
   await page.click('#libResults [data-act="lib-copy"]'); await wait(500);
   ok(await page.$('#libResults .pill.ok')!==null, 'marked as copied');
   const cp=await page.evaluate(n=>store.data.locations.find(l=>l.name_en===n), pickName);
-  const orig=await page.evaluate(n=>store.raw.locations.find(l=>l.name_en===n && !l.trip_id), pickName);
+  // other trips' places aren't kept on a connected phone; the library holds what it fetched
+  const orig=await page.evaluate(n=>otherTripPlaces().find(l=>l.name_en===n && !l.trip_id), pickName);
   ok(cp && cp.id!==orig.id && cp.trip_id===await page.evaluate(()=>TRIP.id) && cp.history_blurb===orig.history_blurb && cp.lat===orig.lat, 'copy is a new place in this trip, with the notes: '+pickName);
   ok(rows('Locations').some(l=>l.id===cp.id && l.trip_id===cp.trip_id), 'saved to the Sheet');
   await page.evaluate(()=>closeSheet()); await page.click('[data-act="library"]'); await wait(300); await page.fill('#lq','Peak'); await wait(200);

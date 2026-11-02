@@ -397,6 +397,10 @@ ul.lst li .cn{font-weight:650}
 .banner .bi{flex:none;color:var(--warn);margin-top:1px}
 .banner button{text-decoration:underline;font-weight:650;color:var(--ink)}
 .banner[hidden]{display:none}
+.banner.storage{border-color:color-mix(in srgb,#c2352f 45%,var(--line));background:color-mix(in srgb,#c2352f 10%,var(--surface))}
+details.archived{margin-top:10px}
+details.archived summary{cursor:pointer;font-size:13px;color:var(--ink-2);padding:6px 2px}
+details.archived .loclist{margin-top:8px}
 
 /* Prep: checklist, packing, guide */
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;margin:2px 0 14px;
@@ -1024,7 +1028,21 @@ function cityZh(c){ var i=cityInfo(c); return i ? i.name_zh||"" : ""; }
 function lines(s){ return String(s||"").split(/\r?\n/).map(function(x){return x.trim();}).filter(Boolean); }
 function paras(s){ return String(s||"").split(/\n\s*\n/).map(function(x){return x.trim();}).filter(Boolean); }
 function load(k,d){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }
-function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+/* A save can fail — storage full, or blocked (private browsing). For most
+   keys that only loses a preference, but the trip copy and the queue of
+   unsent edits matter: saveFail records it and the banner under the sync
+   badge says so (it used to fail without a word). */
+var saveFail={};
+function save(k,v){
+  try{ localStorage.setItem(k,JSON.stringify(v)); if(saveFail[k]){ delete saveFail[k]; setTimeout(function(){ if(typeof updateStatus==="function") updateStatus(); }, 0); } return true; }
+  catch(e){ saveFail[k]=String(e && (e.name||e.message) || "error"); setTimeout(function(){ if(typeof updateStatus==="function") updateStatus(); }, 0); return false; }
+}
+function storageText(){
+  if(!saveFail[LS.cache] && !saveFail[LS.queue]) return "";
+  return "This phone couldn't save its copy of the trip (storage full or blocked)"+
+    (saveFail[LS.queue] ? ", and edits waiting to be sent may be lost if the app is closed" : "")+
+    ". Sync while you have a connection, and free some space on the phone.";
+}
 function uid(p){ return p+"-"+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36); }
 function todayISO(){ var d=new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
@@ -1101,7 +1119,7 @@ var store = {
     save(LS.queue, this.queue); save(LS.rescued, true);
   },
   configured: function(){ return !!(this.cfg.url && this.cfg.key); },
-  hasData: function(){ return !!(this.raw && this.raw.locations && this.raw.locations.length); },
+  hasData: function(){ return !!(this.raw && ((this.raw.locations && this.raw.locations.length) || (this.raw.trips && this.raw.trips.length))); },
   /* The open trip's rows go back into the full set; anything new in them is
      tagged with the trip first, so it can't drift into another one. */
   persist: function(){
@@ -1210,9 +1228,16 @@ var store = {
     if(!this.configured()) return Promise.reject(new Error("not-configured"));
     if(this.syncing) return Promise.resolve();
     this.syncing=true; updateStatus();
-    var gen;
+    var gen, asked;
     return this.flush()
-      .then(function(){ gen=self.writeGen; return self.call("all"); })
+      .then(function(){
+        gen=self.writeGen;
+        // Only the open trip's rows: each sync, and each phone's offline copy,
+        // stays one trip's size however many trips the Sheet holds. A backend
+        // from before this sends every trip anyway; the copy is trimmed below.
+        asked={ trip:TRIP.id, is_default:TRIP.id===defaultTripId() };
+        return self.call("all", asked);
+      })
       .then(function(d){
         // Something was saved on this phone while the Sheet's copy was on its
         // way, so that copy predates it and would undo it on screen. Let the
@@ -1234,7 +1259,9 @@ var store = {
           var myBk={}; (raw.bookings||[]).forEach(function(b){ myBk[b.id]=b; });
           (d.bookings||[]).forEach(function(b){ var m=myBk[b.id]; if(!m) return;
             BK_LOCAL_FIRST.forEach(function(k){ if(!b[k] && m[k]) b[k]=m[k]; }); });
-          var ck = mergeChecklist(raw.checklist||[], d.checklist);
+          var scoped=!!d.scope;
+          // With a reply for one trip, only that trip's local items can be "new"
+          var ck = mergeChecklist(scoped ? (raw.checklist||[]).filter(function(i){ return tripOf(i)===asked.trip; }) : raw.checklist||[], d.checklist);
           if(Array.isArray(d.checklist) && d.checklist.length){ self.supportsAssignee = "assignee" in d.checklist[0]; save(LS.assignee, self.supportsAssignee); }
           // An older backend sends no trips, cities or day names: keep this phone's
           self.supportsTrips = Array.isArray(d.trips); save(LS.trips, self.supportsTrips);
@@ -1244,9 +1271,19 @@ var store = {
                        trips:  self.supportsTrips ? d.trips : raw.trips||[],
                        cities: Array.isArray(d.cities) ? d.cities : raw.cities||[],
                        days:   Array.isArray(d.days) ? d.days : raw.days||[],
-                       bin:    Array.isArray(d.bin) ? d.bin : raw.bin||[] };
+                       bin:    Array.isArray(d.bin) ? d.bin : raw.bin||[],
+                       index:  d.places_per_trip || null };
           self.data = null;   // rebuilt from raw: persist must not fold the old copy back in
           applyTrip();
+          // The trips list can make a different trip the open one (first connect,
+          // a trip deleted elsewhere): fetch that one instead, once.
+          if(scoped && (TRIP.id!==asked.trip || (TRIP.id===defaultTripId())!==asked.is_default) && !opts.again){
+            self.syncing=false;
+            return self.sync(Object.assign({}, opts, { again:true }));
+          }
+          // Keep only the open trip on the phone; other trips come down when opened
+          TRIP_TABS.forEach(function(k){ self.raw[k]=self.raw[k].filter(function(r){ return tripOf(r)===TRIP.id; }); });
+          self.data = null; applyTrip();
           self.persist();
           if(ck.upload.length){
             ck.upload.forEach(function(i){ self.enqueue("saveChecklistItem", i); });
@@ -1390,12 +1427,23 @@ function applyTrip(){
   }
   document.title = TRIP.name || "Trip";
 }
-function switchTrip(id){
+/** Open another trip. A connected phone keeps only the open trip, so the new
+ *  one is fetched; with no connection the trip that was open stays open — unless
+ *  the trip was only just made on this phone (fresh), which has nothing to fetch. */
+function switchTrip(id, fresh){
+  var from=ui.trip, fromDay=ui.day;
   store.persist();
   ui.trip=id; ui.city="All"; ui.day=null; save(LS.ui, ui);
   applyTrip(); store.persist();
   closeSheet(); setView("today");
-  toast("Opened "+TRIP.name);
+  if(!store.configured()){ toast("Opened "+TRIP.name); return Promise.resolve(); }
+  toast("Opening "+TRIP.name+"…", 4000);
+  return store.sync({quiet:true}).then(function(){ toast("Opened "+TRIP.name); }, function(err){
+    if(fresh){ toast("Opened "+TRIP.name+" — it reaches the Sheet when there's a connection"); return; }
+    var name=TRIP.name;
+    ui.trip=from; ui.day=fromDay; save(LS.ui, ui); store.data=null; applyTrip(); render();
+    toast(err && err.kind && err.kind!=="net" ? syncProblem(err) : "No connection — "+name+" opens once there is one. "+TRIP.name+" is still open.", 6000);
+  });
 }
 
 /* ==========================================================================
@@ -1653,9 +1701,10 @@ function updateStatus(){
           : (store.queue.length ? store.queue.length+" waiting to send" : "Offline");
   var html = '<span class="statusdot '+cls+'"></span>'+esc(txt);
   document.querySelectorAll(".syncbadge").forEach(function(b){ b.innerHTML = html; });
-  var stale = staleText();
+  var stale = storageText() || staleText();
   document.querySelectorAll(".stalebar").forEach(function(b){
     b.hidden = !stale;
+    b.classList.toggle("storage", !!storageText());
     b.innerHTML = stale ? '<span class="bi">'+IC.info+'</span><span>'+esc(stale)+
       ' <button data-act="sync">Sync now</button></span>' : "";
   });
@@ -2572,7 +2621,7 @@ function placeResults(q){
   var list=all.filter(function(l){ return matches(l,q) && keep(l); });
   return '<div class="spread small muted" style="margin:4px 0 10px">'+
       '<span>'+list.length+" of "+all.length+'</span>'+
-      '<span class="row" style="gap:6px">'+(otherTripPlaces().length ? '<button class="btn sm ghost" data-act="library">Other trips</button>' : '')+
+      '<span class="row" style="gap:6px">'+(otherTripPlaces().length || allTrips().length>1 ? '<button class="btn sm ghost" data-act="library">Other trips</button>' : '')+
       '<button class="btn sm ghost" data-act="import-places">Import</button>'+
       '<button class="btn sm ghost" data-act="new-location">+ New place</button></span></div>'+
     (list.length ? '<div class="loclist">'+list.map(function(l){
@@ -3643,15 +3692,37 @@ function settingsForm(){
 /* ---------- trips and cities (Settings) ---------- */
 var NEEDS_UPGRADE = '<p class="blurb small muted">Adding trips and cities needs the one-off update to the Sheet’s '+
   'script — see the README, section 12. Until then this phone has the one trip.</p>';
+function isArchived(t){ return /^(1|true|yes)$/i.test(String(t && t.archived || "")); }
+/** The backend has the Trips tab's archived column. */
+function canArchive(){ return store.supportsTrips && (store.raw.trips||[]).some(function(t){ return "archived" in t; }); }
+/** How many places a trip has, from the count the backend sends with each sync. */
+function placesIn(t){
+  var ix=store.raw.index; if(!ix) return null;
+  return (ix[t.id]||0) + (t.id===defaultTripId() ? (ix[""]||0) : 0);
+}
+function setArchived(id, on){
+  var t=(store.raw.trips||[]).filter(function(x){ return x.id===id; })[0]; if(!t) return;
+  var row={ id:id, archived:on?"1":"", updated:nowISO() };
+  store.write("saveTrip", row, function(){
+    store.raw.trips=(store.raw.trips||[]).map(function(x){ return x.id===id ? Object.assign({}, x, row) : x; });
+  }).then(function(){ closeSheet(); settingsForm(); toast(on ? "Archived — it's under Archived trips" : "Back in the trip list"); });
+}
 function tripsSectionHTML(){
   var list=allTrips().slice().sort(function(a,b){ return a.start<b.start?-1:1; });
-  return '<div class="section-title">Trips</div><div class="loclist">'+list.map(function(t){
-      var open=t.id===TRIP.id;
+  var row=function(t){
+      var open=t.id===TRIP.id, n=placesIn(t), arch=isArchived(t);
       return '<div class="locrow"><div class="lb"><div class="en">'+esc(t.name)+(t.name_zh?' <span class="zh">'+escz(t.name_zh)+'</span>':'')+'</div>'+
-        '<div class="mt">'+esc(rangeText(t.start,t.end))+(open?' · open now':'')+'</div></div>'+
+        '<div class="mt">'+esc(rangeText(t.start,t.end))+(n!==null?' · '+n+' place'+(n===1?'':'s'):'')+(open?' · open now':'')+'</div></div>'+
         (open ? (store.supportsTrips ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
-              : '<button class="btn sm primary" data-act="trip-open" data-tid="'+esc(t.id)+'">Open</button>')+'</div>';
-    }).join("")+'</div>'+
+              : '<button class="btn sm primary" data-act="trip-open" data-tid="'+esc(t.id)+'">Open</button>')+
+        (!open && canArchive() && t.id!==defaultTripId()
+          ? '<button class="btn sm ghost" data-act="'+(arch?'trip-unarchive':'trip-archive')+'" data-tid="'+esc(t.id)+'">'+(arch?'Unarchive':'Archive')+'</button>' : '')+
+        '</div>';
+    };
+  var live=list.filter(function(t){ return !isArchived(t) || t.id===TRIP.id; });
+  var gone=list.filter(function(t){ return isArchived(t) && t.id!==TRIP.id; });
+  return '<div class="section-title">Trips</div><div class="loclist">'+live.map(row).join("")+'</div>'+
+    (gone.length ? '<details class="archived"><summary>Archived trips ('+gone.length+')</summary><div class="loclist">'+gone.map(row).join("")+'</div></details>' : '')+
     (store.supportsTrips ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="trip-new">+ New trip</button></div>' : NEEDS_UPGRADE);
 }
 function citiesSectionHTML(){
@@ -3717,7 +3788,7 @@ function saveTripForm(id){
   if(daysBetween(t.start,t.end)>120){ toast("That's over 120 days — check the dates"); return; }
   if(t.tz && !validTz(t.tz)){ toast("Not a time zone this phone knows — pick one from the list"); return; }
   var shift = old && $("#t_move") && $("#t_move").checked ? daysBetween(old.start, t.start) : 0;
-  var row=function(o){ var r={}; ["id","name","name_zh","start","end","tz","zh_script","is_default","notes","updated"].forEach(function(k){ r[k]=o[k]==null?"":o[k]; }); return r; };
+  var row=function(o){ var r={}; ["id","name","name_zh","start","end","tz","zh_script","is_default","notes","updated","archived"].forEach(function(k){ r[k]=o[k]==null?"":o[k]; }); return r; };
   // The Sheet's first trip row: the one there is, written out before any other joins it
   if(!(store.raw.trips||[]).length && t.id!==LEGACY_TRIP.id){
     var first=row(Object.assign({}, LEGACY_TRIP, { updated:nowISO() }));
@@ -3740,7 +3811,7 @@ function saveTripForm(id){
     store.data.schedule.forEach(function(e){ e.date=addDaysISO(e.date, shift); store.enqueue("saveScheduleEntry", e); });
   }
   store.persist();
-  if(!old){ switchTrip(t.id); }
+  if(!old){ switchTrip(t.id, true); }
   else { store.data=null; applyTrip(); store.persist(); closeSheet(); render(); toast(shift ? "Saved — plan moved "+Math.abs(shift)+" day"+(Math.abs(shift)===1?"":"s")+(shift>0?" later":" earlier") : "Saved"); }
   if(store.configured()) store.flush().then(updateStatus).catch(function(){});
 }
@@ -4050,9 +4121,27 @@ function pickFound(i){
    any of them can be copied into the open one — notes, tickets, photo and all.
    The copy is a new place; changing it leaves the original alone.
    ========================================================================== */
-function otherTripPlaces(){ return store.raw.locations.filter(function(l){ return tripOf(l)!==TRIP.id; }); }
+/* A connected phone keeps only the open trip, so places from other trips are
+   fetched when "Other trips" is opened (libCache). An unconnected phone still
+   holds every trip it has. */
+var libCache=null;
+function otherTripPlaces(){
+  var own=store.raw.locations.filter(function(l){ return tripOf(l)!==TRIP.id; });
+  return own.length ? own : (libCache||[]).filter(function(l){ return tripOf(l)!==TRIP.id; });
+}
 function tripName(id){ var t=allTrips().filter(function(x){ return x.id===id; })[0]; return t ? t.name : "another trip"; }
 function libraryForm(){
+  if(store.configured() && !store.raw.locations.some(function(l){ return tripOf(l)!==TRIP.id; })){
+    openSheet("From other trips", '<p class="blurb small muted" style="margin:12px 0">Fetching places from your other trips…</p>');
+    store.call("locations").then(function(d){ libCache=(d && d.locations) || []; libraryShow(); }, function(err){
+      $("#sheetBody").innerHTML='<div class="card empty" style="margin-top:12px">'+
+        (err && err.kind && err.kind!=="net" ? esc(syncProblem(err)) : "Places from other trips need a connection — they aren't kept on the phone.")+'</div>';
+    });
+    return;
+  }
+  libraryShow();
+}
+function libraryShow(){
   function results(q){
     var list=otherTripPlaces().filter(function(l){ return matches(l,q); })
       .sort(function(a,b){ return (a.city+a.name_en)<(b.city+b.name_en)?-1:1; });
@@ -4073,7 +4162,7 @@ function libraryForm(){
   i.addEventListener("input", function(){ $("#libResults").innerHTML=results(this.value); this.closest(".searchwrap").classList.toggle("has", !!this.value); });
 }
 function copyPlace(lid, btn){
-  var src=store.raw.locations.filter(function(l){ return l.id===lid; })[0]; if(!src) return;
+  var src=otherTripPlaces().filter(function(l){ return l.id===lid; })[0]; if(!src) return;
   var l={}; LOC_FIELDS.forEach(function(k){ l[k]=src[k]==null?"":src[k]; });
   l.id=uid("loc"); l.trip_id="";
   if(!cityInfo(l.city) && hasXY(l)) l.city=cityFor(+l.lat,+l.lng)||l.city;
@@ -4882,6 +4971,8 @@ document.addEventListener("click", function(ev){
     case "bk-save": saveBookingForm(t.dataset.bid); return;
     case "bk-delete": deleteBookingForm(t.dataset.bid); return;
     case "trip-open": switchTrip(t.dataset.tid); return;
+    case "trip-archive": setArchived(t.dataset.tid, true); return;
+    case "trip-unarchive": setArchived(t.dataset.tid, false); return;
     case "trip-new": tripForm(null); return;
     case "trip-edit": tripForm(t.dataset.tid); return;
     case "trip-save": saveTripForm(t.dataset.tid); return;

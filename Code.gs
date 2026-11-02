@@ -59,7 +59,7 @@ var TABS = {
   // One row per trip. zh_script: 'simplified' shows Chinese in Simplified,
   // 'original' as written. is_default marks the trip that rows with no
   // trip_id belong to.
-  Trips: ['id', 'name', 'name_zh', 'start', 'end', 'tz', 'zh_script', 'is_default', 'notes', 'updated'],
+  Trips: ['id', 'name', 'name_zh', 'start', 'end', 'tz', 'zh_script', 'is_default', 'notes', 'updated', 'archived'],
   // Shared by every trip, matched to places by name. region is cn (mainland
   // China: Amap, shifted map grid), hk, mo or blank. The fare columns are the
   // taxi meter, in the local currency, for the getting-around estimates.
@@ -145,7 +145,7 @@ function route_(action, req) {
 
   switch (action) {
     case 'ping':                return { pong: true, time: new Date().toISOString() };
-    case 'all':                 return readAll_();
+    case 'all':                 return readAll_(payload);
     case 'locations':           return { locations: readTab_('Locations') };
     case 'bookings':            return { bookings: readTab_('Bookings') };
     case 'schedule':            return { schedule: readTab_('Schedule') };
@@ -288,16 +288,32 @@ function readTab_(name) {
   return out;
 }
 
-function readAll_() {
+/* Everything a phone needs. A phone that names its open trip ({trip,
+ * is_default}) gets only that trip's rows — so what each sync sends, and what
+ * each phone keeps offline, stays one trip's size however many trips the
+ * Sheet holds — plus every trip's name and a count of its places. A blank
+ * trip_id is the default trip's, so those rows come with is_default. A phone
+ * that names no trip (an older app) gets everything, as before. */
+function readAll_(scope) {
+  var trip = scope && scope.trip ? String(scope.trip) : '';
+  var dflt = !!(scope && scope.is_default);
+  var mine = function (rows) {
+    if (!trip) return rows;
+    return rows.filter(function (r) { var t = String(r.trip_id || ''); return t === trip || (!t && dflt); });
+  };
+  var locations = readTab_('Locations'), index = {};
+  locations.forEach(function (l) { var t = String(l.trip_id || ''); index[t] = (index[t] || 0) + 1; });
   return {
-    bookings: readTab_('Bookings'),
-    locations: readTab_('Locations'),
-    schedule: readTab_('Schedule'),
-    checklist: readTab_('Checklist'),
+    bookings: mine(readTab_('Bookings')),
+    locations: mine(locations),
+    schedule: mine(readTab_('Schedule')),
+    checklist: mine(readTab_('Checklist')),
     trips: readTab_('Trips'),
     cities: readTab_('Cities'),
-    days: readTab_('Days'),
-    bin: readTab_('Bin'),
+    days: mine(readTab_('Days')),
+    bin: mine(readTab_('Bin')),
+    scope: trip ? { trip: trip, is_default: dflt } : null,
+    places_per_trip: index,
     fetched_at: new Date().toISOString()
   };
 }

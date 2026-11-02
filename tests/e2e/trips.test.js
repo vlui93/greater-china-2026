@@ -80,7 +80,10 @@ suite({}, async (env) => {
   await page.evaluate(()=>{ ui.prepTab="guide"; setView("prep"); }); await wait(200);
   ok(/Alipay/.test(await page.innerText('#view-prep')), 'China guide back');
   await page.reload(); await wait(800);
-  ok(await page.evaluate(()=>TRIP.id==="gc2026" && store.raw.locations.some(l=>l.name_en==="Test Shrine")), 'after reload: still the first trip, Japan cached');
+  // A connected phone keeps only the open trip (the scaling change): Japan's
+  // places live in the Sheet, not on this phone, until Japan is opened again.
+  ok(await page.evaluate(()=>TRIP.id==="gc2026" && !store.raw.locations.some(l=>l.name_en==="Test Shrine")), 'after reload: still the first trip, and only its places on the phone');
+  ok(rows('Locations').some(l=>l.name_en==="Test Shrine"), 'Japan\'s places are safe in the Sheet');
   await page.evaluate(()=>switchTrip(allTrips().filter(t=>t.name==="Test Japan")[0].id)); await wait(300);
   ok(await page.evaluate(()=>packing.items.some(i=>i.id==="my-jp1")), "Japan's packing list kept");
 
