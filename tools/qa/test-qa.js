@@ -64,5 +64,33 @@ ok(mail.status === 1 && /personal email/.test(mail.stdout), 'scan catches a pers
 const allowed = probe('const order = "12345678901"; // qa-allow: invented\n// npm: opencc-js@1.4.2, noreply@anthropic.com\n');
 ok(!/probe/.test(allowed.stdout.split('\n').filter(l => /scan-probe/.test(l)).join('')), 'qa-allow, package@version and noreply addresses are not flagged');
 
+// Plan check: the scheduling rules from the first trip, on an invented plan
+{
+  const P = (id, type, notes) => ({ id, name_en: 'Place ' + id, name_zh: '地' + id, city: 'Testville', type, lat: '1', lng: '2', nav_app: 'amap', notes: notes || '' });
+  const S = (id, date, lid, t, notes) => ({ id, date, location_id: lid, planned_time: t || '', notes: notes || '' });
+  const plan = {
+    locations: [P('a', 'attraction'), P('park', 'attraction', 'An all-day park at altitude.'), P('mus', 'attraction', 'Closed Mondays.'),
+                P('r1', 'restaurant', 'Spice: mild options — the clear broth'), P('r2', 'restaurant'), P('r3', 'restaurant', 'Spice: none')],
+    schedule: [
+      // 2030-03-04 is a Monday
+      S('1', '2030-03-04', 'mus', '10:00'), S('2', '2030-03-04', 'r1', '12:00'), S('3', '2030-03-04', 'r3', '19:00'), S('4', '2030-03-04', 'a', '', 'OPTIONAL — or this'),
+      S('5', '2030-03-05', 'park', '08:00'), S('6', '2030-03-05', 'r1', '12:00'), S('7', '2030-03-05', 'r3', '18:00'), S('8', '2030-03-05', 'a', '', 'OPTIONAL — x'),
+      S('9', '2030-03-06', 'a', '08:00', 'Day trip out of town'), S('10', '2030-03-06', 'r2', '12:00'), S('11', '2030-03-06', 'r3', '18:00'), S('12', '2030-03-06', 'a', '', 'OPTIONAL — y'),
+      S('13', '2030-03-07', 'nowhere', '10:00')],
+    bookings: [], days: [] };
+  const f = path.join(os.tmpdir(), 'qa-plan-' + process.pid + '.json');
+  fs.writeFileSync(f, JSON.stringify(plan));
+  const pc = run('plan-check.js', [f]);
+  ok(pc.status === 1 && /ERROR 2030-03-06: heavy day 2 in a row/.test(pc.stdout), 'plan check: two heavy days in a row (all-day park, then a day trip) is an error');
+  ok(!/ERROR 2030-03-05/.test(pc.stdout), 'plan check: one heavy day on its own is fine');
+  ok(/warn  2030-03-04: Place mus: its notes say "closed mondays"/.test(pc.stdout) && !/ERROR 2030-03-04/.test(pc.stdout), 'plan check: a closed-day hint is a warning to check, never an error');
+  ok(/warn  Place r2: no "Spice:" line/.test(pc.stdout) && !/Place r1: no "Spice:"/.test(pc.stdout), 'plan check: a restaurant without a Spice line is flagged, one with it is not');
+  ok(/ERROR 2030-03-07: stop 13 points at a missing place/.test(pc.stdout), 'plan check: a stop pointing at a missing place is an error');
+  plan.days = [{ date: '2030-03-06', label: 'Easy day out — light' }];
+  fs.writeFileSync(f, JSON.stringify(plan));
+  ok(!/heavy day 2 in a row/.test(run('plan-check.js', [f]).stdout), 'plan check: a day labelled "light" in Days is not counted as heavy');
+  fs.unlinkSync(f);
+}
+
 console.log(fails ? 'QA tool tests: ' + fails + ' of ' + n + ' FAILED' : 'QA tool tests: all ' + n + ' passed');
 process.exit(fails ? 1 : 0);
