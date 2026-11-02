@@ -532,6 +532,10 @@ The allowances are rules of thumb, shown as "about"; they don't know about queue
 
 The tick beside each stop (and each place in Places) marks it as **been**: the card dims, a *Been · 已去* tag shows, and its pin turns grey on the maps. *Hide visited* in Places leaves them out. Handy when plans move about — the tick stays with the place, whichever day it ends up on. Ticks are shared through the Sheet's `visited` column (paste the updated `Code.gs`, *Deploy → Manage deployments → Edit → New version*); until then they stay on the phone.
 
+**Planning on the road.** Locations shows how far through the plan you are — *On the plan · 12 of 30 planned visited* (per city when a city is picked; places that are only `OPTIONAL — …` alternatives count as extras). Each row says which day the place is planned for. *On the plan* narrows the list to places on the schedule; with *Hide visited* it's what's left to see. During the trip, a place's page has **Add to today**, with Undo.
+
+**Spice.** A first line of `Spice: none`, `Spice: mild options — …` or `Spice: spicy` in a food place's notes shows as a tag (*Not spicy*, *Mild options*, *Spicy*), and *Mild-friendly* in Locations keeps only the first two. Add it in *Edit this place*, or in the Sheet's `notes` column; the `trip-prep` skill writes one for every food place.
+
 ### Opening on today
 
 During the trip the app opens on today's plan — the third day of the trip on its third day — and moves to the new day if it was left open overnight. The route on the trip overview is a timeline, one row per hotel stay.

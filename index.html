@@ -227,6 +227,12 @@ nav.tabs .tz{font-size:10px;font-weight:500;line-height:1;opacity:.85;margin-top
 .stop.been .stop-en,.stop.been .stop-zh,.locrow.been .en{color:var(--ink-3)}
 .stop.been .stop-time{color:var(--ink-3)}
 .pill.been{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 38%,var(--line))}
+.pill.spice-none{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 38%,var(--line))}
+.pill.spice-mild{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+.pill.spice-spicy{color:#c0392b;border-color:color-mix(in srgb,#c0392b 40%,var(--line))}
+.locrow .mt .pill{font-size:10.5px;padding:1px 6px;vertical-align:1px}
+.planprog{margin:2px 0 8px}
+.planprog .pt{font-size:12.5px;color:var(--ink-2);margin-bottom:5px}
 .locrow .visitbtn{height:44px;margin-right:6px}
 .stop-tools{
   display:flex;align-items:center;gap:2px;border-top:1px solid var(--line);
@@ -948,6 +954,40 @@ var LOC_FIELDS = ["id","name_en","name_zh","city","type","lat","lng","nav_app","
    above). Kept through a sync the same way, for a backend without the column. */
 var VISIT_KEEP = LOCAL_FIRST.concat(["visited"]);
 function isVisited(l){ var v=String(l && l.visited || "").trim(); return !!v && v!=="no"; }
+/* Where each place sits on the plan: the days it's a planned stop, and the
+   days it's only an OPTIONAL alternative. On the road, Locations with "Hide
+   visited" is how the travellers saw what was left and re-planned each day. */
+function isOptionalStop(s){ return /^\s*OPTIONAL\b/i.test(s && s.notes || ""); }
+function planIndex(){
+  var ix={};
+  store.data.schedule.forEach(function(s){
+    var p=ix[s.location_id] || (ix[s.location_id]={ planned:[], optional:[] });
+    (isOptionalStop(s) ? p.optional : p.planned).push(s.date);
+  });
+  Object.keys(ix).forEach(function(k){ ix[k].planned.sort(); ix[k].optional.sort(); });
+  return ix;
+}
+function planText(p){
+  if(!p) return "";
+  var days=function(a){ return a.filter(function(d,i){ return a.indexOf(d)===i && DAYS.indexOf(d)>=0; }).map(dayNumber); };
+  var pl=days(p.planned), op=days(p.optional);
+  if(pl.length) return (pl.length>1?"Days ":"Day ")+pl.join(", ");
+  if(op.length) return "Option on day"+(op.length>1?"s ":" ")+op.join(", ");
+  return "";
+}
+/* A food place's spice level, from a "Spice: …" line in its notes (the
+   trip-prep skill writes one; anyone can add it in Edit place). none, mild
+   (mild dishes on the menu) or spicy; "" when the notes don't say. */
+function spiceOf(l){
+  var m=String(l && l.notes || "").match(/^\s*Spice:\s*(.+)$/im); if(!m) return "";
+  var v=m[1].toLowerCase();
+  if(/\bnone\b|not spicy|non-spicy|no chil+i/.test(v)) return "none";
+  if(/mild/.test(v)) return "mild";
+  if(/spicy|hot/.test(v)) return "spicy";
+  return "";
+}
+var SPICE_LABEL={ none:"Not spicy", mild:"Mild options", spicy:"Spicy" };
+function spicePill(l){ var k=spiceOf(l); return k ? '<span class="pill spice-'+k+'">'+SPICE_LABEL[k]+'</span>' : ""; }
 function toggleVisited(id){
   var l=store.loc(id); if(!l) return Promise.resolve(false);
   var v=isVisited(l) ? "no" : todayISO();
@@ -2439,6 +2479,8 @@ function renderPlaces(){
   var q=ui.q||"";
   var mode=ui.placesMode==="map" ? "map" : "list";
   var hideChip=(all.some(isVisited) ? '<button class="chip" data-act="hide-visited" aria-pressed="'+!!ui.hideVisited+'">Hide visited</button>' : '')+
+    (store.data.schedule.length ? '<button class="chip" data-act="on-plan" aria-pressed="'+!!ui.onPlan+'">On the plan</button>' : '')+
+    (all.some(function(l){ return /none|mild/.test(spiceOf(l)); }) ? '<button class="chip" data-act="mild" aria-pressed="'+!!ui.mild+'">Mild-friendly</button>' : '')+
     '<button class="chip" data-act="no-link" aria-pressed="'+!!ui.noLink+'">No map link</button>';
   var seg='<div class="seg two" role="tablist">'+[["list","List · 列表"],["map","Map · 地图"]].map(function(x){
     return '<button data-act="places-mode" data-v="'+x[0]+'" aria-pressed="'+(mode===x[0])+'">'+x[1]+'</button>';
@@ -2467,6 +2509,7 @@ function renderPlaces(){
       return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
         (t==="All"?"All types":esc(t))+'</button>';
     }).join("")+hideChip+'</div>'+
+    planProgress(planIndex())+
     '<div id="placeResults">'+placeResults(q)+'</div>';
 
   var input=$("#q");
@@ -2482,11 +2525,29 @@ function renderPlaces(){
   }
 }
 
+/** The Locations filters other than the search box, shared by the list and the map. */
+function placeFilter(ix){
+  return function(l){
+    return (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type) && !(ui.hideVisited && isVisited(l)) &&
+      !(ui.noLink && mapLinkOf(l)) && !(ui.onPlan && !ix[l.id]) && !(ui.mild && !/none|mild/.test(spiceOf(l)));
+  };
+}
+/** "On the plan: 12 of 20 visited" for the city and type picked. */
+function planProgress(ix){
+  var scope=store.data.locations.filter(function(l){ return (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type); });
+  var pl=scope.filter(function(l){ return ix[l.id] && ix[l.id].planned.length; });
+  var op=scope.filter(function(l){ return ix[l.id] && !ix[l.id].planned.length && ix[l.id].optional.length; });
+  if(!pl.length && !op.length) return "";
+  var n=function(a){ return a.filter(isVisited).length; };
+  var pct=pl.length ? Math.round(n(pl)/pl.length*100) : 0;
+  return '<div class="planprog" role="status"><div class="pt"><b>'+(ui.city==="All"?"On the plan":esc(ui.city))+'</b> · '+
+      n(pl)+' of '+pl.length+' planned visited'+(op.length ? ' · extras '+n(op)+' of '+op.length : '')+'</div>'+
+    (pl.length ? '<div class="prog"><i style="width:'+pct+'%"></i></div>' : '')+'</div>';
+}
+
 function placeResults(q){
-  var all=store.data.locations;
-  var list=all.filter(function(l){
-    return matches(l,q) && (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type) && !(ui.hideVisited && isVisited(l)) && !(ui.noLink && mapLinkOf(l));
-  });
+  var all=store.data.locations, ix=planIndex(), keep=placeFilter(ix);
+  var list=all.filter(function(l){ return matches(l,q) && keep(l); });
   return '<div class="spread small muted" style="margin:4px 0 10px">'+
       '<span>'+list.length+" of "+all.length+'</span>'+
       '<span class="row" style="gap:6px">'+(otherTripPlaces().length ? '<button class="btn sm ghost" data-act="library">Other trips</button>' : '')+
@@ -2500,7 +2561,9 @@ function placeResults(q){
         '<button class="lb" data-act="open" data-lid="'+esc(l.id)+'" style="text-align:left;background:none">'+
           '<div class="en">'+hilite(l.name_en,q)+'</div>'+
           '<div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
-          '<div class="mt">'+(isVisited(l)?'<b style="color:var(--ok)">Been · 已去</b> · ':'')+esc(l.city)+' · '+esc(l.type)+' · '+esc(mapLinkOf(l) ? mapLinkApp(mapLinkOf(l))+' link' : u.app)+'</div>'+
+          '<div class="mt">'+(isVisited(l)?'<b style="color:var(--ok)">Been · 已去</b> · ':'')+
+            (planText(ix[l.id]) ? '<b>'+esc(planText(ix[l.id]))+'</b> · ' : '')+esc(l.city)+' · '+esc(l.type)+' · '+esc(mapLinkOf(l) ? mapLinkApp(mapLinkOf(l))+' link' : u.app)+
+            (spiceOf(l) ? ' '+spicePill(l) : '')+'</div>'+
         '</button>'+
         visitBtn(l)+
         '<button class="navbtn '+u.cls+'" data-act="nav" data-lid="'+esc(l.id)+'" aria-label="Navigate">'+IC.nav+'</button>'+
@@ -2977,7 +3040,7 @@ function locationDetail(id){
       '<div class="ph">'+esc(l.type)+(TYPE_ZH[l.type]?' · <span class="zh">'+TYPE_ZH[l.type]+'</span>':'')+'</div>'+
       '<div class="hz zh">'+escz(l.name_zh)+'</div>'+
       '<div class="he">'+esc(l.name_en)+'</div>'+
-      '<div class="hm">'+esc(l.city)+' · '+esc(l.type)+' · opens in '+esc(u.app)+'</div>'+
+      '<div class="hm">'+esc(l.city)+' · '+esc(l.type)+' · opens in '+esc(u.app)+(spiceOf(l) ? ' '+spicePill(l) : '')+'</div>'+
     '</div>'+
     (cr ? '<div class="credit">Photo: <a href="'+esc(cr.href)+'" target="_blank" rel="noopener">'+esc(cr.text)+'</a></div>' : '')+
     '<div class="navrow">'+
@@ -3013,10 +3076,14 @@ function locationDetail(id){
     (function(){
       var appear=store.data.schedule.filter(function(s){ return s.location_id===l.id; })
         .sort(function(a,b){ return a.date<b.date?-1:1; });
-      if(!appear.length) return '<p class="blurb muted small">Not on the schedule yet.</p>'+
+      // During the trip, the one-tap way to fit something in today
+      var td=todayISO(), onToday=appear.some(function(s){ return s.date===td; });
+      var today = DAYS.indexOf(td)>=0 && !onToday
+        ? '<button class="btn primary block" data-act="add-today" data-lid="'+esc(l.id)+'" style="margin-bottom:10px">'+IC.plus+' Add to today · 今天</button>' : '';
+      if(!appear.length) return today+'<p class="blurb muted small">Not on the schedule yet.</p>'+
         '<button class="btn block" data-act="add-to-day" data-lid="'+esc(l.id)+'" style="margin-top:8px">Add to a day</button>';
-      return '<ul class="lst">'+appear.map(function(s){
-        return "<li>Day "+dayNumber(s.date)+" · "+esc(fmtDate(s.date,true))+(s.planned_time?" at "+esc(s.planned_time):"")+"</li>";
+      return today+'<ul class="lst">'+appear.map(function(s){
+        return "<li>Day "+dayNumber(s.date)+" · "+esc(fmtDate(s.date,true))+(s.planned_time?" at "+esc(s.planned_time):"")+(isOptionalStop(s)?" (option)":"")+"</li>";
       }).join("")+'</ul>'+
       '<button class="btn block" data-act="add-to-day" data-lid="'+esc(l.id)+'" style="margin-top:10px">Add to another day</button>';
     })()+
@@ -3916,7 +3983,7 @@ function showMap(which, el, pins, opts){
 }
 function renderPlacesMap(head){
   var all=store.data.locations;
-  var list=all.filter(function(l){ return (ui.city==="All"||l.city===ui.city) && (ui.type==="All"||l.type===ui.type) && !(ui.hideVisited && isVisited(l)) && !(ui.noLink && mapLinkOf(l)); });
+  var list=all.filter(placeFilter(planIndex()));
   var pinned=list.filter(hasXY), missing=list.length-pinned.length;
   dropMap("places");
   $("#view-places").innerHTML=head+
@@ -3925,7 +3992,7 @@ function renderPlacesMap(head){
       return '<span><i style="background:'+TYPE_COLOR[t]+'"></i>'+t+'</span>'; }).join("")+
       (list.some(isVisited) ? '<span><i style="background:'+VISITED_COLOR+'"></i>visited</span>' : '')+
       '<span class="muted">'+pinned.length+' on the map'+(missing?' · '+missing+' without a pin':'')+'</span></div>';
-  var key=TRIP.id+"|"+ui.city+"|"+ui.type+"|"+!!ui.hideVisited;
+  var key=TRIP.id+"|"+ui.city+"|"+ui.type+"|"+!!ui.hideVisited+"|"+!!ui.onPlan+"|"+!!ui.mild;
   var v=ui.mapView && ui.mapView.key===key ? ui.mapView : null;
   var ctr=cityInfo(ui.city!=="All" ? ui.city : (cityOptions()[0]||""));
   showMap("places", $("#placesMap"), pinned.map(function(l){
@@ -4825,6 +4892,17 @@ document.addEventListener("click", function(ev){
     }
     case "hide-visited": ui.hideVisited=!ui.hideVisited; save(LS.ui,ui); render(); return;
     case "no-link": ui.noLink=!ui.noLink; save(LS.ui,ui); render(); return;
+    case "on-plan": ui.onPlan=!ui.onPlan; save(LS.ui,ui); render(); return;
+    case "mild": ui.mild=!ui.mild; save(LS.ui,ui); render(); return;
+    case "add-today": {
+      var td=todayISO(), lidT=lid;
+      addStop(td, lidT, "", "").then(function(e){
+        locationDetail(lidT);
+        toast("Added to today", 5000, function(){ removeStop(e.id).then(function(){ locationDetail(lidT); render(); }); });
+        render();
+      });
+      return;
+    }
     case "nearby": {
       var ln=store.loc(lid); if(ln && hasXY(ln)) openUrls(nearbyUrls(ln, t.dataset.kind));
       return;
