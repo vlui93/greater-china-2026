@@ -1,12 +1,12 @@
 /* No trip is built into the app. A phone that knows nothing, on a Sheet whose
    Trips tab is empty, works out the one trip from the plan's own dates; once
-   the Sheet lists its trips the phone remembers the default one; and the page,
+   the Sheet lists its trips, its row is the trip; and the page,
    its manifest and the app's files name no trip, city list or dates. */
 const { suite, trip } = require('./lib');
 const fs = require('fs'), path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 
-suite({}, async (env) => {
+suite({ trips: false }, async (env) => {
   const { ok, wait, rows } = env;
   const T = trip();
   const dates = T.schedule.map(s => s.date).concat(T.bookings.map(b => b.date), T.bookings.map(b => b.arr_date))
@@ -14,7 +14,7 @@ suite({}, async (env) => {
   const span = Math.round((Date.parse(last) - Date.parse(first)) / 864e5) + 1;
 
   console.log('\n1. before connecting');
-  const page = await env.phone({ trip0: false, connect: false });
+  const page = await env.phone({ connect: false });
   ok(await page.title() === 'My trip', 'the page is titled "' + await page.title() + '"');
   ok(!/Greater China/.test(await page.content()), 'nothing on the page names a trip');
   ok(await page.evaluate(() => TRIP.id === 'trip-1' && TRIP.start === TRIP.end && TRIP.start === todayISO()), 'the placeholder trip is just today, until there is a plan');
@@ -42,12 +42,10 @@ suite({}, async (env) => {
   await page.click('#btnSettings'); await wait(400); await page.click('[data-act="trip-open"][data-tid="trip-1"]'); await wait(900);
   ok(await page.evaluate(() => TRIP.id === 'trip-1' && store.data.locations.length) === T.locations.length, 'and it opens with them');
 
-  console.log('\n4. a phone remembers the default trip the Sheet lists');
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('gct.trip0') || 'null'));
-  ok(saved && saved.id === 'trip-1' && saved.start === first, 'kept on the phone after a sync that brought the trips');
-  env.box.post('saveTrip', { id: 'trip-1', name: 'Renamed in the Sheet' });
+  console.log('\n4. once the Sheet lists the trip, the Sheet\'s row is the trip');
+  env.box.post('saveTrip', { id: 'trip-1', name: 'Renamed in the Sheet', end: '2026-11-03' });
   await page.evaluate(() => store.sync({ quiet: true })); await wait(500);
-  ok(await page.evaluate(() => TRIP.name) === 'Renamed in the Sheet' && await page.evaluate(() => JSON.parse(localStorage.getItem('gct.trip0')).name) === 'Renamed in the Sheet', 'and kept up to date');
+  ok(await page.evaluate(() => TRIP.name === 'Renamed in the Sheet' && TRIP_END === '2026-11-03'), 'a name and last day changed in the Sheet are the ones the app shows');
 
   console.log('\n5. what ships names no trip');
   const man = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
@@ -72,7 +70,7 @@ suite({}, async (env) => {
   ok(await page.evaluate(() => taxiFor('Hong Kong').flag) === 31, 'a tariff changed in the Sheet is the tariff the app uses');
   // a Sheet with no city rows at all
   env.tab('Cities').d.splice(1);
-  const bare = await env.phone({ trip0: false, clock: '2026-10-18T09:00:00+08:00', clockMode: 'install' });
+  const bare = await env.phone({ clock: '2026-10-18T09:00:00+08:00', clockMode: 'install' });
   ok(await bare.evaluate(() => cityInfo('Hong Kong') === null && cityList().length === 0), 'with no rows, the app knows no cities');
   await bare.evaluate(() => { homeMode = 'day'; setView('today'); }); await wait(400);
   ok(await bare.$$eval('#stopList .stop', e => e.length).catch(() => 0) > 0 || await bare.$$eval('#view-today [data-lid]', e => e.length) > 0, 'the day\'s plan still shows');

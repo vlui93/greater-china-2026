@@ -1,24 +1,24 @@
 /* Getting between stops: legs worked out from the pins, getting-there notes
-   imported on the phone and kept through syncs with a backend that has no
-   columns for them yet, and every travel line on every day free of NaN. */
+   imported on a phone reaching the Sheet and staying through syncs, a blank
+   in the Sheet being a blank on the phone, and every travel line on every day
+   free of NaN. */
 const { suite, trip, fixture, fixturePath } = require('./lib');
 const fs = require('fs');
 
-suite({}, async (env) => {
-  const { ok, wait } = env;
-  const NEW = ['getting_there', 'arrive_by', 'tickets'];
-  // The backend before the new columns existed, and right after: columns there but empty.
-  const OLD = trip(); OLD.locations.forEach(l => NEW.forEach(k => delete l[k]));
-  const EMPTY = trip(); EMPTY.locations.forEach(l => NEW.forEach(k => l[k] = ''));
-  let backend = OLD;
-  const page = await env.phone({ static: b => b.action === 'all' ? backend : b.action === 'ping' ? 'pong' : {} });
+const NEW = ['getting_there', 'arrive_by', 'tickets'];
+// A Sheet whose places have no getting-there notes yet
+const OLD = trip(); OLD.locations.forEach(l => NEW.forEach(k => { l[k] = ''; }));
+
+suite({ seed: OLD }, async (env) => {
+  const { ok, wait, rows } = env;
+  const page = await env.phone({});
   const notes = fixture('trip-notes.json');
   const known = new Set(OLD.locations.map(l => l.id));
   const nGT = notes.locations.filter(x => x.id && known.has(x.id) && x.getting_there).length;
   const nBoth = notes.locations.filter(x => x.id && known.has(x.id) && x.getting_there && x.tickets).length;
   const nMatched = notes.locations.filter(x => x.id && known.has(x.id)).length;
 
-  console.log('\n1. before import (old backend, no notes yet)');
+  console.log('\n1. before import (no notes yet)');
   await page.click('button.daychip[data-date="2026-10-19"]'); await wait(250);
   let legs = await page.$$eval('.stop-leg', els => els.map(e => e.innerText.replace(/\s+/g, ' ').trim()));
   ok(legs.length > 0, 'computed legs render (' + legs.length + ' on day 19)');
@@ -33,16 +33,19 @@ suite({}, async (env) => {
   legs = await page.$$eval('.stop-leg', els => els.map(e => e.innerText.replace(/\s+/g, ' ').trim()));
   ok(legs.some(t => /Test Big Buddha.*cable car/.test(t)), 'Test Cable Car → Test Big Buddha now says cable car');
 
-  console.log('\n3. survives a sync against the OLD backend');
-  await page.click('[data-act="sync"]'); await wait(700);
+  console.log('\n3. the notes reach the Sheet, and stay through a sync');
+  await page.click('[data-act="sync"]'); await wait(900);
   let kept = await page.evaluate(() => store.data.locations.filter(l => l.getting_there && l.tickets).length);
   ok(kept === nBoth, 'places with getting_there+tickets after sync: ' + kept + ' (want ' + nBoth + ')');
+  ok(rows('Locations').filter(l => l.getting_there).length === nGT, 'and the Sheet has getting-there on all ' + nGT + ' places');
 
-  console.log('\n4. survives a sync against an UPGRADED backend that is still empty');
-  backend = EMPTY;
-  await page.click('[data-act="sync"]'); await wait(700);
-  kept = await page.evaluate(() => store.data.locations.filter(l => l.getting_there).length);
-  ok(kept === nGT, 'getting_there still on all ' + kept + ' places');
+  console.log('\n4. a blank in the Sheet is a blank on the phone');
+  const shL = env.tab('Locations'), cGT = shL.d[0].indexOf('getting_there'), rMkt = shL.d.findIndex(x => x && x[0] === 'fx-hk-market');
+  const hadGT = await page.evaluate(() => !!store.loc('fx-hk-market').getting_there);
+  shL.d[rMkt][cGT] = '';
+  await page.click('[data-act="sync"]'); await wait(900);
+  ok(hadGT && await page.evaluate(() => store.loc('fx-hk-market').getting_there) === '', 'a note cleared in the Sheet is cleared on the phone (it used to come back from the phone)');
+  ok(await page.evaluate(() => store.data.locations.filter(l => l.getting_there).length) === nGT - 1, 'the other ' + (nGT - 1) + ' are untouched');
 
   console.log('\n5. detail view');
   await page.evaluate(() => locationDetail('fx-hk-peak')); await wait(300);

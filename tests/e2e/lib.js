@@ -94,8 +94,8 @@ const NET = {
   'https://wb.amap.com/?p=B0TEST0001,23.105432,113.248765,%E6%B5%8B%E8%AF%95%E9%9D%A2%E9%A6%86,%E5%B9%BF%E5%B7%9E&src=share': [200, {}, '<title>测试面馆-高德地图</title>']
 };
 /* pre2: the last backend from before replies carried a version number. */
-const CODE = { current: path.join(ROOT, 'Code.gs'), v1: path.join(FIX, 'Code.v1.gs'), pre2: path.join(FIX, 'Code.pre2.gs') };
-/** Code.gs (or the first release, `v1`) running against `SS`, seeded with `seed`. */
+const CODE = { current: path.join(ROOT, 'Code.gs'), pre2: path.join(FIX, 'Code.pre2.gs') };
+/** Code.gs (or `pre2`, the last one before versions) running against `SS`, seeded with `seed`. */
 function backend(SS, which, seed) {
   const box = { SpreadsheetApp: { getActive: () => SS },
     ContentService: { MimeType: { JSON: 'j' }, createTextOutput: t => ({ _t: t, setMimeType() { return this; } }) },
@@ -116,12 +116,10 @@ function trip() { delete require.cache[require.resolve('./fixtures/trip.js')]; r
 function fixturePath(name) { return path.join(FIX, name); }
 function fixture(name) { return JSON.parse(fs.readFileSync(fixturePath(name), 'utf8')); }
 
-/* The app carries no trip of its own. A phone that has synced with a Sheet
-   that lists its trips remembers the default one (gct.trip0), and falls back
-   on it when a reply lists none. The suites' Sheet starts with an empty Trips
-   tab (and the first release's backend has no such tab at all), so each phone
-   starts the way such a phone would: already knowing the invented trip's name
-   and dates. `trip0: false` gives a phone that knows nothing. */
+/* The app carries no trip of its own: the Sheet's Trips tab lists them. The
+   suites' Sheet starts with the invented trip as its one row (the default
+   trip, which rows with no trip id belong to). `trips: false` gives a Sheet
+   whose Trips tab is still empty. */
 const FIRST_TRIP = { id: 'gc2026', name: 'Greater China', name_zh: '', start: '2026-10-16', end: '2026-11-01',
   tz: 'Asia/Shanghai', zh_script: '', is_default: '1', notes: '' };
 
@@ -141,6 +139,8 @@ async function setup(opts) {
   // from the start (`cities: false` for a Sheet with none).
   env.cities = opts.cities === false ? [] : require('./fixtures/cities.js')();
   if (env.box.TABS.Cities) env.cities.forEach(c => env.box.post('saveCity', c));
+  env.trips = opts.trips === false ? [] : [Object.assign({}, FIRST_TRIP)];
+  if (env.box.TABS.Trips) env.trips.forEach(t => env.box.post('saveTrip', t));
   const s = await serve(); env.server = s.server; env.url = s.url;
   env.browser = await launch();
   env.ok = (c, m) => { env.checks++; console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) env.fails++; };
@@ -159,25 +159,29 @@ async function setup(opts) {
     env.contexts.push(ctx);
     // Never reach the real internet: photo lookups and map tiles are answered here or refused.
     if (!o.keepNet) await ctx.route(/wikipedia\.org|wikimedia\.org|openstreetmap\.org/, r => r.fulfill({ status: 404, body: '' }));
-    const posted = [];
+    const posted = [], kept = { locations: {}, bookings: {} };
     await ctx.route('**/macros/s/**', async route => {
       const body = route.request().postData() || '{}';
       try { posted.push(JSON.parse(body)); } catch (e) { /* not JSON */ }
       if (o.static) {
-        // A canned reply is the trip alone; the Sheet's city rows go with it, as a real reply's would
-        let d = o.static(JSON.parse(body));
-        if (env.cities.length && d && d.locations && !d.cities) d = Object.assign({}, d, { cities: env.cities });
+        // A canned reply is the trip alone; the Sheet's city and trip rows go with it, as a real
+        // reply's would. And like a real backend it keeps what it is told about a place or a
+        // booking: a saved field comes back on the next sync.
+        const req = JSON.parse(body);
+        const jobs = req.action === 'batch' ? ((req.payload || {}).jobs || []) : [req];
+        jobs.forEach(j => { const p = j.payload, t = j.action === 'saveLocation' ? 'locations' : j.action === 'saveBooking' ? 'bookings' : null;
+          if (t && p && p.id) kept[t][p.id] = Object.assign(kept[t][p.id] || {}, p); });
+        let d = o.static(req);
+        if (d && d.locations) {
+          d = Object.assign({ cities: env.cities, trips: env.trips }, d);
+          ['locations', 'bookings'].forEach(t => { if (Array.isArray(d[t])) d[t] = d[t].map(r => kept[t][r.id] ? Object.assign({}, r, kept[t][r.id]) : r); });
+        }
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
       }
       let out = env.box.doPost({ postData: { contents: body }, parameter: {} })._t;
-      // The first release's backend has no Cities tab: with it, the app used facts built into
-      // the app. No backend that old is deployed any more and the app no longer carries them,
-      // so for the suites that still run it, its replies are given the rows.
-      if (!env.box.TABS.Cities && env.cities.length) { const j = JSON.parse(out); if (j.data && j.data.locations && !j.data.cities) { j.data.cities = env.cities; out = JSON.stringify(j); } }
       if (o.filter) out = JSON.stringify(o.filter(JSON.parse(out), JSON.parse(body)));
       route.fulfill({ status: 200, contentType: 'application/json', body: out });
     });
-    if (o.trip0 !== false) await ctx.addInitScript(t => { try { if (!localStorage.getItem('gct.trip0')) localStorage.setItem('gct.trip0', t); } catch (e) { /* no storage yet */ } }, JSON.stringify(FIRST_TRIP));
     if (o.init) await ctx.addInitScript(o.init.fn, o.init.arg);
     if (o.before) await o.before(ctx);   // extra routes, before the page loads
     const page = await ctx.newPage();

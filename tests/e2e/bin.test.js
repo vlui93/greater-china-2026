@@ -1,8 +1,8 @@
 /* Deleting places quickly, and getting them back. Swipe a place left in
    Locations to show Delete; it goes from every day (All Days and Home) and
    from the Sheet, with Undo, and into "Recently deleted", where Restore puts
-   it back on the same days. With the current backend the bin is the Sheet's
-   Bin tab, shared by every phone; with an older one it stays on the phone. */
+   it back on the same days. The bin is the Sheet's Bin tab, shared by every
+   phone. */
 const { suite, trip } = require('./lib');
 
 suite({}, async (env) => {
@@ -99,15 +99,5 @@ suite({}, async (env) => {
   await page.evaluate(() => store.sync({ quiet: true })); await wait(800);
   ok(await page.evaluate(id => !!store.loc(id), victim) && !/Recently deleted/.test(await page.textContent('#placeResults')), 'the first phone sees it back after a sync, bin empty');
 
-  console.log('\n6. with an older backend, the bin stays on the phone');
-  const old = await env.phone({ clock: '2026-10-18T11:00:00+08:00', clockMode: 'install',
-    filter: (out, body) => { if (body.action === 'all' && out.data) delete out.data.bin; return out; } });
-  await old.evaluate(() => setView('places')); await wait(300);
-  const tid = T.locations.find(l => l.type === 'shopping').id;
-  await old.evaluate(id => deletePlace(id), tid); await wait(700);
-  await old.click('[data-act="bin"]'); await wait(300);
-  ok(/Places deleted on this phone/.test(await old.textContent('#sheetBody')), 'its bin says it is this phone\'s');
-  await old.click('#sheetBody [data-act="bin-restore"]'); await wait(800);
-  ok(await old.evaluate(id => !!store.loc(id), tid) && rows('Locations').some(l => l.id === tid), 'and restores from there');
-  ok(!page.errs.length && !other2.errs.length && !old.errs.length, 'no JS errors ' + page.errs.concat(other2.errs, old.errs).join('; '));
+  ok(!page.errs.length && !other2.errs.length, 'no JS errors ' + page.errs.concat(other2.errs).join('; '));
 });

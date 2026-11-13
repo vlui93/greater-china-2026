@@ -11,7 +11,7 @@ suite({}, async (env) => {
   const nLoc=await page.evaluate(()=>store.data.locations.length);
 
   console.log('\n1. the trip you have: nothing changes');
-  ok(await page.evaluate(()=>TRIP.id==="gc2026" && DAYS.length===17 && store.supportsTrips), 'one trip, 17 days, backend knows trips');
+  ok(await page.evaluate(()=>TRIP.id==="gc2026" && DAYS.length===17), 'one trip, 17 days');
   ok(await page.evaluate(()=>dayLabel("2026-10-20"))==="Test day trip", 'day names from the Days tab');
   ok(await page.evaluate(()=>bookingWhen({date:"2026-10-21",time:"09:15"})===Date.parse("2026-10-21T09:15:00+08:00")), 'booking times still read as UTC+8');
   ok(await page.evaluate(()=>bookingWhen({date:"2026-10-16",time:"10:00",tz:"Australia/Sydney"})===Date.parse("2026-10-16T10:00:00+11:00")), 'a booking in Sydney time reads as AEDT');
@@ -95,25 +95,6 @@ suite({}, async (env) => {
   ok(SC2.length===2 && SC2.every(s=>s.date==='2027-04-03'), 'Sheet: stops moved two days');
   ok(D2.length===1 && D2[0].date==='2027-04-03' && D2[0].label==='Arrive Kyoto', 'Sheet: day name moved with them');
   ok(await page.evaluate(()=>DAYS[0]==="2027-04-03" && dayLabel("2027-04-03")==="Arrive Kyoto"), 'app shows the moved plan');
-
-  console.log('\n8. an older backend: trips kept on the phone, no new ones');
-  await page.ctx.unroute('**/macros/s/**');
-  await page.ctx.route('**/macros/s/**', async route=>{ const body=route.request().postData()||'{}';
-    // an older backend knows nothing of fingerprints: it ignores one sent to it, and sends no version or fingerprint back
-    const req=JSON.parse(body); if(req.payload) delete req.payload.etag;
-    const j=JSON.parse(env.box.doPost({postData:{contents:JSON.stringify(req)},parameter:{}})._t);
-    delete j.v; if(j.data) delete j.data.etag;
-    if(j.data && j.data.locations){ delete j.data.trips; delete j.data.cities; delete j.data.days; }
-    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(j)}); });
-  await page.evaluate(()=>store.sync({quiet:true})); await wait(600);
-  ok(await page.evaluate(()=>!store.supportsTrips && store.raw.trips.length===2 && cityInfo("Kyoto")!==null), 'trips and cities kept');
-  await page.click('#btnSettings'); await wait(200);
-  ok(await page.$('[data-act="trip-new"]')===null && /one-off update/.test(await page.innerText('#sheetBody')), 'no + New trip; says the script needs the update');
-  await page.evaluate(()=>closeSheet());
-  await page.ctx.unroute('**/macros/s/**');
-  await page.ctx.route('**/macros/s/**', async route=>{ const body=route.request().postData()||'{}';
-    route.fulfill({status:200,contentType:'application/json',body:env.box.doPost({postData:{contents:body},parameter:{}})._t}); });
-  await page.evaluate(()=>store.sync({quiet:true})); await wait(600);
 
   console.log('\n9. delete the trip');
   await page.click('#btnSettings'); await wait(200); await page.click('[data-act="trip-edit"]'); await wait(200);

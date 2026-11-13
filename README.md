@@ -304,7 +304,7 @@ The content is trip data, so like everything else it is not in this repo. It com
 
 **On a phone:** ⚙ → **Import trip notes** → pick the file. A row can name its place (`name_zh` or `name_en`) instead of giving an `id` — that's how details reach a place someone added on their phone, whose id nobody else knows. Background, what to do, dishes and souvenirs only ever fill an empty field, and they're queued for the Sheet; an import never overwrites what someone wrote. Do it once per phone. The notes are kept on that phone, and a sync never blanks them — even against a backend that does not have the columns yet.
 
-A notes file can also carry new places and itinerary changes, which works on any backend version:
+A notes file can also carry new places and itinerary changes:
 
 - a `locations` row with `"add": true` and its own `id` (`loc-` plus letters and digits) creates that place, unless one with the same id or name is already there;
 - `schedule` rows add or update stops by `id` (`date`, `order_index`, `location_id`, `planned_time`, `notes`), and `schedule_remove` lists stop ids to delete.
@@ -322,17 +322,17 @@ Push the notes file, not `src/seed.json`. `push` overwrites every field that dif
 
 ### Photos
 
-Each phone finds photos for itself. For every place without one it asks Wikipedia — English first, then Chinese — for the article's lead image, and only takes it when the article's coordinates are within 3 km of the place's pin (or near its city when the place has no pin), so a shared name can't put the wrong building on a card. Disambiguation pages are skipped. The photo shows on the stop card, the place page (with a credit linking the image's file page) and the Locations list.
+The first phone to sync looks photos up, and what it finds is saved to the Sheet for the others. For every place without one it asks Wikipedia — English first, then Chinese — for the article's lead image, and only takes it when the article's coordinates are within 3 km of the place's pin (or near its city when the place has no pin), so a shared name can't put the wrong building on a card. Disambiguation pages are skipped. The photo shows on the stop card, the place page (with a credit linking the image's file page) and the Locations list.
 
 Photos are saved on the phone for offline use — Wikipedia is blocked on the mainland — in their own cache, capped at 30 MB, which outlasts app updates. They are looked up after each sync and when the phone comes back online, at most once a fortnight per place; ⚙ → **Photos → Find** looks again now and shows how many are saved. Lookups send place names to Wikipedia, and nothing else.
 
-To choose a photo yourself, paste an `https` image link into **Photo link** on Edit place; type `none` for no photo, which also stops the lookup. Photos found automatically stay on each phone; a link you set is saved to the Sheet like any other field, once the backend has the column.
+To choose a photo yourself, paste an `https` image link into **Photo link** on Edit place; type `none` for no photo, which also stops the lookup. A photo found automatically and a link you set are both saved to the Sheet, like any other field. A view-only phone doesn't look photos up; it shows the ones already there.
 
 ### Ticket links
 
 A booking or a place can carry a link to its ticket — a Trip.com order, a PDF in Google Drive, the airline's page. Only the link is kept, never the ticket or its QR code. Add one from the booking (Bookings → open it → **+ Add ticket link**), from the overview's **Tickets 票夹** row, or from Edit place → **Ticket link**. Links have to be `https`.
 
-They open from the overview's Tickets row (which lists every upcoming flight, train and ferry, so the missing ones are easy to spot), from the booking or place page, and from that day's briefing. Until the backend is upgraded, a link stays on the phone that added it and survives syncs; afterwards it is saved to the Sheet and reaches every phone.
+They open from the overview's Tickets row (which lists every upcoming flight, train and ferry, so the missing ones are easy to spot), from the booking or place page, and from that day's briefing. The link is saved to the Sheet and reaches every phone.
 
 ---
 
@@ -346,7 +346,7 @@ The **Prep** tab has three parts.
   - *Group — one of us brings it* (kind `pack`) — things the group needs once, like adapters and the first-aid kit. Unticked ones say *One for the group*. Ticking one records your name (*Alex brings it*) so the others can see it's covered. Set your name in ⚙ Settings.
   - *Just me* — extras kept only on that phone, never synced.
 
-  Editing an item lets you move it between *Each of us* and *Group*. **Section** is a dropdown of that list's sections, with *＋ New section…* to start one. For a group item, **Who's bringing it** picks from everyone the app has seen on the trip — your name in ⚙ Settings, whoever has ticked or been given something — or *＋ Someone else…*. The item then reads *Sam to bring* (or *You're bringing it*) until someone ticks it. Assignments are saved in the Checklist tab's `assignee` column, which needs the updated `Code.gs`; until it is deployed, an assignment stays on the phone that made it.
+  Editing an item lets you move it between *Each of us* and *Group*. **Section** is a dropdown of that list's sections, with *＋ New section…* to start one. For a group item, **Who's bringing it** picks from everyone the app has seen on the trip — your name in ⚙ Settings, whoever has ticked or been given something — or *＋ Someone else…*. The item then reads *Sam to bring* (or *You're bringing it*) until someone ticks it. Assignments are saved in the Checklist tab's `assignee` column.
 - **Deleting quickly.** Swipe any item left — a task or a packing item — to show **Delete**. Swipe a section's title left to delete the whole section. There's no "are you sure"; an **Undo** shows for five seconds instead. Tap a section's title to rename it. Deleted rows stay in the Sheet marked `removed`, so another phone can't bring them back.
 - **Guide** — general advice for Hong Kong, Macau and the mainland: apps to install, staying connected, paying, getting around, power banks. Nothing in it is specific to this trip, so it ships in the page.
 
@@ -452,7 +452,7 @@ Each trip has its own personal packing list on each phone.
 
 ### Updating the backend
 
-The app works with the old backend — you just can't add trips or cities, and day names stay on the phone that set them. To switch it on:
+When a new version of the app needs a newer backend, it says so (see below). To update it:
 
 1. Open `Code.gs` from this repo, select all, copy.
 2. In the Sheet: **Extensions → Apps Script**, select all of the old code and paste over it.
@@ -460,7 +460,9 @@ The app works with the old backend — you just can't add trips or cities, and d
 4. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment*, which would change the URL.
 5. In the app: ⚙ → **Pull**. **Trips** now has **+ New trip**.
 
-**How to tell it needs doing.** Every reply from the script carries its version number. When the app is built for a newer one, ⚙ Settings shows **Backend needs updating** with the two versions, and **Test** says so too. Nothing stops working in the meantime — the app only asks an older backend for what it has — but the newer parts stay off. Version 2 adds:
+**How to tell it needs doing.** Every reply from the script carries its version number. When the app is built for a newer one, ⚙ Settings shows **Backend needs updating** with the two versions, and **Test** says so too. The app only asks an older backend for what it has, so the newer parts stay off; a change it can't take is dropped with *Not saved: the Sheet's script is older than this app*, never kept quietly on one phone. The app no longer carries workarounds for backends older than version 2.
+
+**Fields phones used to keep to themselves.** Getting-there notes, ticket and photo links, the visited tick and a booking's flight details once stayed on the phone that had them, while the backend had no columns for them. The first sync after this version sends up whatever only that phone holds; from then on the Sheet's copy is the one that counts, so a cell cleared in the Sheet is cleared on the phones. A notes import now sends every place it changes to the Sheet. Version 2 adds:
 
 - **One request for many changes.** Changes made with no signal used to go up one at a time, a second or more each; they now go together.
 - **Nothing downloaded when nothing changed.** A sync sends back a fingerprint of the last copy it got; if the Sheet still matches, the answer is a few bytes. The fingerprint is of the content itself, so a change typed into the Sheet, or made by a script, counts like any other. ⚙ → **Pull** always fetches the whole trip.
@@ -577,7 +579,7 @@ The tick beside each stop (and each place in Places) marks it as **been**: the c
 
 **Planning on the road.** Locations shows how far through the plan you are — *On the plan · 12 of 30 planned visited* (per city when a city is picked; places that are only `OPTIONAL — …` alternatives count as extras). Each row says which day the place is planned for. *On the plan* narrows the list to places on the schedule; with *Hide visited* it's what's left to see. During the trip, a place's page has **Add to today**, with Undo.
 
-**Deleting and Recently deleted.** Swipe a place to the left in Locations to show **Delete** (or *Edit this place → Delete*). It goes from every day — Home and All Days — and from the Sheet, stops included, with **Undo** for a few seconds. It also goes into **Recently deleted** (the link under the list), where **Restore** puts it back with its stops on the same days. The bin is the Sheet's **Bin** tab — each row holds the place and its stops as they were, who deleted it and when — so any phone can restore from it once it has synced. With a backend from before the Bin tab, the bin is kept on the phone that deleted the place instead (the last 60).
+**Deleting and Recently deleted.** Swipe a place to the left in Locations to show **Delete** (or *Edit this place → Delete*). It goes from every day — Home and All Days — and from the Sheet, stops included, with **Undo** for a few seconds. It also goes into **Recently deleted** (the link under the list), where **Restore** puts it back with its stops on the same days. The bin is the Sheet's **Bin** tab — each row holds the place and its stops as they were, who deleted it and when — so any phone can restore from it once it has synced. (Places deleted before the Sheet had that tab were kept on the phone that deleted them; any still there show and restore too.)
 
 **Spice.** A first line of `Spice: none`, `Spice: mild options — …` or `Spice: spicy` in a food place's notes shows as a tag (*Not spicy*, *Mild options*, *Spicy*), and *Mild-friendly* in Locations keeps only the first two. Add it in *Edit this place*, or in the Sheet's `notes` column; the `trip-prep` skill writes one for every food place.
 

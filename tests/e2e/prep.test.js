@@ -1,8 +1,8 @@
-/* Prep: importing checklist and packing on a phone while the backend is still the first release, ticking without jamming the queue, soft deletes, the upgrade uploading the phone's checklist, newest tick wins, day briefings, the Tomorrow card and the guide. */
+/* Prep: importing checklist and packing on a phone, ticking without jamming the queue, soft deletes, the phone uploading its checklist, newest tick wins, day briefings, the Tomorrow card and the guide. */
 const { suite, trip, fixture, fixturePath, swCache } = require('./lib');
 const fs = require('fs'), path = require('path');
 
-suite({ backend: 'v1' }, async (env) => {
+suite({}, async (env) => {
   const { ok, wait, rows, tab } = env;
   const N = fixture('trip-notes.json'), T = trip(), ids = new Set(T.locations.map(l => l.id));
   const nPlaces = N.locations.filter(x => x.id && ids.has(x.id)).length, nMiss = N.locations.length - nPlaces;
@@ -10,7 +10,7 @@ suite({ backend: 'v1' }, async (env) => {
   const SS = env.SS, sheetCk = () => { const sh = SS.getSheetByName('Checklist'); return sh ? sh.getLastRow() - 1 : -1; };
   const page = await env.phone({ clock: '2026-09-25T20:00:00+10:00', tz: 'Asia/Shanghai', connectWait: 600, dialogs: false });
 
-  console.log('\n1. import on a phone, backend still the OLD one');
+  console.log('\n1. import on a phone');
   await page.click('#btnSettings'); await wait(200);
   await page.fill('#s_me','Alex'); await page.press('#s_me','Tab'); await wait(2500);
   await page.setInputFiles('#importFile', fixturePath('trip-notes.json')); await wait(500);
@@ -25,7 +25,7 @@ suite({ backend: 'v1' }, async (env) => {
   ok(/due in 3 days/.test(firstDue), 'next-up item shows its due date: "'+firstDue+'"');
   ok(await page.textContent('#viewSub')==='21 days until you fly', 'sub: '+await page.textContent('#viewSub'));
 
-  console.log('\n3. ticking against the old backend does not jam the queue');
+  console.log('\n3. ticking does not jam the queue');
   const before=page.posted.length;
   await page.click('.ckbox[data-id="ck-01"]'); await wait(400);
   ok(await page.getAttribute('.ckbox[data-id="ck-01"]','aria-checked')==='true', 'ck-01 ticked');
@@ -53,13 +53,11 @@ suite({ backend: 'v1' }, async (env) => {
   await page.reload(); await wait(600);
   ok(await page.getAttribute('.ckbox[data-id="pk-01"]','aria-checked')==='true', 'personal tick survives reload');
 
-  console.log('\n6. sync against the OLD backend keeps the checklist');
+  console.log('\n6. a sync keeps the checklist');
   await page.evaluate(()=>store.sync({quiet:true})); await wait(500);
   ok(await page.evaluate(()=>store.data.checklist.length)===nCk, 'still '+nCk+' items after sync');
-  ok(sheetCk()===-1, 'old backend has no Checklist tab (nothing was pushed into the void)');
 
-  console.log('\n7. UPGRADE: new script, same spreadsheet');
-  env.deploy();
+  console.log('\n7. and sends it to the Sheet');
   await page.evaluate(()=>store.sync({quiet:true})); await wait(1500);
   ok(sheetCk()===nCk, 'phone uploaded its checklist on first sync: '+sheetCk()+' rows');
   const ckRows=env.SS.getSheetByName('Checklist'), H=env.box.TABS.Checklist;

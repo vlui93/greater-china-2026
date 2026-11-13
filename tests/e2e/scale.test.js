@@ -68,11 +68,6 @@ suite({}, async (env) => {
   ok(!/Archived trips/.test(await page.textContent('#sheetBody')) && (rows('Trips').find(t => t.id === 'tx-3') || {}).archived === '', 'unarchive puts it back');
   await page.evaluate(() => closeSheet());
 
-  console.log('\n6. a phone on an older backend keeps one trip too');
-  const old = await env.phone({ filter: (out, body) => (body.action === 'all' ? box.post('all') : out) });
-  const oc = await old.evaluate(() => JSON.parse(localStorage.getItem('gct.cache')).locations.map(l => l.trip_id || ''));
-  ok(oc.length === T.locations.length && oc.every(t => t === ''), 'it gets every trip, keeps only the open one (' + oc.length + ' places)');
-
   console.log('\n7. a copy that can\'t be saved is reported');
   await page.evaluate(() => { window.__set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k === 'gct.cache') { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; } return window.__set.call(this, k, v); }; });
   await page.evaluate(() => { const l = store.data.locations[0]; return saveLocation(Object.assign({}, l, { notes: 'edited while storage is full' })); }); await wait(500);
@@ -81,5 +76,5 @@ suite({}, async (env) => {
   ok(/couldn't save its copy of the trip/.test(bar), 'banner: "' + bar.split('.')[0] + '"');
   await page.evaluate(() => { Storage.prototype.setItem = window.__set; const l = store.data.locations[0]; return saveLocation(Object.assign({}, l, { notes: 'saved again' })); }); await wait(500);
   ok(await page.evaluate(() => { const b = document.querySelector('#view-today .stalebar'); return !b || b.hidden; }), 'goes once the copy saves again');
-  ok(!page.errs.length && !old.errs.length, 'no JS errors ' + page.errs.concat(old.errs).join('; '));
+  ok(!page.errs.length, 'no JS errors ' + page.errs.join('; '));
 });

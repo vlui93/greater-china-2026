@@ -37,7 +37,7 @@ function importNotes(file){
       }
       if(!l){ miss++; return; }
       var changed=false, part={ id:l.id }, detail=false;
-      LOCAL_FIRST.forEach(function(k){
+      LOC_EXTRA.forEach(function(k){
         if(typeof x[k]==="string" && x[k]!==(l[k]||"")){ l[k]=x[k]; part[k]=x[k]; changed=true; }
       });
       DETAILS.forEach(function(k){
@@ -51,10 +51,9 @@ function importNotes(file){
         l.notes=(l.notes ? l.notes+"\n" : "")+x.notes; part.notes=l.notes; changed=detail=true;
       }
       if(changed) n++;
-      // Details go to the Sheet (queued, so this works unconnected too). Only
-      // for these: the three LOCAL_FIRST fields are kept safe on the phone,
-      // and queueing all 68 places on every import would stall the first sync.
-      if(detail){ store.enqueue("saveLocation", part); sent++; }
+      // Everything the import changed goes to the Sheet (queued, so this works
+      // unconnected too; a long queue goes up as one batch).
+      if(changed){ store.enqueue("saveLocation", part); sent++; }
     });
     // Itinerary: stops in the file are added or updated by id, and listed ids
     // are removed. This rewrites the plan everyone sees, so ask first.

@@ -127,17 +127,4 @@ suite({}, async (env) => {
   await page.check('input[name="c_who"][value="each"]'); await page.click('[data-act="ck-save"]'); await wait(600);
   ok((rows('Checklist').find(r=>r.id==='ck-g2')||{}).assignee==='', 'moved to "each of us": nobody is assigned');
   await page.screenshot({path:env.out('pack-5.png'), fullPage:true});
-
-  console.log('\n10. the backend deployed today has no assignee column');
-  await page.ctx.unroute('**/macros/s/**');
-  await page.ctx.route('**/macros/s/**', async route=>{ const body=route.request().postData()||'{}';
-    const j=JSON.parse(env.box.doPost({postData:{contents:body},parameter:{}})._t);
-    if(j.data && Array.isArray(j.data.checklist)) j.data.checklist.forEach(i=>{ delete i.assignee; });
-    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(j)}); });
-  await page.evaluate(()=>store.sync({quiet:true})); await wait(700);
-  ok(await page.evaluate(()=>!store.supportsAssignee), 'the app notices');
-  ok(await page.evaluate(id=>(store.data.checklist.find(i=>i.id===id)||{}).assignee, bis.id)==='Sam', 'an assignment survives a sync with it (kept on this phone)');
-  await page.click('[data-act="ck-edit"][data-id="'+bis.id+'"]'); await wait(300);
-  ok(/Once the Sheet's script is updated/.test(await page.innerText('#c_assign_f')), 'and the form says so');
-  await page.evaluate(()=>closeSheet());
 });

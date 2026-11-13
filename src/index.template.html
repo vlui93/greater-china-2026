@@ -849,8 +849,7 @@ header.top::before,.sheet-top::before{
 /* Trips. The Sheet's Trips tab lists them, with rows in the other tabs
    tagged by trip_id (blank = the default trip). TRIP is whichever one is
    open. No trip is built into the app: until the Sheet lists one, the one
-   trip there is comes from firstTrip() — the trip this phone last knew as the
-   default, or else one worked out from the plan's own dates. */
+   trip there is comes from firstTrip(), worked out from the plan's own dates. */
 var FIRST_TRIP_ID = "trip-1";
 function blankTrip(start, end){
   var d=new Date(), today=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -1073,7 +1072,7 @@ var IC = {
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
            packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips",
-           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin", binOK:"gct.binok", v:"gct.v", trip0:"gct.trip0" };
+           synced:"gct.synced", bin:"gct.bin", v:"gct.v", pushed:"gct.pushed1" };
 /* The backend version this app is built for. Every reply from Code.gs says
    which version it is (`v`; a backend from before that counts as 1), so the
    app knows what it can ask for and Settings can say when Code.gs needs
@@ -1082,21 +1081,20 @@ var BACKEND_WANT = 2;
 var BATCH_SIZE = 100;
 /* Bumped whenever the app starts keeping something more from a sync reply:
    a fingerprint from before then doesn't vouch for the copy on this phone. */
-var RAW_SHAPE = 1;
-/* Location fields added after the first release. A blank from the Sheet never
-   overwrites a value this phone already has for them, so notes imported on a
-   phone survive until the backend has the columns to hold them. The cost: to
-   clear one of these, clear it in the app, not by deleting it in the Sheet. */
-var LOCAL_FIRST = ["getting_there", "arrive_by", "tickets", "photo_url", "ticket_url", "map_url"];
-/* Booking fields added after the first release; kept on the phone through a
-   sync until the backend has the columns, as LOCAL_FIRST is for places. */
-var BK_LOCAL_FIRST = ["ticket_url","tz","number","from_place","to_place","arr_date","arr_time","arr_tz"];
+var RAW_SHAPE = 2;
+/* Fields that phones once kept to themselves: notes imported on a phone
+   (getting there, arrive by, tickets), links and the visited tick stayed on
+   that phone while the backend had no column for them. Every backend has the
+   columns now, so the Sheet's copy is the one that counts — after each phone
+   has, once, sent up whatever only it holds (see sync). */
+var LOC_EXTRA = ["getting_there", "arrive_by", "tickets", "photo_url", "ticket_url", "map_url"];
+var BK_EXTRA = ["ticket_url","tz","number","from_place","to_place","arr_date","arr_time","arr_tz"];
 var LOC_FIELDS = ["id","name_en","name_zh","city","type","lat","lng","nav_app","history_blurb",
-                  "recommendations","dishes_to_order","souvenirs","notes"].concat(LOCAL_FIRST);
+                  "recommendations","dishes_to_order","souvenirs","notes"].concat(LOC_EXTRA);
 /* Places ticked off on the trip: visited is the day it was ticked, or "no"
    once unticked (a value, so the untick reaches the Sheet past the rule
    above). Kept through a sync the same way, for a backend without the column. */
-var VISIT_KEEP = LOCAL_FIRST.concat(["visited"]);
+var PHONE_HELD = LOC_EXTRA.concat(["visited"]);
 function isVisited(l){ var v=String(l && l.visited || "").trim(); return !!v && v!=="no"; }
 /* Where each place sits on the plan: the days it's a planned stop, and the
    days it's only an OPTIONAL alternative. On the road, Locations with "Hide
@@ -1227,9 +1225,6 @@ var store = {
   cfg: load(LS.cfg, { url:"", key:"" }),
   raw: null,     // every trip's rows, plus trips, cities and day names: what is cached
   data: null,    // the open trip's bookings, places, stops and checklist: what is shown
-  supportsTrips: !!load(LS.trips, false),
-  supportsBin: !!load(LS.binOK, false),     // the backend has the Bin tab (shared Recently deleted)   // the backend has the Trips, Cities and Days tabs
-  supportsAssignee: !!load("gct.assignee", false),   // the backend's Checklist has the assignee column
   v: +load(LS.v, 0) || 0,                    // the backend's version, once it has answered (0: not yet)
   queue: load(LS.queue, []),
   online: false,
@@ -1239,25 +1234,7 @@ var store = {
     var cached = load(LS.cache, null);
     this.raw = (cached && cached.locations) ? cached : JSON.parse(JSON.stringify(EMPTY));
     Object.keys(EMPTY).forEach(function(k){ if(!Array.isArray(store.raw[k])) store.raw[k]=[]; });
-    this.rescueLocalOnly();
     applyTrip();
-  },
-  /* Before writes were queued while not connected, places and stops added on
-     an unconnected phone were never queued, and the first sync would have
-     replaced them with the Sheet's copy. Queue them once. Ids made on a
-     phone look like loc-mg0x1k2a (a base-36 timestamp); the trip's own are a
-     city-and-name slug or sc- and three digits, so they can't be mistaken. */
-  rescueLocalOnly: function(){
-    if(this.configured() || load(LS.rescued, false)) return;
-    var queued={}, self=this, n=0, made=/^(loc|sc)-(?=[0-9a-z]*[a-z])[0-9a-z]{6,}$/;
-    this.queue.forEach(function(j){ if(j.payload && j.payload.id) queued[j.payload.id]=1; });
-    this.raw.locations.forEach(function(l){
-      if(made.test(l.id) && !queued[l.id]){ self.queue.push({ action:"saveLocation", payload:l, ts:Date.now() }); n++; }
-    });
-    this.raw.schedule.forEach(function(e){
-      if(made.test(e.id) && !queued[e.id]){ self.queue.push({ action:"saveScheduleEntry", payload:e, ts:Date.now() }); n++; }
-    });
-    save(LS.queue, this.queue); save(LS.rescued, true);
   },
   configured: function(){ return !!(this.cfg.url && this.cfg.key); },
   hasData: function(){ return !!(this.raw && ((this.raw.locations && this.raw.locations.length) || (this.raw.trips && this.raw.trips.length))); },
@@ -1333,18 +1310,21 @@ var store = {
       if(!self.queue.length) return Promise.resolve(sent);
       var job=self.queue[0];
       return self.call(job.action, job.payload).then(function(){
-        self.queue.shift(); save(LS.queue, self.queue); sent++; return step();
+        self.queue.shift(); save(LS.queue, self.queue); sent++;
+        // A phone connecting for the first time learns the backend's version from
+        // this first reply; if it can take a batch, the rest go up together.
+        if(self.v>=2 && self.queue.length>1) return self.flushBatch(sent);
+        return step();
       }, function(err){
-        // An action this backend predates would sit at the head of the queue
-        // forever and hold up everything behind it. Drop it; the phone keeps
-        // the change and the next sync against an upgraded backend uploads it.
+        // A change this key isn't allowed, or one this backend is too old to
+        // know, would sit at the head of the queue forever and hold up
+        // everything behind it. Drop it and say so.
         if(err && err.kind==="access"){
           self.queue.shift(); save(LS.queue, self.queue); self.refused=(self.refused||0)+1;
           self.raw.etag="";
           toast(syncProblem(err), 6000); return step();
         }
-        if(!isUnknownAction(err)) throw err;
-        self.queue.shift(); save(LS.queue, self.queue); return step();
+        throw err;
       });
     }
     return step();
@@ -1366,7 +1346,6 @@ var store = {
         if(r && r.ok){ sent++; return; }
         var m=String((r && r.error) || "No answer for this change");
         if(ACCESS_RE.test(m)){ refused=callError("access", m); self.refused=(self.refused||0)+1; return; }
-        if(/Unknown action/.test(m)) return;
         keep.push(job); if(!failed) failed=callError("server", m);
       });
       // jobs added while the batch was away are still behind the ones sent
@@ -1391,7 +1370,6 @@ var store = {
     var p = this.call(action,payload).then(function(){
       updateStatus();
     }).catch(function(err){
-      if(isUnknownAction(err)) return;   // kept on this phone; uploaded once the backend knows it
       if(err && err.kind==="access"){
         // Refused for this key: it would never go, so it isn't queued — say so,
         // and put the Sheet's version back on screen
@@ -1439,32 +1417,28 @@ var store = {
           self.persist();
           var raw=self.raw;
           var mine={}; (raw.locations||[]).forEach(function(l){ mine[l.id]=l; });
-          (d.locations||[]).forEach(function(l){
-            var local=mine[l.id]; if(!local) return;
-            VISIT_KEEP.forEach(function(k){ if(!l[k] && local[k]) l[k]=local[k]; });
-          });
-          // Same for a booking's ticket link, which an older backend can't store
-          var myBk={}; (raw.bookings||[]).forEach(function(b){ myBk[b.id]=b; });
-          (d.bookings||[]).forEach(function(b){ var m=myBk[b.id]; if(!m) return;
-            BK_LOCAL_FIRST.forEach(function(k){ if(!b[k] && m[k]) b[k]=m[k]; }); });
+          // Once per phone: whatever only this phone holds in the fields phones
+          // used to keep to themselves goes up to the Sheet, and is kept here
+          // meanwhile. From then on a blank in the Sheet is a blank.
+          var held=[], once=!load(LS.pushed, false);
+          var keepHeld=function(rows, mineById, fields, action){
+            (rows||[]).forEach(function(r){
+              var local=mineById[r.id], part=null; if(!local) return;
+              fields.forEach(function(k){ if(!r[k] && local[k]){ r[k]=local[k]; (part=part||{ id:r.id })[k]=local[k]; } });
+              if(part) held.push([action, part]);
+            });
+          };
+          if(once){
+            keepHeld(d.locations, mine, PHONE_HELD, "saveLocation");
+            var myBk={}; (raw.bookings||[]).forEach(function(b){ myBk[b.id]=b; });
+            keepHeld(d.bookings, myBk, BK_EXTRA, "saveBooking");
+          }
           var scoped=!!d.scope;
           // With a reply for one trip, only that trip's local items can be "new"
           var ck = mergeChecklist(scoped ? (raw.checklist||[]).filter(function(i){ return tripOf(i)===asked.trip; }) : raw.checklist||[], d.checklist);
-          if(Array.isArray(d.checklist) && d.checklist.length){ self.supportsAssignee = "assignee" in d.checklist[0]; save(LS.assignee, self.supportsAssignee); }
-          // An older backend sends no trips, cities or day names: keep this phone's
-          self.supportsTrips = Array.isArray(d.trips); save(LS.trips, self.supportsTrips);
-          if(self.supportsTrips && d.trips.length){
-            var dt=d.trips.filter(function(t){ return t.id===(d.default_trip||""); })[0] ||
-                   d.trips.filter(function(t){ return t.is_default && !/^(0|false)$/i.test(String(t.is_default)); })[0] || d.trips[0];
-            save(LS.trip0, dt);
-          }
-          self.supportsBin = Array.isArray(d.bin); save(LS.binOK, self.supportsBin);
           self.raw = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[],
                        checklist:ck.items,
-                       trips:  self.supportsTrips ? d.trips : raw.trips||[],
-                       cities: Array.isArray(d.cities) ? d.cities : raw.cities||[],
-                       days:   Array.isArray(d.days) ? d.days : raw.days||[],
-                       bin:    Array.isArray(d.bin) ? d.bin : raw.bin||[],
+                       trips:  d.trips||[], cities: d.cities||[], days: d.days||[], bin: d.bin||[],
                        index:  d.places_per_trip || null,
                        me:     d.me || null,
                        default_trip: d.default_trip || "",
@@ -1484,10 +1458,9 @@ var store = {
           TRIP_TABS.forEach(function(k){ self.raw[k]=self.raw[k].filter(function(r){ return tripOf(r)===TRIP.id; }); });
           self.data = null; applyTrip();
           self.persist();
-          if(ck.upload.length){
-            ck.upload.forEach(function(i){ self.enqueue("saveChecklistItem", i); });
-            self.flush().then(updateStatus).catch(function(){});
-          }
+          ck.upload.forEach(function(i){ self.enqueue("saveChecklistItem", i); });
+          if(once){ held.forEach(function(h){ self.enqueue(h[0], h[1]); }); save(LS.pushed, true); }
+          if(ck.upload.length || held.length) self.flush().then(updateStatus).catch(function(){});
         }
         self.syncing=false; self.online=true; updateStatus();
         if(!opts.quiet) toast("Synced with the Sheet");
@@ -1502,7 +1475,6 @@ var store = {
   }
 };
 
-function isUnknownAction(err){ return /Unknown action/.test(String(err && err.message || err)); }
 /** A failed call, labelled with why: net (no connection), page (something
  *  answered, but not the trip), key (the API key), server (the script's own
  *  error). The message stays the server's, which other code matches on. */
@@ -1510,7 +1482,7 @@ function callError(kind, msg){ var e=new Error(msg); e.kind=kind; return e; }
 /* The backend refusing a change this key may not make (another trip, view
    only, the owner's job). Such a change is dropped from the queue — it would
    never go — and the next sync puts the Sheet's version back on screen. */
-var ACCESS_RE = /can't see that trip|View only|Only the trip owner|isn't on any trip/i;
+var ACCESS_RE = /can't see that trip|View only|Only the trip owner|isn't on any trip|Unknown action/i;
 /** Why a sync failed, in words that say what to do. Every failure used to
  *  read "Offline", so a wrong key after redeploying looked like no signal. */
 /** An invite — a link with #join=…, or the whole invite message — as {u,k,n}. */
@@ -1544,7 +1516,7 @@ function joinFromLink(){
 function syncProblem(err){
   var k=err && err.kind, m=String(err && err.message || "");
   if(k==="key" && /has been removed/i.test(m)) return "Can't sync: this key has been removed — ask the trip owner for a new invite.";
-  if(k==="access") return "Not saved: "+m;
+  if(k==="access") return /Unknown action/i.test(m) ? "Not saved: the Sheet’s script is older than this app — see ⚙ Settings." : "Not saved: "+m;
   if(k==="key") return /not configured/i.test(m)
     ? "Can't sync: Code.gs has no API key. Put yours back on the API_KEY line, then Deploy › Manage deployments › edit › New version."
     : "Can't sync: the API key in ⚙ Settings doesn't match the one in Code.gs.";
@@ -1604,27 +1576,22 @@ var packing = {
    A row's trip_id says which trip it belongs to, and a blank one means the
    default trip, which is how every row written before trips existed reads.
    ========================================================================== */
-/* The one trip there is while the Sheet lists none: the default trip as this
-   phone last knew it (kept in LS.trip0 on every sync that brings trips), or
-   else a trip spanning the dates the plan and its bookings use. */
+/* The one trip there is while the Sheet lists none (a new Sheet): one
+   spanning the dates the plan and its bookings use, or just today. */
 function firstTrip(){
-  var ok=/^\d{4}-\d{2}-\d{2}$/, saved=load(LS.trip0, null);
-  if(saved && saved.id && ok.test(saved.start||"") && ok.test(saved.end||"")) return saved;
-  var raw=store.raw||{}, dates=[];
+  var ok=/^\d{4}-\d{2}-\d{2}$/, raw=store.raw||{}, dates=[];
   (raw.schedule||[]).forEach(function(s){ dates.push(String(s.date||"")); });
   (raw.bookings||[]).forEach(function(b){ dates.push(String(b.date||""), String(b.arr_date||"")); });
   dates=dates.filter(function(d){ return ok.test(d); }).sort();
   return dates.length ? blankTrip(dates[0], dates[dates.length-1]) : blankTrip();
 }
 function allTrips(){
-  var first=null;
+  var ok=/^\d{4}-\d{2}-\d{2}$/;
   var list=((store.raw && store.raw.trips) || []).filter(function(t){ return t && t.id; }).map(function(t){
-    if(!first) first=firstTrip();
-    var o=Object.assign({}, t.id===first.id ? first : {});
-    Object.keys(t).forEach(function(k){ var v=t[k]==null?"":String(t[k]).trim(); if(v || !(k in o)) o[k]=v; });
+    var o={}; Object.keys(t).forEach(function(k){ o[k]=t[k]==null?"":String(t[k]).trim(); });
     return o;
-  }).filter(function(t){ return /^\d{4}-\d{2}-\d{2}$/.test(t.start) && /^\d{4}-\d{2}-\d{2}$/.test(t.end); });
-  return list.length ? list : [first || firstTrip()];
+  }).filter(function(t){ return ok.test(t.start) && ok.test(t.end); });
+  return list.length ? list : [firstTrip()];
 }
 function defaultTripId(){
   // The backend says which trip blank rows belong to — it may be one this key
@@ -1905,20 +1872,26 @@ function needsLookup(l, force){
 }
 var photoRun=null, photoDirty=false;
 /** Looks up places that have no photo yet (three at a time), then makes sure
- *  every photo is saved for offline. Safe to call often: one run at a time. */
+ *  every photo is saved for offline. Safe to call often: one run at a time.
+ *  A photo found goes to the Sheet, so the other phones get it without looking
+ *  it up themselves; a view-only phone doesn't look, and takes what is there. */
 function findPhotos(force){
   if(photoRun) return photoRun;
   if(!store.data || !navigator.onLine || !("fetch" in window)) return Promise.resolve(0);
-  var todo=store.data.locations.filter(function(l){ return needsLookup(l, force); }), found=0;
+  var todo=isViewer() ? [] : store.data.locations.filter(function(l){ return needsLookup(l, force); }), found=0;
   function worker(){
     var l=todo.shift(); if(!l) return Promise.resolve();
     return lookupPhoto(l).then(function(u){
       photoState.tried[l.id]={ k:photoKey(l), at:Date.now() }; savePhotoState();
       var cur=store.loc(l.id);
-      if(u && cur && !cur.photo_url){ cur.photo_url=u; found++; photoDirty=true; store.persist(); }
+      if(u && cur && !cur.photo_url){
+        cur.photo_url=u; found++; photoDirty=true; store.persist();
+        store.enqueue("saveLocation", { id:cur.id, photo_url:u });
+      }
     }).then(worker);
   }
   photoRun=Promise.all([worker(),worker(),worker()]).then(function(){
+    if(found && store.configured()) store.flush().then(updateStatus).catch(function(){});
     return Promise.all(store.data.locations.map(function(l){ return cachePhoto(photoOf(l)); }));
   }).then(function(){
     photoRun=null;
@@ -3435,10 +3408,9 @@ function saveLocation(obj){
 /* Recently deleted. A deleted place goes into a bin with the stops it had, so
    it can be put back on the same days later — Undo only lasts a few seconds.
    With a backend that has the Bin tab the bin is shared: it lives in the
-   Sheet and any phone can restore from it. With an older backend it's kept
-   on the phone that deleted the place (the last BIN_MAX), as before; items
-   left there from then still show and restore. */
-var BIN_MAX = 60;
+   Sheet and any phone can restore from it. Places deleted before the Sheet
+   had that tab were kept on the phone that deleted them; any still there
+   show and restore too, though no new ones are added. */
 function binAll(){ var b=load(LS.bin, []); return Array.isArray(b) ? b : []; }
 /** A Bin row from the Sheet, in the same shape as a phone's own bin item. */
 function binNorm(b){
@@ -3449,15 +3421,9 @@ function binNorm(b){
   }catch(e){ return null; }
 }
 function binItems(){
-  var shared = store.supportsBin ? (store.raw.bin||[]).map(binNorm).filter(function(x){ return x && x.loc && x.trip===TRIP.id; }) : [];
+  var shared = (store.raw.bin||[]).map(binNorm).filter(function(x){ return x && x.loc && x.trip===TRIP.id; });
   var mine = binAll().filter(function(x){ return x.trip===TRIP.id; });
   return shared.concat(mine).sort(function(a,b){ return a.at<b.at ? 1 : -1; });
-}
-function binPut(loc, stops){
-  var item={ id:uid("bin"), trip:TRIP.id, at:new Date().toISOString(),
-             loc:JSON.parse(JSON.stringify(loc)), stops:JSON.parse(JSON.stringify(stops)) };
-  save(LS.bin, [item].concat(binAll()).slice(0, BIN_MAX));
-  return item;
 }
 function binDrop(bid){ save(LS.bin, binAll().filter(function(x){ return x.id!==bid; })); }
 /** Put a deleted place back, with its stops on the days they were on. */
@@ -3495,7 +3461,7 @@ function deletePlace(lid){
 function deleteLocation(id){
   var l=store.loc(id), stops=store.data.schedule.filter(function(s){ return s.location_id===id; });
   var item=null, payload={ id:id };
-  if(l && store.supportsBin){
+  if(l){
     // The backend files it in the Bin under this id, so a restore made before
     // the delete has even reached the Sheet still finds it
     var row={ id:uid("bin"), trip_id:l.trip_id||"", deleted_at:new Date().toISOString(), deleted_by:getMe(),
@@ -3503,7 +3469,7 @@ function deleteLocation(id){
     payload={ id:id, bin_id:row.id, by:getMe() };
     store.raw.bin=(store.raw.bin||[]).concat([row]);
     item=binNorm(row);
-  } else if(l) item=binPut(l, stops);
+  }
   return store.write("deleteLocation", payload, function(){
     store.data.locations = store.data.locations.filter(function(l){ return l.id!==id; });
     store.data.schedule  = store.data.schedule.filter(function(s){ return s.location_id!==id; });

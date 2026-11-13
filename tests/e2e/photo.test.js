@@ -70,7 +70,7 @@ suite({}, async (env) => {
 
   console.log('\n3. kept through sync; set by hand');
   await page.evaluate(()=>store.sync({quiet:true})); await wait(600);
-  ok(/640px-Peak/.test(await page.evaluate(()=>store.loc('fx-hk-peak').photo_url)), 'a sync from the old backend keeps the photo');
+  ok(/640px-Peak/.test(await page.evaluate(()=>store.loc('fx-hk-peak').photo_url)), 'a sync keeps the photo (it went to the Sheet when it was found)');
   await page.evaluate(()=>locationForm('fx-hk-peak')); await wait(200);
   await page.fill('#f_photo_url','http://insecure.example/x.jpg'); await page.click('[data-act="save-location"]'); await wait(300);
   ok(/https/.test(await page.textContent('#toast')), 'non-https link refused: '+await page.textContent('#toast'));

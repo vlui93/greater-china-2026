@@ -19,7 +19,7 @@ function renameDay(date){
 function binSheet(){
   var items=binItems();
   var html = items.length ? '<p class="blurb small muted" style="margin:12px 0 12px">'+
-      (store.supportsBin ? 'Places deleted on any phone on this trip.' : 'Places deleted on this phone.')+
+      'Places deleted on any phone on this trip.'+
       ' Restore puts a place back, with its stops on the days they were on.</p><div class="loclist">'+items.map(function(it){
       var l=it.loc, n=it.stops.length;
       return '<div class="locrow"><div class="thumb">'+typeIcon(l.type)+'</div>'+
@@ -28,7 +28,7 @@ function binSheet(){
         '<button class="btn sm primary" data-act="bin-restore" data-bid="'+esc(it.id)+'">Restore</button>'+
         '<button class="btn sm ghost" data-act="bin-forget" data-bid="'+esc(it.id)+'" aria-label="Remove from the bin">'+IC.close+'</button></div>';
     }).join("")+'</div>'
-    : '<div class="card empty" style="margin-top:12px">'+(store.supportsBin ? 'Nothing in the bin.' : 'Nothing deleted on this phone.')+'</div>';
+    : '<div class="card empty" style="margin-top:12px">'+'Nothing in the bin.'+'</div>';
   openSheet("Recently deleted", html);
 }
 
@@ -228,9 +228,7 @@ function fillFromLink(){
     applyPlace(pl);
     if(pl.lat==null) linkStatus($("#f_link_status").innerHTML+" The link didn't include a pin — the map app will search the Chinese name instead, which usually works.");
   }).catch(function(err){
-    linkStatus((got?before+" ":"")+(isUnknownAction(err)
-      ? "That's a short link, and your Sheet's script is too old to read it — it needs the one-off update. For now, type the Chinese name: that alone is enough for the map app to find it."
-      : "Couldn't look the link up just now — no signal to Google? Type the Chinese name for now; that alone is enough to navigate."));
+    linkStatus((got?before+" ":"")+"Couldn't look the link up just now — no signal to Google? Type the Chinese name for now; that alone is enough to navigate.");
   });
 }
 
@@ -386,8 +384,6 @@ function settingsForm(){
 }
 
 /* ---------- trips and cities (Settings) ---------- */
-var NEEDS_UPGRADE = '<p class="blurb small muted">Adding trips and cities needs the one-off update to the Sheet’s '+
-  'script — see the README, section 12. Until then this phone has the one trip.</p>';
 
 function peopleSectionHTML(){
   if(!store.configured() || !(store.raw && store.raw.me)) return "";
@@ -404,8 +400,8 @@ function peopleSectionHTML(){
 
 function isArchived(t){ return /^(1|true|yes)$/i.test(String(t && t.archived || "")); }
 
-/** The backend has the Trips tab's archived column. */
-function canArchive(){ return store.supportsTrips && (store.raw.trips||[]).some(function(t){ return "archived" in t; }); }
+/** Archiving needs the trip to be a row in the Sheet's Trips tab. */
+function canArchive(){ return (store.raw.trips||[]).length>0; }
 
 /** How many places a trip has, from the count the backend sends with each sync. */
 function placesIn(t){
@@ -427,7 +423,7 @@ function tripsSectionHTML(){
       var open=t.id===TRIP.id, n=placesIn(t), arch=isArchived(t);
       return '<div class="locrow"><div class="lb"><div class="en">'+esc(t.name)+(t.name_zh?' <span class="zh">'+escz(t.name_zh)+'</span>':'')+'</div>'+
         '<div class="mt">'+esc(rangeText(t.start,t.end))+(n!==null?' · '+n+' place'+(n===1?'':'s'):'')+(open?' · open now':'')+'</div></div>'+
-        (open ? (store.supportsTrips && isOwner() ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
+        (open ? (isOwner() ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
               : '<button class="btn sm primary" data-act="trip-open" data-tid="'+esc(t.id)+'">Open</button>')+
         (!open && canArchive() && isOwner() && t.id!==defaultTripId()
           ? '<button class="btn sm ghost" data-act="'+(arch?'trip-unarchive':'trip-archive')+'" data-tid="'+esc(t.id)+'">'+(arch?'Unarchive':'Archive')+'</button>' : '')+
@@ -437,7 +433,7 @@ function tripsSectionHTML(){
   var gone=list.filter(function(t){ return isArchived(t) && t.id!==TRIP.id; });
   return '<div class="section-title">Trips</div><div class="loclist">'+live.map(row).join("")+'</div>'+
     (gone.length ? '<details class="archived"><summary>Archived trips ('+gone.length+')</summary><div class="loclist">'+gone.map(row).join("")+'</div></details>' : '')+
-    (store.supportsTrips ? (isOwner() ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="trip-new">+ New trip</button></div>' : '') : NEEDS_UPGRADE);
+    (isOwner() ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="trip-new">+ New trip</button></div>' : '');
 }
 
 function citiesSectionHTML(){
@@ -452,9 +448,9 @@ function citiesSectionHTML(){
       return '<div class="locrow"><div class="lb"><div class="en">'+esc(c.name)+(c.name_zh?' <span class="zh">'+escz(c.name_zh)+'</span>':'')+'</div>'+
         '<div class="mt">'+[REG[c.region]||"", tzName(c.tz)===REG[c.region] ? "" : (c.tz ? tzName(c.tz)+" time" : "no time zone"),
           mapAppFor(c.name), c.taxi?"fares set":"no fares"].filter(Boolean).map(esc).join(" · ")+'</div></div>'+
-        (store.supportsTrips ? '<button class="btn sm" data-act="city-edit" data-v="'+esc(c.name)+'">Edit</button>' : '')+'</div>';
+        '<button class="btn sm" data-act="city-edit" data-v="'+esc(c.name)+'">Edit</button></div>';
     }).join("")+'</div>'+
-    (store.supportsTrips ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="city-new">+ Add city</button></div>' : '');
+    '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="city-new">+ Add city</button></div>';
 }
 
 function tripForm(id){

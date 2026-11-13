@@ -1,10 +1,9 @@
 /* Importing an itinerary update: the phone says what would change and asks
    first; Cancel still brings in the new places; OK applies the stops to the
-   Sheet; a phone that already has the new plan is asked nothing. Run against
-   the first backend release, as phones in the field were. */
+   Sheet; a phone that already has the new plan is asked nothing. */
 const { suite, fixture, fixturePath, trip } = require('./lib');
 
-suite({ backend: 'v1' }, async (env) => {
+suite({}, async (env) => {
   const { ok, wait } = env;
   const PM = fixture('phone-made.json'), U = fixture('itinerary-update.json');
   PM.locations.forEach(l => env.box.post('saveLocation', l));
@@ -51,6 +50,7 @@ suite({ backend: 'v1' }, async (env) => {
   const B = await env.phone({ connectWait: 900 });
   t = await imp(B);
   ok(B.dialogs.length === 0, 'no itinerary question');
-  ok(new RegExp(U.checklist.length + ' checklist items').test(t) && !/itinerary/.test(t), 'toast: ' + t);
+  // B got the plan and the checklist from the Sheet (phone A's import sent both up), so the file holds nothing it lacks
+  ok(/Nothing new in that file/.test(t) && !/itinerary/.test(t), 'toast: ' + t);
   ok(sheetRows('Schedule').length === sh.length, 'Sheet itinerary unchanged: ' + sh.length + ' stops');
 });

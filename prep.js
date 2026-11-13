@@ -234,7 +234,7 @@ function checklistForm(scope, id, kind, section){
         people.map(function(n){ return '<option value="'+esc(n)+'"'+(it.assignee===n?" selected":"")+'>'+esc(n)+(n===getMe()?" (you)":"")+'</option>'; }).join("")+
         '<option value="__new__">＋ Someone else…</option></select>'+
       '<input id="c_assign_new" placeholder="Their name" autocomplete="off" style="margin-top:8px" hidden>'+
-      (store.supportsAssignee ? '' : '<div class="hint">For now this shows on your phone only. Once the Sheet\'s script is updated, everyone sees it.</div>')+
+
       '</div>' : '')+
     (kind==="task" ? '<div class="field"><label>Due</label><input id="c_due" type="date" value="'+esc(it.due||"")+'"></div>' : '')+
     (scope==="mine" ? '<p class="hint small muted">Only on this phone.</p>'

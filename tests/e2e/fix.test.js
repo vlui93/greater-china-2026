@@ -18,17 +18,6 @@ suite({}, async (env) => {
   }
   await page.evaluate(()=>closeSheet());
 
-  console.log('\n2. a bare Google short link, on the backend you have today');
-  env.deploy('v1');
-  await page.click('[data-act="quick-add"]'); await wait(250);
-  await page.fill('#f_link', "https://maps.app.goo.gl/Zz9Yy8?g_st=ic");
-  await page.click('[data-act="link-fill"]'); await wait(600);
-  const g=await page.evaluate(()=>$("#f_link_status").innerText);
-  console.log('       status: '+g);
-  ok(/too old to read it/.test(g) && /type the Chinese name/.test(g) && !/Nothing usable/.test(g) && !/README/.test(g), 'plain explanation, no README reference');
-  await page.evaluate(()=>closeSheet());
-  env.deploy();
-
   console.log('\n3. the restaurant\'s notes file, on a place saved with no pin');
   const rid=await page.evaluate(()=>{ const l={ id:'loc-mtest0001', name_en:'Test Waterfall Restaurant', name_zh:'测试瀑布餐厅',
       city:'Guangzhou', type:'restaurant', lat:'', lng:'', nav_app:'amap', history_blurb:'', recommendations:'', dishes_to_order:'', souvenirs:'',

@@ -58,13 +58,4 @@ suite({}, async (env) => {
   await page.fill('#b_arr_date','2026-10-21'); await page.fill('#b_arr_time','11:00');
   await page.click('[data-act="bk-save"]'); await wait(500);
   ok(/in 15:00 · out Wed 21 Oct 11:00/i.test(await page.innerText('.bk[data-bid="fx-bk-07"] .bk-when')), 'list: '+await page.innerText('.bk[data-bid="fx-bk-07"] .bk-when'));
-
-  console.log('\n7. an older backend keeps the new fields on the phone');
-  await page.ctx.unroute('**/macros/s/**');
-  await page.ctx.route('**/macros/s/**', async route=>{ const body=route.request().postData()||'{}';
-    const j=JSON.parse(env.box.doPost({postData:{contents:body},parameter:{}})._t);
-    if(j.data && j.data.bookings) j.data.bookings.forEach(b=>{ ['number','from_place','to_place','arr_date','arr_time','arr_tz'].forEach(k=>delete b[k]); });
-    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(j)}); });
-  await page.evaluate(()=>store.sync({quiet:true})); await wait(600);
-  ok(await page.evaluate(()=>{ const b=store.data.bookings.find(x=>x.id==="fx-bk-01"); return b.number==="TA138" && b.arr_time==="04:40"; }), 'arrival and number survive a sync');
 });

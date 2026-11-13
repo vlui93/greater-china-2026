@@ -82,16 +82,6 @@ suite({}, async (env) => {
   ok(/Already on your list/.test(dup), 'warns it is already on the list');
   await page.evaluate(()=>closeSheet());
 
-  console.log('\n8. your CURRENT backend: short link');
-  env.deploy('v1');
-  await page.click('[data-act="quick-add"]'); await wait(300);
-  await page.fill('#f_link', "【高德地图】测试面馆二\nhttps://surl.amap.com/T3st");
-  await page.click('[data-act="link-fill"]'); await wait(600);
-  const old=await page.evaluate(()=>({zh:$("#f_name_zh").value, st:$("#f_link_status").innerText, q:store.queue.length}));
-  ok(old.zh==="测试面馆二" && /one-off update/.test(old.st) && old.q===0, 'Chinese name still filled; clear message; nothing queued');
-  await page.screenshot({path:env.out('link-oldbackend.png')});
-  await page.evaluate(()=>closeSheet());
-
   console.log('\n9. Locations tab "+ New place" has the box too; editing does not');
   await page.click('nav.tabs button[data-view="places"]'); await wait(200);
   await page.click('[data-act="new-location"]'); await wait(300);

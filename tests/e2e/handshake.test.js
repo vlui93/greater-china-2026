@@ -162,5 +162,46 @@ suite({}, async (env) => {
   await old.evaluate(() => { closeSheet(); return store.sync({ quiet: true }); }); await wait(400);
   await old.click('#btnSettings'); await wait(300);
   ok(await old.evaluate(() => store.v) === 2 && !await old.$('#backendNote'), 'once the backend is updated, the note goes');
-  ok(!page.errs.length && !old.errs.length && !vp.errs.length, 'no JS errors ' + page.errs.concat(old.errs, vp.errs).join('; '));
+
+  console.log('\n7. what only a phone holds goes up to the Sheet once; after that the Sheet decides');
+  // A phone from before: connected, holding a getting-there note, a visited tick and a flight number the Sheet doesn't have.
+  const [pa, pb] = T.locations.filter(l => l.type !== 'hotel').slice(4, 6).map(l => l.id), bk = T.bookings[0].id;
+  const cell = (tabName, id, colName, v) => { const sh = env.tab(tabName), c = sh.d[0].indexOf(colName), r = sh.d.findIndex(x => x && x[0] === id); if (v !== undefined) sh.d[r][c] = v; return sh.d[r][c]; };
+  cell('Locations', pa, 'getting_there', ''); cell('Locations', pa, 'visited', ''); cell('Bookings', bk, 'number', '');
+  cell('Locations', pb, 'getting_there', 'what the Sheet says');
+  const held = trip(); held.checklist = [];
+  Object.assign(held.locations.find(l => l.id === pa), { getting_there: 'only on this phone', visited: '2026-10-18T03:00:00.000Z' });
+  Object.assign(held.locations.find(l => l.id === pb), { getting_there: '' });
+  Object.assign(held.bookings.find(b => b.id === bk), { number: 'TA999' });
+  const before7 = env.box.post('all').data;
+  const hp = await env.phone({ connect: false, init: { fn: c => { if (!localStorage.getItem('gct.cache')) { localStorage.setItem('gct.cache', c);
+    localStorage.setItem('gct.cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/X/exec', key: 'k' })); } }, arg: JSON.stringify(held) } });
+  await hp.evaluate(() => store.sync({ quiet: true })); await wait(900);
+  ok(cell('Locations', pa, 'getting_there') === 'only on this phone' && String(cell('Locations', pa, 'visited')).slice(0, 10) === '2026-10-18' && cell('Bookings', bk, 'number') === 'TA999', 'its note, its visited tick and its flight number are now in the Sheet');
+  ok(await hp.evaluate(([pa, bk]) => store.loc(pa).getting_there === 'only on this phone' && store.data.bookings.find(b => b.id === bk).number === 'TA999', [pa, bk]), 'and still on the phone');
+  ok(await hp.evaluate(pb => store.loc(pb).getting_there, pb) === 'what the Sheet says', 'where the Sheet had a value and the phone none, the phone takes the Sheet\'s');
+  const p2nd = await env.phone({});
+  ok(await p2nd.evaluate(pa => store.loc(pa).getting_there, pa) === 'only on this phone', 'another phone gets the note from the Sheet');
+  cell('Locations', pa, 'getting_there', '');
+  await hp.evaluate(() => store.sync({ quiet: true })); await wait(700);
+  ok(await hp.evaluate(pa => store.loc(pa).getting_there, pa) === '' && cell('Locations', pa, 'getting_there') === '', 'cleared in the Sheet afterwards, it is cleared on the phone and not sent up again');
+  ok(before7.locations.find(l => l.id === pa).getting_there === '', '(the Sheet did start without it)');
+
+  console.log('\n8. a change the backend doesn\'t know');
+  tamper = (out, body) => { if (body.action === 'saveLocation' && body.payload.notes === 'too new for this backend') return { ok: false, error: 'Unknown action: saveLocation', v: out.v };
+    if (body.action === 'batch') out.data.results[0] = { ok: false, error: 'Unknown action: somethingNew' }; return out; };
+  await page.evaluate(a => saveLocation(Object.assign({}, store.loc(a), { notes: 'too new for this backend' })), a); await wait(600);
+  ok(/older than this app/.test(await page.textContent('#toast')), 'it says so: "' + (await page.textContent('#toast')).trim() + '"');
+  ok(await page.evaluate(() => store.queue.length) === 0, 'and is not left waiting');
+  await wait(600);
+  ok(await page.evaluate(a => store.loc(a).notes, a) === L(a), 'the phone goes back to what the Sheet holds');
+  offline = true;
+  await page.evaluate(([a, b]) => Promise.all([
+    saveLocation(Object.assign({}, store.loc(a), { notes: 'unknown in a batch' })),
+    saveLocation(Object.assign({}, store.loc(b), { notes: 'known in the same batch' }))]), [a, b]); await wait(400);
+  offline = false;
+  await sync();
+  ok(await page.evaluate(() => store.queue.length) === 0 && L(b) === 'known in the same batch', 'in a batch, the unknown one is dropped and the rest are saved');
+  tamper = null;
+  ok(!page.errs.length && !old.errs.length && !vp.errs.length && !hp.errs.length && !p2nd.errs.length, 'no JS errors ' + page.errs.concat(old.errs, vp.errs, hp.errs, p2nd.errs).join('; '));
 });
