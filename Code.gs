@@ -1,5 +1,5 @@
 /**
- * Greater China Trip Companion — Google Apps Script backend
+ * Trip Companion — Google Apps Script backend
  * Bound to a Google Sheet. Deploy as a Web App.
  *
  * SETUP (full detail in README.md):
@@ -25,6 +25,14 @@
 // this line left as it is doesn't lock the phones out.
 var API_KEY = 'CHANGE-ME-to-a-long-random-string';
 // ---------------------------------------------------------------------------
+
+/* What this backend can do, as a number the app reads off every reply (`v`).
+ * The app compares it with the version it was built for and says, in
+ * Settings, when this file needs pasting again — instead of guessing from
+ * which fields happen to be in a reply.
+ *   2: every reply carries v; batch; all answers "unchanged" to a matching
+ *      etag; the Inbox. */
+var VERSION = 2;
 
 var TABS = {
   // New columns only ever go on the end: rows already in a Sheet keep their
@@ -75,7 +83,11 @@ var TABS = {
   // People with their own key (see caller_). trips is a comma list of trip ids,
   // or * for every trip; role is member (sees and changes those trips) or
   // viewer (only looks). revoked, once set, stops the key.
-  Members: ['id', 'name', 'key', 'trips', 'role', 'added', 'revoked']
+  Members: ['id', 'name', 'key', 'trips', 'role', 'added', 'revoked'],
+  // Things sent in from other apps' share menus (a link, a name, a note) to be
+  // turned into places later. by is who sent it; done is set once it has been
+  // dealt with.
+  Inbox: ['id', 'trip_id', 'added', 'by', 'text', 'url', 'done']
 };
 
 var NUMERIC = { lat: true, lng: true, order_index: true };
@@ -160,13 +172,28 @@ function caller_(given, ownerKey) {
   given = String(given || '');
   if (!given) return null;
   if (given === ownerKey) return { owner: true, role: 'owner', name: '', trips: '*' };
-  var m = readTab_('Members').filter(function (x) { return x.key && x.key === given; })[0];
+  var m = members_().filter(function (x) { return x.key && x.key === given; })[0];
   if (!m) return null;
   if (String(m.revoked || '').trim()) return { revoked: true };
   var t = String(m.trips || '').trim();
   return { owner: false, id: m.id, name: m.name, role: m.role === 'viewer' ? 'viewer' : 'member',
            trips: t === '*' ? '*' : t.split(/\s*,\s*/).filter(Boolean) };
 }
+/* The Members tab is read on every request from a personal key, so it is kept
+ * in the script's cache for a couple of minutes. Adding, changing or removing
+ * a person through the app clears it at once; a change typed straight into
+ * the Sheet takes up to MEMBERS_TTL seconds to count. */
+var MEMBERS_TTL = 120;
+function cache_() { return typeof CacheService !== 'undefined' ? CacheService.getScriptCache() : null; }
+function members_() {
+  var c = cache_(), hit = c && c.get('members');
+  if (hit) { try { return JSON.parse(hit); } catch (x) {} }
+  var rows = readTab_('Members');
+  if (c) { try { c.put('members', JSON.stringify(rows), MEMBERS_TTL); } catch (x) {} }
+  return rows;
+}
+function membersChanged_() { var c = cache_(); if (c) c.remove('members'); }
+
 /** The trip that rows with a blank trip_id belong to — as the app works it out. */
 function defaultTrip_() {
   var ok = /^\d{4}-\d{2}-\d{2}$/;
@@ -213,7 +240,59 @@ function saveMember_(p) {
   var trips = Array.isArray(p.trips) ? p.trips.join(',') : String(p.trips || '');
   var row = { id: p.id || '', name: String(p.name).trim(), trips: trips, role: p.role === 'viewer' ? 'viewer' : 'member' };
   if (!row.id || rowIndexById_('Members', row.id) < 0) { row.key = newKey_(); row.added = new Date().toISOString(); row.revoked = ''; }
+  membersChanged_();
   return upsert_('Members', row, 'mem');
+}
+
+/* Several changes in one request, under the one lock: a phone that made ten
+ * changes with no signal sends them together instead of one slow request
+ * each. Each job is checked and run exactly as it would be alone, in order,
+ * and one that is refused or fails doesn't stop the rest — its error comes
+ * back in its place. */
+var BATCH_MAX = 200;
+var NOT_IN_BATCH = { batch: true, all: true, reseed: true, setupTabs: true, resolvePlace: true };
+function batch_(payload) {
+  var jobs = (payload && payload.jobs) || [];
+  if (!Array.isArray(jobs)) throw new Error('batch needs {jobs:[...]}');
+  if (jobs.length > BATCH_MAX) throw new Error('Too many changes in one batch (' + jobs.length + ').');
+  return { results: jobs.map(function (j) {
+    var a = String((j && j.action) || '');
+    try {
+      if (!a || NOT_IN_BATCH[a]) throw new Error('Not allowed in a batch: ' + a);
+      return { ok: true, action: a, data: route_(a, { payload: j.payload }) };
+    } catch (err) {
+      return { ok: false, action: a, error: String(err && err.message ? err.message : err) };
+    }
+  }) };
+}
+
+/* A link or a note sent in from another app's share menu. It names no trip
+ * (the Shortcut that sends it is set up once and outlives the trip), so it
+ * goes to the trip the sender is on that is under way or coming up next —
+ * else the default trip. The text is kept as sent; the first link in it is
+ * pulled out so the app can offer to read it. */
+var INBOX_TEXT_MAX = 2000;
+function inboxTrip_(asked) {
+  if (asked && allowed_(asked)) return String(asked);
+  var today = Utilities.formatDate(new Date(), ss_().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  var ok = /^\d{4}-\d{2}-\d{2}$/;
+  var live = readTab_('Trips').filter(function (t) {
+    return t.id && ok.test(t.start) && ok.test(t.end) && allowed_(t.id) && !String(t.archived || '').trim() && t.end >= today;
+  }).sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; });
+  if (live[0]) return live[0].id;
+  return allowed_('') ? dflt_() : '';
+}
+function inboxAdd_(p) {
+  noViewer_();
+  var text = String((p && p.text) || '').replace(/\s+/g, ' ').trim().slice(0, INBOX_TEXT_MAX);
+  var url = String((p && p.url) || '').trim();
+  if (!url) { var m = text.match(/https?:\/\/[^\s<>"']+/i); if (m) url = m[0]; }
+  if (url && !/^https?:\/\//i.test(url)) url = '';
+  if (!text && !url) throw new Error('Nothing to add: send some text or a link.');
+  var trip = inboxTrip_(p && p.trip);
+  if (!trip) throw new Error("This key isn't on any trip yet — ask the trip owner.");
+  return upsert_('Inbox', { id: '', trip_id: trip, added: new Date().toISOString(),
+    by: REQ_.who.owner ? String((p && p.by) || '') : (REQ_.who.name || ''), text: text, url: url.slice(0, 500), done: '' }, 'in');
 }
 
 function route_(action, req) {
@@ -221,7 +300,7 @@ function route_(action, req) {
   if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch (x) {} }
 
   switch (action) {
-    case 'ping':                return { pong: true, time: new Date().toISOString() };
+    case 'ping':                return { pong: true, time: new Date().toISOString(), version: VERSION };
     case 'whoami':              return me_();
     case 'all':                 return readAll_(payload);
     case 'locations':           return { locations: mineOnly_(readTab_('Locations')) };
@@ -256,7 +335,12 @@ function route_(action, req) {
 
     case 'members':             ownerOnly_(); return { members: readTab_('Members') };
     case 'saveMember':          ownerOnly_(); return { member: saveMember_(payload) };
-    case 'revokeMember':        ownerOnly_(); return { member: upsert_('Members', { id: payload && payload.id, revoked: new Date().toISOString() }, 'mem') };
+    case 'revokeMember':        ownerOnly_(); membersChanged_(); return { member: upsert_('Members', { id: payload && payload.id, revoked: new Date().toISOString() }, 'mem') };
+
+    case 'batch':               return batch_(payload);
+    case 'inboxAdd':            return { item: inboxAdd_(payload || req) };
+    case 'saveInboxItem':       canWrite_('Inbox', payload); return { item: upsert_('Inbox', payload, 'in') };
+    case 'deleteInboxItem':     canWrite_('Inbox', { id: payload && payload.id }); return { deleted: remove_('Inbox', payload && payload.id) };
 
     case 'reseed':              ownerOnly_(); return seedAll_(true);
     case 'setupTabs':           ownerOnly_(); return ensureTabs_();
@@ -311,6 +395,7 @@ function absoluteUrl_(loc, base) {
 }
 
 function json_(obj) {
+  obj.v = VERSION;
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
@@ -404,7 +489,7 @@ function readAll_(scope) {
   };
   var locations = readTab_('Locations'), index = {};
   locations.forEach(function (l) { var t = String(l.trip_id || ''); if (allowed_(t)) index[t] = (index[t] || 0) + 1; });
-  return {
+  var out = {
     bookings: mine(readTab_('Bookings')),
     locations: mine(locations),
     schedule: mine(readTab_('Schedule')),
@@ -413,12 +498,24 @@ function readAll_(scope) {
     cities: readTab_('Cities'),
     days: mine(readTab_('Days')),
     bin: mine(readTab_('Bin')),
+    inbox: mine(readTab_('Inbox')).filter(function (i) { return !String(i.done || '').trim(); }),
     scope: trip ? { trip: trip, is_default: dflt } : null,
     places_per_trip: index,
     me: me_(),
-    default_trip: dflt_(),
-    fetched_at: new Date().toISOString()
+    default_trip: dflt_()
   };
+  // A fingerprint of everything above. A phone sends back the one it last
+  // got; when nothing has changed — however the Sheet was edited, by an app,
+  // by hand or by a script — the answer is just "unchanged", not the trip.
+  var etag = etag_(out), now = new Date().toISOString();
+  if (scope && scope.etag && String(scope.etag) === etag) return { unchanged: true, etag: etag, fetched_at: now };
+  out.etag = etag;
+  out.fetched_at = now;
+  return out;
+}
+function etag_(obj) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(obj), Utilities.Charset.UTF_8);
+  return bytes.map(function (b) { return ((b < 0 ? b + 256 : b) + 256).toString(16).slice(1); }).join('');
 }
 
 function rowIndexById_(name, id) {
@@ -541,7 +638,7 @@ function deleteTrip_(payload) {
   var dflt = String(t[TABS.Trips.indexOf('is_default')]).trim().toLowerCase();
   if (dflt && dflt !== '0' && dflt !== 'false') throw new Error('The default trip cannot be deleted.');
   var counts = {};
-  ['Bookings', 'Locations', 'Schedule', 'Checklist', 'Days'].forEach(function (name) {
+  ['Bookings', 'Locations', 'Schedule', 'Checklist', 'Days', 'Bin', 'Inbox'].forEach(function (name) {
     var sh = sheet_(name), col = TABS[name].indexOf('trip_id') + 1, last = sh.getLastRow(), n = 0;
     if (last >= 2) {
       var v = sh.getRange(2, col, last - 1, 1).getValues();

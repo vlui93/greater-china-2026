@@ -99,7 +99,10 @@ suite({}, async (env) => {
   console.log('\n8. an older backend: trips kept on the phone, no new ones');
   await page.ctx.unroute('**/macros/s/**');
   await page.ctx.route('**/macros/s/**', async route=>{ const body=route.request().postData()||'{}';
-    const j=JSON.parse(env.box.doPost({postData:{contents:body},parameter:{}})._t);
+    // an older backend knows nothing of fingerprints: it ignores one sent to it, and sends no version or fingerprint back
+    const req=JSON.parse(body); if(req.payload) delete req.payload.etag;
+    const j=JSON.parse(env.box.doPost({postData:{contents:JSON.stringify(req)},parameter:{}})._t);
+    delete j.v; if(j.data) delete j.data.etag;
     if(j.data && j.data.locations){ delete j.data.trips; delete j.data.cities; delete j.data.days; }
     route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(j)}); });
   await page.evaluate(()=>store.sync({quiet:true})); await wait(600);

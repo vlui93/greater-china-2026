@@ -34,6 +34,7 @@ MockSheet.prototype = {
     const sh=this;
     return {
       getValues(){
+        sh.nread = (sh.nread||0) + 1;
         const out=[];
         for(let r=row;r<row+nr;r++){ const line=[];
           for(let c=col;c<col+nc;c++) line.push(sh._cell(r,c));
@@ -79,6 +80,8 @@ const NET = {
   "https://maps.app.goo.gl/evil": [302, {Location:"https://evil.example.com/"}, ""]
 };
 const fetched = [];
+/* The script cache: a plain store the tests can look into and empty. */
+const CACHE = { d: {}, get(k){ return k in this.d ? this.d[k] : null; }, put(k, v){ this.d[k] = String(v); }, remove(k){ delete this.d[k]; } };
 const sandbox = {
   UrlFetchApp: { fetch(url, opts){
     fetched.push({url, opts});
@@ -91,7 +94,11 @@ const sandbox = {
     createTextOutput: (t) => ({ _t: t, setMimeType(){ return this; }, getContent(){ return this._t; } })
   },
   LockService: { getScriptLock: () => ({ waitLock(){}, releaseLock(){} }) },
-  Utilities: { formatDate: (d) => d.toISOString().slice(0,10), getUuid: () => require('crypto').randomUUID() },
+  Utilities: { formatDate: (d) => d.toISOString().slice(0,10), getUuid: () => require('crypto').randomUUID(),
+    // Apps Script hands a digest back as signed bytes
+    computeDigest: (alg, text) => [...require('crypto').createHash('md5').update(String(text), 'utf8').digest()].map(b => b > 127 ? b - 256 : b),
+    DigestAlgorithm: { MD5: 'MD5' }, Charset: { UTF_8: 'UTF_8' } },
+  CacheService: { getScriptCache: () => CACHE },
   Logger: { log(){} },
   console
 };
@@ -458,6 +465,121 @@ console.log("18. personal keys: each person sees only their trips");
   const own = P(KEY, "all", null).data;
   ok(own.scope === null && own.trips.length >= 3 && own.me.owner === true, "the owner, from an older app, still gets everything");
   ["tA", "tB"].forEach(id => P(KEY, "deleteTrip", { id }));
+}
+
+console.log("19. every reply says which backend version it is");
+{
+  const V = sandbox.VERSION;
+  ok(V >= 2, "the backend has a version number (" + V + ")");
+  eq([post({ key: KEY, action: "ping" }).v, post({ key: KEY, action: "all" }).v, post({ key: "wrong", action: "all" }).v, post({ key: KEY, action: "no-such-thing" }).v], [V, V, V, V],
+     "on ping, all, a refused key and an unknown action alike");
+  eq(post({ key: KEY, action: "ping" }).data.version, V, "ping carries it in its data too");
+}
+
+console.log("20. batch: several changes in one request");
+{
+  const P = (k, action, payload) => post({ key: k, action, payload });
+  P(KEY, "saveTrip", { id: "tC", name: "Trip C", start: "2027-05-01", end: "2027-05-05" });
+  P(KEY, "saveTrip", { id: "tD", name: "Trip D", start: "2027-06-01", end: "2027-06-05" });
+  const ld = P(KEY, "saveLocation", { name_en: "D Place", city: "Dville", type: "attraction", trip_id: "tD" }).data.location;
+  const r = P(KEY, "batch", { jobs: [
+    { action: "saveLocation", payload: { id: "bl-1", name_en: "One", city: "Cville", type: "attraction", trip_id: "tC" } },
+    { action: "saveScheduleEntry", payload: { id: "bs-1", date: "2027-05-02", order_index: 1, location_id: "bl-1", trip_id: "tC" } },
+    { action: "saveLocation", payload: { id: "bl-1", visited: "2027-05-02T10:00:00Z" } },
+    { action: "no-such-thing", payload: {} },
+    { action: "saveChecklistItem", payload: { id: "bc-1", kind: "task", text: "after the bad one", trip_id: "tC" } } ] });
+  ok(r.ok && r.data.results.length === 5, "one reply, one result per job");
+  eq(r.data.results.map(x => x.ok), [true, true, true, false, true], "a job that fails comes back as an error in its place; the rest still run");
+  ok(/Unknown action/.test(r.data.results[3].error), "  with its reason: " + r.data.results[3].error);
+  const c = P(KEY, "all", { trip: "tC" }).data;
+  ok(c.locations.length === 1 && c.locations[0].name_en === "One" && c.locations[0].visited === "2027-05-02T10:00:00Z", "the jobs ran in order: the place was added, then ticked");
+  ok(c.schedule.some(x => x.id === "bs-1") && c.checklist.some(x => x.id === "bc-1"), "and the stop and the task are in the Sheet");
+  for (const a of ["batch", "all", "reseed", "setupTabs", "resolvePlace"]) {
+    const x = P(KEY, "batch", { jobs: [{ action: a, payload: {} }] }).data.results[0];
+    ok(!x.ok && /Not allowed in a batch/.test(x.error), a + " can't be put in a batch");
+  }
+  const many = []; for (let i = 0; i < 201; i++) many.push({ action: "ping" });
+  ok(/Too many/.test(P(KEY, "batch", { jobs: many }).error), "more than 200 at once is refused");
+  ok(P(KEY, "batch", { jobs: [] }).data.results.length === 0, "an empty batch is fine");
+  const sam = P(KEY, "saveMember", { name: "Sam", trips: ["tC"], role: "member" }).data.member;
+  const vic = P(KEY, "saveMember", { name: "Vic", trips: ["tC"], role: "viewer" }).data.member;
+  const m = P(sam.key, "batch", { jobs: [
+    { action: "saveLocation", payload: { id: "bl-2", name_en: "Two", trip_id: "tC" } },
+    { action: "saveLocation", payload: { id: ld.id, notes: "changed through a batch" } },
+    { action: "saveLocation", payload: { id: "bl-3", name_en: "Sneak", trip_id: "tD" } },
+    { action: "saveMember", payload: { name: "Friend", trips: "*" } } ] }).data.results;
+  eq(m.map(x => x.ok), [true, false, false, false], "a person's batch is checked job by job: their trip yes, another trip no, owner-only no");
+  ok(/can't see that trip/.test(m[1].error) && /can't see that trip/.test(m[2].error) && /Only the trip owner/.test(m[3].error), "  each refusal says why");
+  ok(P(KEY, "locations").data.locations.find(l => l.id === ld.id).notes !== "changed through a batch" && !P(KEY, "locations").data.locations.some(l => l.id === "bl-3"), "and Trip D is untouched");
+  const v = P(vic.key, "batch", { jobs: [{ action: "saveLocation", payload: { id: "bl-4", name_en: "v", trip_id: "tC" } }] }).data.results[0];
+  ok(!v.ok && /View only/.test(v.error), "a viewer's batch changes nothing");
+
+  console.log("21. a sync that finds nothing new");
+  const a1 = P(KEY, "all", { trip: "tC" }).data;
+  ok(/^[0-9a-f]{32}$/.test(a1.etag), "all carries a fingerprint of what it sent (" + a1.etag.slice(0, 8) + "…)");
+  const a2 = P(KEY, "all", { trip: "tC", etag: a1.etag });
+  ok(a2.data.unchanged === true && a2.data.etag === a1.etag && !("locations" in a2.data) && JSON.stringify(a2).length < 200, "sent back with nothing changed, the reply is just \"unchanged\" (" + JSON.stringify(a2).length + " bytes)");
+  ok(a2.data.fetched_at, "  with the time, so the phone knows it synced");
+  P(KEY, "saveLocation", { id: "bl-1", notes: "edited" });
+  const a3 = P(KEY, "all", { trip: "tC", etag: a1.etag }).data;
+  ok(!a3.unchanged && a3.etag !== a1.etag && a3.locations.find(l => l.id === "bl-1").notes === "edited", "after a change through the app, the whole trip comes, with a new fingerprint");
+  // a hand edit in the Sheet itself, which no code sees happen
+  const shL = SS.getSheetByName("Locations"), rowL = shL.d.findIndex(x => x && x[0] === "bl-1");
+  shL.d[rowL][sandbox.TABS.Locations.indexOf("notes")] = "typed into the Sheet";
+  const a4 = P(KEY, "all", { trip: "tC", etag: a3.etag }).data;
+  ok(!a4.unchanged && a4.locations.find(l => l.id === "bl-1").notes === "typed into the Sheet", "a change typed straight into the Sheet counts too");
+  P(KEY, "saveLocation", { id: ld.id, notes: "D changed" });
+  ok(P(KEY, "all", { trip: "tC", etag: a4.etag }).data.unchanged === true, "a change in another trip leaves this trip unchanged");
+  ok(P(KEY, "all", { trip: "tD", etag: a4.etag }).data.locations, "the fingerprint of one trip doesn't pass for another");
+  ok(!P(KEY, "all", { trip: "tC" }).data.unchanged, "a phone that sends no fingerprint always gets the trip");
+  const s1 = P(sam.key, "all", { trip: "tC" }).data;
+  ok(s1.etag !== a4.etag && P(sam.key, "all", { trip: "tC", etag: s1.etag }).data.unchanged === true, "each key has its own (what a person may see is part of it)");
+
+  console.log("22. the Inbox: things sent in from other apps");
+  const day = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  P(KEY, "saveTrip", { id: "tPast", name: "Over", start: day(-20), end: day(-10) });
+  P(KEY, "saveTrip", { id: "tSoon", name: "Soon", start: day(5), end: day(9) });
+  P(KEY, "saveTrip", { id: "tLater", name: "Later", start: day(40), end: day(45) });
+  P(KEY, "saveTrip", { id: "tShelved", name: "Shelved", start: day(1), end: day(2), archived: "1" });
+  const i1 = P(KEY, "inboxAdd", { text: "  Noodle place everyone queues for\nhttps://example.com/p/123?x=1  see this ", by: "Alex" });
+  ok(i1.ok && i1.data.item.trip_id === "tSoon", "with no trip named, it goes to the trip coming up next (not a past, later or archived one)");
+  eq([i1.data.item.text, i1.data.item.url, i1.data.item.by], ["Noodle place everyone queues for https://example.com/p/123?x=1 see this", "https://example.com/p/123?x=1", "Alex"], "the text is kept, the first link pulled out, and who sent it");
+  ok(P(KEY, "inboxAdd", { text: "x", trip: "tLater" }).data.item.trip_id === "tLater", "a named trip is used");
+  ok(/Nothing to add/.test(P(KEY, "inboxAdd", { text: "   " }).error), "an empty one is refused");
+  ok(P(KEY, "inboxAdd", { url: "javascript:alert(1)", text: "odd" }).data.item.url === "", "only http(s) links are kept as links");
+  ok(P(KEY, "inboxAdd", { text: "y".repeat(5000) }).data.item.text.length === 2000, "very long text is cut at 2000");
+  const g = get({ key: KEY, action: "inboxAdd", text: "sent as a plain link https://example.com/g" });
+  ok(g.ok && g.data.item.url === "https://example.com/g", "works as a plain GET too (for a Shortcut that can't post)");
+  const soon = P(KEY, "all", { trip: "tSoon" }).data, later = P(KEY, "all", { trip: "tLater" }).data;
+  ok(soon.inbox.length === 4 && later.inbox.length === 1 && P(KEY, "all", { trip: "tC" }).data.inbox.length === 0, "each trip's sync carries its own inbox only");
+  P(KEY, "saveInboxItem", { id: i1.data.item.id, done: "2027-01-01T00:00:00Z" });
+  ok(!P(KEY, "all", { trip: "tSoon" }).data.inbox.some(i => i.id === i1.data.item.id), "one marked done no longer comes");
+  ok(P(KEY, "deleteInboxItem", { id: later.inbox[0].id }).data.deleted.removed && P(KEY, "all", { trip: "tLater" }).data.inbox.length === 0, "and one can be deleted");
+  const sm = P(sam.key, "inboxAdd", { text: "from Sam", by: "Somebody else" });
+  ok(sm.ok && sm.data.item.trip_id === "tC" && sm.data.item.by === "Sam", "a person's goes to a trip they're on, under their own name");
+  ok(P(sam.key, "inboxAdd", { text: "from Sam", trip: "tSoon" }).data.item.trip_id === "tC", "naming a trip they're not on doesn't get them into it");
+  const other = soon.inbox.find(i => i.id !== i1.data.item.id);
+  ok(/can't see that trip/.test(P(sam.key, "saveInboxItem", { id: other.id, done: "x" }).error) && /can't see that trip/.test(P(sam.key, "deleteInboxItem", { id: other.id }).error), "and they can't touch another trip's inbox");
+  ok(/View only/.test(P(vic.key, "inboxAdd", { text: "v" }).error), "a viewer can't add");
+  ok(!JSON.stringify(P(sam.key, "all", { trip: "tC" }).data.inbox).includes("Noodle"), "nor see another trip's");
+
+  console.log("23. the people list is read once, not on every request");
+  const shM = SS.getSheetByName("Members");
+  P(sam.key, "ping");
+  const before = shM.nread;
+  P(sam.key, "ping"); P(sam.key, "ping"); P(vic.key, "ping");
+  eq(shM.nread, before, "three more requests from personal keys didn't read the Members tab again");
+  ok(P(KEY, "revokeMember", { id: sam.id }).ok && /This key has been removed/.test(P(sam.key, "ping").error), "removing a person still stops their key at once");
+  const fr = P(KEY, "saveMember", { name: "Friend", trips: ["tC"] }).data.member;
+  ok(P(fr.key, "ping").ok, "and a person just added can connect at once");
+  const rowV = shM.d.findIndex(x => x && x[0] === vic.id);
+  shM.d[rowV][sandbox.TABS.Members.indexOf("revoked")] = "by hand";
+  ok(P(vic.key, "ping").ok, "a removal typed into the Sheet waits for the cached list to run out…");
+  CACHE.d = {};
+  ok(/This key has been removed/.test(P(vic.key, "ping").error), "…and then counts");
+  const gone = P(KEY, "deleteTrip", { id: "tSoon" }).data;
+  ok(gone.rows_removed.Inbox >= 3 && !SS.getSheetByName("Inbox").d.some(x => x && x[1] === "tSoon"), "deleting a trip takes its inbox with it (" + gone.rows_removed.Inbox + " items)");
+  ["tC", "tD", "tPast", "tLater", "tShelved"].forEach(id => P(KEY, "deleteTrip", { id }));
 }
 
 console.log("\n" + (fails ? "FAILED " + fails + "/" + checks : "PASSED all " + checks + " checks"));

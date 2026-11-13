@@ -5,6 +5,8 @@ const fs = require('fs'), path = require('path');
 suite({}, async (env) => {
   const { ok, wait, rows, tab } = env;
   const page = await env.phone({});
+  // These checks call functions from manage.js and use what they return, so the file is loaded first
+  await page.evaluate(() => loadPart('manage'));
 
   const zlib=require('zlib');
   const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','base64');

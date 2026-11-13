@@ -5,6 +5,8 @@ const fs = require('fs'), path = require('path');
 suite({}, async (env) => {
   const { ok, wait, rows, tab } = env;
   const page = await env.phone({});
+  // These checks call functions from manage.js and use what they return, so the file is loaded first
+  await page.evaluate(() => loadPart('manage'));
 
   console.log('\n1. coordinate conversion');
   const v=await page.evaluate(()=>{ const w=gcjToWgs(39.915,116.404); const g=wgsToGcj(w[0],w[1]); return {w,g}; });

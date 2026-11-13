@@ -779,6 +779,56 @@ var EMPTY = { bookings: [], locations: [], schedule: [], checklist: [], trips: [
 var TRIP_TABS = ["bookings", "locations", "schedule", "checklist"];   // rows that belong to one trip
 
 /* ==========================================================================
+   Parts. Screens that aren't needed to show today's plan or the list of
+   places live in their own files (prep.js, bookings.js, manage.js,
+   extras.js) and are fetched the first time one is opened; the service worker
+   keeps them all, so this works with no signal. The build writes each file's
+   function names here. Until a file has loaded, each of its functions is a
+   stand-in that loads the file and then calls the real one — so calling one
+   from this file just works, but hands back a promise, not the function's own
+   result. Nothing here uses such a result except in a handler for something
+   the part itself put on screen (by then the real function is in place).
+   A helper that two files need stays in this one.
+   ========================================================================== */
+var PARTS = {"prep":["shortDate","dueInfo","byOrder","taskSort","groupBySection","setEachTick","ckRow","ckGroupHTML","countDone","renderPrep","prepChecklist","swipeHint","prepPacking","prepGuide","checklistForm","fillSections","formSection","tripPeople","removeItems","sectionForm","myTemplates","packingKeyFor","templateSources","templatesForm","useTemplate","saveTemplate","deleteTemplate"],"bookings":["bkWhenText","setBookingTicket","setBookingTz","renderBookings","icsText","icsFold","icsUtc","icsDate","buildIcs","icsForm","fileName","exportIcs","printHTML","printForm","printNow","guessYear","findDates","findTimes","after","findRef","parseBookingText","bookingForm","bookingFormShape","readPasted","saveBookingForm","deleteBookingForm"],"manage":["isOwner","renameDay","binSheet","locationForm","collectLocationForm","isShortMapLink","nameFromTitle","mergeResolved","placeFromParsed","linkBoxHTML","setField","applyPlace","fillFromLink","bindLinkBox","quickAddForm","guessCity","pickLocationForDay","pickDayForLocation","backendNoteHTML","settingsForm","peopleSectionHTML","isArchived","canArchive","placesIn","setArchived","tripsSectionHTML","citiesSectionHTML","tripForm","saveTripForm","deleteTrip","cityForm","saveCityForm","routeKm","bestInsert","orderDay","bestOrder","findBoxHTML","bindFindBox","osmSearch","osmPlace","findPlace","pickFound","libraryForm","libraryShow","copyPlace","stopNoteForm"],"extras":["importNotes","unzipFirst","stripTags","parseKml","parseGeoJson","parseCsv","parseCsvPlaces","readPlacesFile","importPlacesFile","applyImport","aiFormKey","aiCitiesGuess","aiValues","aiCollect","aiForm","aiPrompt","aiCopy","aiParse","aiKey","aiNormalize","aiRead","aiPreview","aiNotes","aiImport","peopleSheet","tripNames","peopleList","personForm","savePerson","inviteLink","inviteText","inviteSheet","copyInvite","removePerson"]};
+var partJs = {};
+function loadPart(name){
+  if(!partJs[name]) partJs[name]=new Promise(function(res, rej){
+    var el=document.createElement("script"); el.src=name+".js";
+    el.onload=function(){ res(); };
+    el.onerror=function(){ delete partJs[name]; el.remove(); rej(new Error("part-load")); };
+    document.head.appendChild(el);
+  });
+  return partJs[name];
+}
+function isStub(f){ return !!(f && f.partStub); }
+Object.keys(PARTS).forEach(function(part){
+  PARTS[part].forEach(function(fn){
+    var stub=function(){
+      var args=arguments, self=this;
+      return loadPart(part).then(function(){
+        if(window[fn]===stub) throw new Error(part+".js has no "+fn);
+        return window[fn].apply(self, args);
+      }, function(){ toast("Couldn't load that screen — try again with a connection"); });
+    };
+    stub.partStub=part;
+    window[fn]=stub;
+  });
+});
+/* Actions a part handles itself: a part calls onAct("name", fn) as it loads,
+   and the build lists which part owns which name, so a tap on one loads its
+   part first. Older actions are still in the switch under "Events". */
+var ACTS = {}, PART_ACTS = {};
+function onAct(name, fn){ ACTS[name]=fn; }
+function runAct(name, t, ev){
+  if(ACTS[name]){ ACTS[name](t, ev); return true; }
+  var part=PART_ACTS[name]; if(!part) return false;
+  loadPart(part).then(function(){ if(ACTS[name]) ACTS[name](t, ev); },
+    function(){ toast("Couldn't load that screen — try again with a connection"); });
+  return true;
+}
+
+/* ==========================================================================
    Getting between stops
    Worked out from the coordinates rather than stored, so it stays right when a
    day is reordered. Meter tariffs as published by each city (checked Sep 2026);
@@ -957,7 +1007,16 @@ var IC = {
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
            packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips",
-           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin", binOK:"gct.binok" };
+           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin", binOK:"gct.binok", v:"gct.v" };
+/* The backend version this app is built for. Every reply from Code.gs says
+   which version it is (`v`; a backend from before that counts as 1), so the
+   app knows what it can ask for and Settings can say when Code.gs needs
+   pasting again. 2: batched saves, "unchanged" syncs, the Inbox. */
+var BACKEND_WANT = 2;
+var BATCH_SIZE = 100;
+/* Bumped whenever the app starts keeping something more from a sync reply:
+   a fingerprint from before then doesn't vouch for the copy on this phone. */
+var RAW_SHAPE = 1;
 /* Location fields added after the first release. A blank from the Sheet never
    overwrites a value this phone already has for them, so notes imported on a
    phone survive until the backend has the columns to hold them. The cost: to
@@ -1105,6 +1164,7 @@ var store = {
   supportsTrips: !!load(LS.trips, false),
   supportsBin: !!load(LS.binOK, false),     // the backend has the Bin tab (shared Recently deleted)   // the backend has the Trips, Cities and Days tabs
   supportsAssignee: !!load("gct.assignee", false),   // the backend's Checklist has the assignee column
+  v: +load(LS.v, 0) || 0,                    // the backend's version, once it has answered (0: not yet)
   queue: load(LS.queue, []),
   online: false,
   syncing: false,
@@ -1181,6 +1241,7 @@ var store = {
         function(){ throw callError("page", e.message); },
         function(){ throw callError("net", e.message); });
     }).then(function(j){
+      if(j && typeof j==="object"){ var v=+j.v || 1; if(v!==self.v){ self.v=v; save(LS.v, v); } }
       if(!j || !j.ok){
         var m=(j && j.error) || "Request failed";
         throw callError(/API key|not configured|key has been removed/i.test(m) ? "key" : ACCESS_RE.test(m) ? "access" : "server", m);
@@ -1200,6 +1261,7 @@ var store = {
   flush: function(){
     var self=this;
     if(!this.configured() || !this.queue.length) return Promise.resolve(0);
+    if(this.v>=2 && this.queue.length>1) return this.flushBatch(0);
     var sent=0;
     function step(){
       if(!self.queue.length) return Promise.resolve(sent);
@@ -1212,6 +1274,7 @@ var store = {
         // the change and the next sync against an upgraded backend uploads it.
         if(err && err.kind==="access"){
           self.queue.shift(); save(LS.queue, self.queue); self.refused=(self.refused||0)+1;
+          self.raw.etag="";
           toast(syncProblem(err), 6000); return step();
         }
         if(!isUnknownAction(err)) throw err;
@@ -1219,6 +1282,33 @@ var store = {
       });
     }
     return step();
+  },
+
+  /* Everything waiting, in one request (BATCH_SIZE at a time). Each job comes
+     back with its own result: done ones leave the queue; one this key isn't
+     allowed is dropped and said so, as when sent alone; one the backend
+     couldn't do stays at the front, and the flush fails with its reason. A
+     batch that never arrives leaves the queue as it was — sending a job twice
+     is harmless, since each names the row it writes. */
+  flushBatch: function(sent){
+    var self=this, jobs=this.queue.slice(0, BATCH_SIZE);
+    if(!jobs.length) return Promise.resolve(sent);
+    return this.call("batch", { jobs: jobs.map(function(j){ return { action:j.action, payload:j.payload }; }) }).then(function(d){
+      var res=(d && d.results) || [], keep=[], failed=null, refused=null;
+      jobs.forEach(function(job,i){
+        var r=res[i];
+        if(r && r.ok){ sent++; return; }
+        var m=String((r && r.error) || "No answer for this change");
+        if(ACCESS_RE.test(m)){ refused=callError("access", m); self.refused=(self.refused||0)+1; return; }
+        if(/Unknown action/.test(m)) return;
+        keep.push(job); if(!failed) failed=callError("server", m);
+      });
+      // jobs added while the batch was away are still behind the ones sent
+      self.queue = keep.concat(self.queue.slice(jobs.length)); save(LS.queue, self.queue);
+      if(refused){ self.raw.etag=""; toast(syncProblem(refused), 6000); }
+      if(failed){ self.online=false; self.lastError=failed; throw failed; }
+      return self.queue.length ? self.flushBatch(sent) : sent;
+    });
   },
 
   /* write-through: apply locally, then send (or queue if offline) */
@@ -1240,6 +1330,7 @@ var store = {
         // Refused for this key: it would never go, so it isn't queued — say so,
         // and put the Sheet's version back on screen
         toast(syncProblem(err), 6000);
+        self.raw.etag="";   // this phone's copy now differs from the Sheet's: fetch it whole
         setTimeout(function(){ self.sync({ quiet:true }).catch(function(){}); }, 50);
         return;
       }
@@ -1262,6 +1353,11 @@ var store = {
         // stays one trip's size however many trips the Sheet holds. A backend
         // from before this sends every trip anyway; the copy is trimmed below.
         asked={ trip:TRIP.id, is_default:TRIP.id===defaultTripId() };
+        // The fingerprint of what this phone last got for this trip: when the
+        // Sheet still matches it, the answer is "unchanged" and nothing is
+        // downloaded. Not sent when asked to pull afresh.
+        var tag=self.raw && self.raw.etag;
+        if(tag && !opts.fresh && self.raw.etag_for===asked.trip+"|"+asked.is_default+"|"+RAW_SHAPE) asked.etag=tag;
         return self.call("all", asked);
       })
       .then(function(d){
@@ -1300,7 +1396,9 @@ var store = {
                        bin:    Array.isArray(d.bin) ? d.bin : raw.bin||[],
                        index:  d.places_per_trip || null,
                        me:     d.me || null,
-                       default_trip: d.default_trip || "" };
+                       default_trip: d.default_trip || "",
+                       inbox:  Array.isArray(d.inbox) ? d.inbox : [],
+                       etag:   d.etag || "", etag_for: d.etag ? asked.trip+"|"+asked.is_default+"|"+RAW_SHAPE : "" };
           // A key that isn't on the trip this phone had open lands on one it is
           if(d.scope && d.scope.trip && !allTrips().some(function(t){ return t.id===ui.trip; })){ ui.trip=d.scope.trip; save(LS.ui, ui); }
           self.data = null;   // rebuilt from raw: persist must not fold the old copy back in
@@ -1453,7 +1551,6 @@ function defaultTripId(){
 /** Who this phone's key is. With a backend from before personal keys (no
  *  "me"), the one key is the owner's. */
 function whoAmI(){ return (store.raw && store.raw.me) || { owner:true, role:"owner", name:"" }; }
-function isOwner(){ return !!whoAmI().owner; }
 function isViewer(){ return whoAmI().role==="viewer"; }
 function tripOf(row){ return (row && row.trip_id) || defaultTripId(); }
 function curTrip(){
@@ -1826,12 +1923,16 @@ function applyGate(){
 function render(){
   applyGate();
   if(gateNeeded()) return;
+  var later=null;
   if(ui.view==="today")    renderDay();
   if(ui.view==="days")     renderDays();
   if(ui.view==="places")   renderPlaces();
-  if(ui.view==="bookings") renderBookings();
-  if(ui.view==="prep")     renderPrep();
+  // These two live in their own files; the first time, the screen is drawn
+  // once its file has arrived (see PARTS), and the status badge after it.
+  if(ui.view==="bookings") later=renderBookings();
+  if(ui.view==="prep")     later=renderPrep();
   updateStatus();
+  if(later && later.then) later.then(updateStatus, function(){});
 }
 
 /* ---------- shared bits ---------- */
@@ -2256,16 +2357,6 @@ function bkTitle(b){ return b.description || bkRoute(b) || b.type || "Booking"; 
 /** "22:20 → 04:40 +1", or a hotel's "in 14:00 · out Wed 21 Oct" */
 /** A ticket with no fixed time — an open return ferry, a timed-entry-free attraction. */
 function isOpenTime(t){ return String(t||"").trim().toLowerCase()==="open"; }
-function bkWhenText(b){
-  var dt=String(b.time||"").trim(), at=hhmm(b.arr_time), ad=bkArrDate(b);
-  if(isOpenTime(dt)) return MOVE_TYPES[b.type] ? "open — any sailing" : "open — any time";
-  if(b.type==="hotel"){
-    return [dt?"in "+dt:"", b.arr_date ? "out "+fmtDate(b.arr_date,false)+(at?" "+at:"") : (at?"out "+at:"")].filter(Boolean).join(" · ");
-  }
-  if(!at) return dt;
-  var plus=ad && ad!==b.date ? " +"+daysBetween(b.date, ad) : "";
-  return (hhmm(dt)||dt)+" → "+at+plus;
-}
 function fmtHM(ms, tz){
   try{ return new Intl.DateTimeFormat("en-GB",{ timeZone:tz, hour:"2-digit", minute:"2-digit", hourCycle:"h23" }).format(new Date(ms)); }
   catch(e){ return ""; }
@@ -2419,14 +2510,6 @@ function autoDayLabel(date){
   }
   if(here && cs.length===1 && cs[0]!==here) return cs[0]+" day trip";
   return cs.join(" · ");
-}
-function renameDay(date){
-  var v=window.prompt("Name for "+fmtDate(date,true)+" (blank to work it out from the plan)", dayLabel(date));
-  if(v===null) return;
-  var row={ id:"day-"+TRIP.id+"-"+date.replace(/-/g,""), trip_id:TRIP.id, date:date, label:v.trim() };
-  store.write("saveDay", row, function(){
-    store.raw.days=(store.raw.days||[]).filter(function(d){ return d.id!==row.id; }).concat([row]);
-  }).then(function(){ render(); toast(row.label ? "Renamed" : "Name cleared"); });
 }
 function tripRange(){ return rangeText(TRIP_START, TRIP_END); }
 function rangeText(start, end){
@@ -2673,22 +2756,6 @@ function planProgress(ix){
     (pl.length ? '<div class="prog"><i style="width:'+pct+'%"></i></div>' : '')+'</div>';
 }
 
-function binSheet(){
-  var items=binItems();
-  var html = items.length ? '<p class="blurb small muted" style="margin:12px 0 12px">'+
-      (store.supportsBin ? 'Places deleted on any phone on this trip.' : 'Places deleted on this phone.')+
-      ' Restore puts a place back, with its stops on the days they were on.</p><div class="loclist">'+items.map(function(it){
-      var l=it.loc, n=it.stops.length;
-      return '<div class="locrow"><div class="thumb">'+typeIcon(l.type)+'</div>'+
-        '<div class="lb"><div class="en">'+esc(l.name_en||"")+'</div><div class="zh zh">'+escz(l.name_zh||"")+'</div>'+
-        '<div class="mt">'+esc(l.city||"")+' · deleted '+esc(fmtDate(it.at.slice(0,10),false))+(it.by?' by '+esc(it.by):'')+(n?' · '+n+' stop'+(n>1?'s':''):'')+'</div></div>'+
-        '<button class="btn sm primary" data-act="bin-restore" data-bid="'+esc(it.id)+'">Restore</button>'+
-        '<button class="btn sm ghost" data-act="bin-forget" data-bid="'+esc(it.id)+'" aria-label="Remove from the bin">'+IC.close+'</button></div>';
-    }).join("")+'</div>'
-    : '<div class="card empty" style="margin-top:12px">'+(store.supportsBin ? 'Nothing in the bin.' : 'Nothing deleted on this phone.')+'</div>';
-  openSheet("Recently deleted", html);
-}
-
 function placeResults(q){
   var all=store.data.locations, ix=planIndex(), keep=placeFilter(ix);
   var list=all.filter(function(l){ return matches(l,q) && keep(l); });
@@ -2726,47 +2793,6 @@ var BK_ICON={
   hotel:  svgIc('<path d="M3.6 20.4V8.6L12 3.4l8.4 5.2v11.8"/><path d="M9.4 20.4v-6h5.2v6"/>'),
   ticket: svgIc('<path d="M3.6 8.2a2.2 2.2 0 0 0 0 4.4v3.6h16.8v-3.6a2.2 2.2 0 0 1 0-4.4V4.6H3.6z"/><path d="M14.4 4.6v11.6" stroke-dasharray="1.6 1.8"/>')
 };
-/* General advice for Hong Kong, Macau and the mainland, shown on any trip that
-   takes in one of them. Nothing here is about a particular trip, so it can
-   live in the public repo. Static HTML only. */
-var GUIDE = [
-  { t:"Install before you fly", items:[
-    "<b>Alipay</b> — the one that matters most. Sign up with your own mobile number, verify your passport in the app and link a Visa or Mastercard. It pays almost everywhere on the mainland, and DiDi and the metro QR codes run inside it.",
-    "<b>WeChat</b> — optional, but hotels and restaurants often message through it and some museums take bookings through WeChat accounts. WeChat Pay takes foreign cards too.",
-    "<b>Amap 高德地图</b> — maps on the mainland. Google Maps is blocked there and its streets sit hundreds of metres off; this app opens Amap for mainland places on its own.",
-    "<b>Trip.com</b> — trains, and the attraction tickets whose own booking channels need a Chinese phone number. Book with names exactly as they appear on your passports.",
-    "<b>A translator with Chinese downloaded for offline use</b> — Apple Translate (download Chinese in its settings) or similar. Camera mode reads menus.",
-    "<b>Octopus in Apple Wallet</b> for Hong Kong — optional, since MTR gates take contactless cards, but Octopus also covers buses, trams, ferries and convenience stores."
-  ]},
-  { t:"Staying connected", items:[
-    "On mainland networks and hotel wifi, <b>Google (Search, Maps, Gmail), WhatsApp, Instagram and Facebook are blocked</b>. Hong Kong and Macau are not affected.",
-    "A <b>roaming eSIM</b> — from your own carrier, or a travel eSIM that covers mainland China, Hong Kong and Macau — routes your data out of the country, so those apps keep working. Buy and install it before you fly; switch it on when you land.",
-    "Hotel wifi on the mainland will not get around the block, so stay on the eSIM for anything Google.",
-    "This app works offline. Edits made on the mainland wait on the phone and send themselves once Google is reachable — the badge at the top of each screen says how many are waiting."
-  ]},
-  { t:"Paying", items:[
-    "<b>Mainland:</b> nearly everything is Alipay or WeChat Pay — scan the shop's code or show yours. Small stalls often can't take a card at all. Keep a few hundred yuan in cash as a backup.",
-    "<b>Hong Kong:</b> contactless cards almost everywhere, Octopus for transport and small shops, cash for markets and dai pai dong.",
-    "<b>Macau:</b> Hong Kong dollars are accepted at par, with change in patacas. Cards in hotels and bigger shops, cash elsewhere.",
-    "Tell your bank you're travelling and check its foreign-transaction fee — every Alipay payment goes through your card."
-  ]},
-  { t:"Getting around", items:[
-    "<b>Metro:</b> Hong Kong's MTR gates take contactless Visa and Mastercard. On the mainland, add each city's transport QR code in Alipay (search “Transport”); Guangzhou and Chengdu also take foreign contactless cards at the gate.",
-    "<b>Cars:</b> open DiDi inside Alipay — it's in English and charges your linked card. Choose the destination by its Chinese name or on the map. If the driver messages you, the messages are translated.",
-    "<b>Taxis:</b> show the driver the Chinese name — every place in this app has a “Show this to someone” card for exactly this.",
-    "<b>High-speed rail:</b> your passport is your ticket. Foreign passports often need the staffed gate rather than the automatic ones, so arrive 45 minutes early for security and ID checks."
-  ]},
-  { t:"Power banks", items:[
-    "On <b>domestic flights within China</b>, a power bank needs a clearly printed <b>3C (CCC) mark</b> or security will take it. Power banks sold in Australia almost never have one.",
-    "Either buy a 3C-marked one once you're on the mainland, or <b>rent</b> one: shared power-bank stations are in nearly every restaurant, mall and station. Scan one with Alipay and return it to any station.",
-    "Whatever you carry goes in hand luggage, under 100 Wh (about 27,000 mAh), and stays unused during the flight."
-  ]},
-  { t:"Small things that help", items:[
-    "Carry <b>tissues and hand sanitiser</b> — many public toilets have no paper.",
-    "Mainland <b>tap water</b> isn't for drinking; bottled water is everywhere.",
-    "Carry your <b>passport</b> on the mainland: hotels, trains, museums and many ticketed sights check it."
-  ]}
-];
 
 /* ==========================================================================
    Prep — the shared checklist, packing lists and a guide.
@@ -2774,33 +2800,8 @@ var GUIDE = [
    only in this phone's storage and never syncs.
    ========================================================================== */
 function getMe(){ return load(LS.me, ""); }
-function shortDate(iso){
-  var d=parseISO(iso); return d.getDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
-}
-function dueInfo(due){
-  if(!due) return null;
-  var days=Math.round((parseISO(due)-parseISO(todayISO()))/86400000);
-  var label = days<0 ? (-days===1?"1 day overdue":(-days)+" days overdue")
-            : days===0 ? "due today" : days===1 ? "due tomorrow"
-            : days<7 ? "due in "+days+" days" : "due "+shortDate(due);
-  return { days:days, label:label, cls: days<0 ? "over" : days<=3 ? "soon" : "" };
-}
 function sharedItems(kind){
   return store.data.checklist.filter(function(i){ return i.kind===kind && !i.removed; });
-}
-function byOrder(a,b){ return (+a.order_index||0)-(+b.order_index||0); }
-function taskSort(a,b){
-  if(!!a.done !== !!b.done) return a.done ? 1 : -1;
-  var da=a.due||"9999", db=b.due||"9999";
-  if(da!==db) return da<db ? -1 : 1;
-  return byOrder(a,b);
-}
-function groupBySection(items, sortFn){
-  var order=[], map={};
-  items.slice().sort(byOrder).forEach(function(i){
-    var k=i.section||"Other"; if(!map[k]){ map[k]=[]; order.push(k); } map[k].push(i);
-  });
-  return order.map(function(k){ return { name:k, items: map[k].sort(sortFn||byOrder) }; });
 }
 /* Packing comes in three kinds. "each": on everyone's list, ticked on each
    phone for its owner (the item is in the Sheet, the ticks aren't). "pack":
@@ -2808,46 +2809,10 @@ function groupBySection(items, sortFn){
    on this phone, never synced. */
 var EACH_KEY = "gct.each";
 function eachTicks(){ return load(EACH_KEY+"."+TRIP.id, {}); }
-function setEachTick(id, on){
-  var m=eachTicks(); if(on) m[id]=nowISO(); else delete m[id]; save(EACH_KEY+"."+TRIP.id, m);
-}
 /** Items to show, with done read from this phone for "each" ones. */
 function eachItems(){
   var m=eachTicks();
   return sharedItems("each").map(function(i){ return Object.assign({}, i, { done:m[i.id]||"", done_by:"" }); });
-}
-function ckRow(it, scope){
-  var done=!!it.done, meta=[];
-  if(it.kind==="task" && !done){ var di=dueInfo(it.due); if(di) meta.push('<span class="due '+di.cls+'">'+esc(di.label)+'</span>'); }
-  if(it.location_id){ var l=store.loc(it.location_id); if(l) meta.push('<span>'+esc(l.name_en)+'</span>'); }
-  if(it.kind==="pack" && scope==="shared")
-    meta.push(done ? '<span class="grp">'+esc(it.done_by ? it.done_by+" brings it" : "Packed")+'</span>'
-         : it.assignee ? '<span class="grp to">'+esc(it.assignee===getMe() ? "You're bringing it" : it.assignee+" to bring")+'</span>'
-         : '<span class="grp need">One for the group</span>');
-  else if(done && it.done_by) meta.push('<span>'+esc(it.done_by)+'</span>');
-  return '<div class="ckrow'+(done?" done":"")+'" data-swipe="item">'+
-    '<div class="ckslide">'+
-    '<button class="ckbox" data-act="ck-toggle" data-scope="'+scope+'" data-id="'+esc(it.id)+'" role="checkbox" '+
-      'aria-checked="'+done+'" aria-label="'+esc(it.text)+'">'+IC.check+'</button>'+
-    '<button class="cktext" data-act="ck-edit" data-scope="'+scope+'" data-id="'+esc(it.id)+'">'+
-      '<span class="t">'+escz(it.text)+'</span>'+(meta.length?'<span class="m">'+meta.join("")+'</span>':'')+'</button>'+
-    '</div>'+
-    '<button class="ckdel" data-act="ck-swipe-del" data-scope="'+scope+'" data-id="'+esc(it.id)+'" tabindex="-1" aria-hidden="true">Delete</button>'+
-  '</div>';
-}
-/** A section's card. With a scope, its header can be tapped (rename,
- *  delete) or swiped left to delete the whole section. */
-function ckGroupHTML(title, rows, addScope, addKind, count, n){
-  var sec=(title==="Mine"||title==="Shared"||title==="To do"||title==="Each of us") ? "" : title;
-  var head = addScope && sec && n
-    ? '<div class="ckhead" data-swipe="section"><div class="ckslide">'+
-        '<button class="ckname" data-act="ck-section" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(sec)+'">'+esc(title)+'</button>'+
-        (count?'<span>'+count+'</span>':'')+'</div>'+
-        '<button class="ckdel" data-act="ck-section-del" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(sec)+'" tabindex="-1" aria-hidden="true">Delete all '+n+'</button></div>'
-    : '<div class="ckhead"><div class="ckslide"><span>'+esc(title)+'</span>'+(count?'<span>'+count+'</span>':'')+'</div></div>';
-  return '<div class="ckgroup">'+head+rows+
-    (addScope ? '<button class="ckadd" data-act="ck-add" data-scope="'+addScope+'" data-kind="'+addKind+'" data-section="'+esc(sec)+'">'+
-      IC.plus+'Add</button>' : '')+'</div>';
 }
 /** The rows of one section, as they are stored. "Other" is the blank one. */
 function sectionItems(scope, kind, sec){
@@ -2856,170 +2821,14 @@ function sectionItems(scope, kind, sec){
     return !i.removed && (scope==="mine" || i.kind===kind) && (i.section||"Other")===(sec||"Other");
   });
 }
-function countDone(items){ return items.filter(function(i){ return i.done; }).length+" / "+items.length; }
-
-function renderPrep(){
-  var tab = ui.prepTab || "checklist";
-  var toGo = Math.round((parseISO(TRIP_START)-parseISO(todayISO()))/86400000);
-  $("#viewTitle").textContent="Prep · 准备";
-  $("#viewSub").textContent = toGo>1 ? toGo+" days until you fly" : toGo===1 ? "You fly tomorrow" : toGo===0 ? "You fly today" : "On the trip";
-  var seg='<div class="seg" role="tablist">'+[["checklist","Checklist"],["packing","Packing"],["guide","Guide"]].map(function(x){
-    return '<button data-act="prep-tab" data-v="'+x[0]+'" aria-pressed="'+(tab===x[0])+'">'+x[1]+'</button>';
-  }).join("")+'</div>';
-  var body = tab==="packing" ? prepPacking() : tab==="guide" ? prepGuide() : prepChecklist();
-  $("#view-prep").innerHTML = statusBar()+seg+body;
-  updateStatus();   // renderPrep is also called on its own (segment switches), not only via render()
-}
-
-function prepChecklist(){
-  var tasks=sharedItems("task");
-  if(!tasks.length) return '<div class="card empty">No checklist yet. Import the trip notes file from ⚙ Settings, '+
-    'or add your own.</div>'+ckGroupHTML("To do", "", "shared", "task");
-  var open=tasks.filter(function(t){ return !t.done; }).sort(taskSort);
-  var done=tasks.length-open.length;
-  var urgent=open.filter(function(t){ var d=dueInfo(t.due); return d && d.days<=7; }).slice(0,4);
-  return '<div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="'+tasks.length+'" aria-valuenow="'+done+'">'+
-      '<i style="width:'+Math.round(done/tasks.length*100)+'%"></i></div>'+
-    (urgent.length ? '<div class="nextup">'+ckGroupHTML("Next up", urgent.map(function(t){ return ckRow(t,"shared"); }).join(""))+'</div>' : '')+
-    groupBySection(tasks, taskSort).map(function(g){
-      return ckGroupHTML(g.name, g.items.map(function(t){ return ckRow(t,"shared"); }).join(""), "shared", "task", countDone(g.items), g.items.length);
-    }).join("")+swipeHint();
-}
-function swipeHint(){
-  return '<p class="hint small muted" style="text-align:center;margin:4px 0 10px">Swipe an item — or a section\'s title — to the left to delete it. Tap a title to rename it.</p>';
-}
-
-var IC_ONE = '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.2" r="3.6"/><path d="M5.2 19.6c.9-3.4 3.6-5.2 6.8-5.2s5.9 1.8 6.8 5.2"/></svg>';
-var IC_GROUP = '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.6" r="3.1"/><path d="M3.4 19.2c.7-3 2.9-4.6 5.6-4.6s4.9 1.6 5.6 4.6"/><circle cx="16.6" cy="7.4" r="2.5"/><path d="M15.8 12.9c2.4-.2 4.3 1.2 4.9 3.9"/></svg>';
 /** What I still have to pack: my ticks on everyone's list, plus my own list. */
 function myPacking(){
   return eachItems().concat(packing.items.filter(function(i){ return !i.removed; }));
-}
-function prepPacking(){
-  var mine=packing.items.filter(function(i){ return !i.removed; });
-  var each=eachItems(), shared=sharedItems("pack");
-  var me=getMe(), all=myPacking();
-  var packed=all.filter(function(i){ return i.done; }).length;
-  function groups(items, scope, kind){
-    return groupBySection(items).map(function(g){
-      return ckGroupHTML(g.name, g.items.map(function(i){ return ckRow(i,scope); }).join(""), scope, kind, countDone(g.items), g.items.length);
-    }).join("");
-  }
-  var html = (all.length ? '<div class="prog"><i style="width:'+Math.round(packed/all.length*100)+'%"></i></div>' : '');
-  html += '<div class="whohead"><span class="wi">'+IC_ONE+'</span><span><b>Each of us · 每人</b>'+
-      '<small>Everyone packs their own. Your ticks are yours — they stay on this phone.</small></span></div>';
-  html += groups(each, "each", "each") || ckGroupHTML("Each of us", "", "each", "each");
-  html += '<div class="whohead grp"><span class="wi">'+IC_GROUP+'</span><span><b>Group · 共用</b>'+
-      '<small>One of us brings it for all three. Tick it when you pack it, and the others see your name.</small></span></div>'+
-    (me ? '' : '<p class="blurb muted small" style="margin:-2px 0 10px">Add your name in ⚙ Settings so the others can see who is bringing what.</p>');
-  html += groups(shared, "shared", "pack") || ckGroupHTML("Shared", "", "shared", "pack");
-  html += '<div class="whohead me"><span class="wi">'+IC.pen+'</span><span><b>Just me · 仅我</b>'+
-      '<small>Extras only you need. Kept on this phone, never shared.</small></span></div>'+
-    '<div class="toolrow"><button class="btn sm" data-act="pk-templates">Use a template</button>'+
-    (mine.length ? '<button class="btn sm ghost" data-act="pk-save-template">Save as template</button>' : '')+'</div>';
-  html += groups(mine, "mine", "pack") || ckGroupHTML("Mine", "", "mine", "pack");
-  return html+swipeHint();
-}
-
-/* For trips that don't take in China. As general as the China one: nothing
-   here is about a particular trip. */
-var GUIDE_GENERAL = [
-  { t:"Before you fly", items:[
-    "Check each passport has <b>six months</b> left after you come home, and whether you need a visa or an electronic travel authority for every country on the way — transit stops included.",
-    "Tell your bank where you're going, and carry two cards from different banks. Check which ones charge for foreign transactions.",
-    "Travel insurance: check that it covers everyone, every country and anything you plan to do (hiring a car, skiing, diving).",
-    "Save copies of passports, insurance and bookings somewhere you can open offline, and share them with someone at home."
-  ]},
-  { t:"On your phone", items:[
-    "Download <b>offline maps</b> for each city in Google Maps or Apple Maps, and the language in your translator.",
-    "Mobile data: an eSIM bought before you go is usually cheaper than roaming. Install it at home and switch it on when you land.",
-    "Each place in this app opens in the map app set for its city — change it per place in Edit place."
-  ]},
-  { t:"Money and getting around", items:[
-    "Cards and phone payments are taken almost everywhere in many countries, but keep some local cash for markets, small shops and tips.",
-    "Rides and fares between stops are estimates, worked out from the distance and the city's taxi tariff when one is set in ⚙ Settings › Cities.",
-    "Check the local emergency number and save your country's embassy or consulate in your contacts."
-  ]}
-];
-function prepGuide(){
-  return '<div class="guide">'+(tripHasChina() ? GUIDE : GUIDE_GENERAL).map(function(sec){
-    return '<div class="card"><h3>'+esc(sec.t)+'</h3><ul>'+sec.items.map(function(x){ return '<li>'+x+'</li>'; }).join("")+'</ul></div>';
-  }).join("")+'</div>';
 }
 
 function findItem(scope, id){
   var list = scope==="mine" ? packing.items : store.data.checklist;   // "each" and "shared" both live in the Sheet
   return list.filter(function(i){ return i.id===id; })[0] || null;
-}
-function checklistForm(scope, id, kind, section){
-  var it = id ? findItem(scope, id) : null;
-  var isNew=!it; kind = it ? it.kind : kind;
-  it = it || { id:"", kind:kind, section:section||"", text:"", due:"" };
-  var packKinds = scope!=="mine" && kind!=="task";
-  // Sections already in use, per list, in the order they appear
-  var bySec={ each:[], pack:[], task:[], mine:[] };
-  (scope==="mine" ? packing.items : store.data.checklist).forEach(function(i){
-    if(!i.section || i.removed) return;
-    var k = scope==="mine" ? "mine" : i.kind;
-    if(bySec[k] && bySec[k].indexOf(i.section)<0) bySec[k].push(i.section);
-  });
-  ckForm = { bySec:bySec, scope:scope, section:it.section };
-  var people=tripPeople();
-  var html=
-    '<div class="field"><label>'+(kind==="task"?"Task":"Item")+'</label><textarea id="c_text" style="min-height:70px">'+esc(it.text)+'</textarea></div>'+
-    (packKinds ? '<div class="field"><label>Who packs it</label><div class="whopick">'+
-      '<label><input type="radio" name="c_who" value="each"'+(kind==="each"?" checked":"")+'><span><b>Each of us</b><br>everyone brings their own</span></label>'+
-      '<label><input type="radio" name="c_who" value="pack"'+(kind==="pack"?" checked":"")+'><span><b>The group</b><br>one of us brings it</span></label>'+
-      '</div></div>' : '')+
-    '<div class="field"><label for="c_section_sel">Section</label><select id="c_section_sel"></select>'+
-      '<input id="c_section_new" placeholder="Name the new section" autocomplete="off" style="margin-top:8px" hidden></div>'+
-    (packKinds ? '<div class="field" id="c_assign_f"'+(kind==="pack"?"":" hidden")+'><label for="c_assign">Who\'s bringing it</label>'+
-      '<select id="c_assign"><option value="">Not decided yet</option>'+
-        people.map(function(n){ return '<option value="'+esc(n)+'"'+(it.assignee===n?" selected":"")+'>'+esc(n)+(n===getMe()?" (you)":"")+'</option>'; }).join("")+
-        '<option value="__new__">＋ Someone else…</option></select>'+
-      '<input id="c_assign_new" placeholder="Their name" autocomplete="off" style="margin-top:8px" hidden>'+
-      (store.supportsAssignee ? '' : '<div class="hint">For now this shows on your phone only. Once the Sheet\'s script is updated, everyone sees it.</div>')+
-      '</div>' : '')+
-    (kind==="task" ? '<div class="field"><label>Due</label><input id="c_due" type="date" value="'+esc(it.due||"")+'"></div>' : '')+
-    (scope==="mine" ? '<p class="hint small muted">Only on this phone.</p>'
-      : kind==="task" ? '<p class="hint small muted">Shared with the others.</p>'
-      : '<p class="hint small muted">On everyone\'s phone. Ticks on an "each of us" item are your own; a group item shows who is bringing it.</p>')+
-    '<div class="formactions">'+
-      '<button class="btn primary" data-act="ck-save" data-scope="'+scope+'" data-kind="'+kind+'" data-id="'+esc(it.id)+'">Save</button>'+
-      (isNew ? '' : '<button class="btn danger" data-act="ck-delete" data-scope="'+scope+'" data-id="'+esc(it.id)+'">Delete</button>')+
-    '</div>';
-  openSheet(isNew ? (kind==="task"?"New task":"New item") : "Edit", html);
-  fillSections(scope==="mine" ? "mine" : kind, it.section);
-  var sel=$("#c_section_sel"), nw=$("#c_section_new"), as=$("#c_assign"), asn=$("#c_assign_new");
-  sel.addEventListener("change", function(){ nw.hidden = sel.value!=="__new__"; if(!nw.hidden) nw.focus(); });
-  if(as) as.addEventListener("change", function(){ asn.hidden = as.value!=="__new__"; if(!asn.hidden) asn.focus(); });
-  document.querySelectorAll('input[name="c_who"]').forEach(function(r){ r.addEventListener("change", function(){
-    var keep = sel.value==="__new__" ? "" : sel.value;
-    fillSections(r.value, keep);
-    var f=$("#c_assign_f"); if(f) f.hidden = r.value!=="pack";
-  }); });
-}
-var ckForm=null;
-/** The section picker: the list's sections, the item's own (even if new), then "New section…". */
-function fillSections(list, current){
-  var sel=$("#c_section_sel"), nw=$("#c_section_new"); if(!sel || !ckForm) return;
-  var secs=(ckForm.bySec[list]||[]).slice();
-  if(current && secs.indexOf(current)<0) secs.unshift(current);
-  sel.innerHTML=secs.map(function(k){ return '<option value="'+esc(k)+'"'+(k===current?" selected":"")+'>'+esc(k)+'</option>'; }).join("")+
-    '<option value="__new__">＋ New section…</option>';
-  if(!secs.length){ sel.value="__new__"; nw.hidden=false; } else nw.hidden = sel.value!=="__new__";
-}
-function formSection(){
-  var sel=$("#c_section_sel"); if(!sel) return "";
-  return sel.value==="__new__" ? $("#c_section_new").value.trim() : sel.value;
-}
-/** Everyone the app has seen on this trip: your name, and whoever has ticked
- *  or been given a group item. Names are added by typing one once. */
-function tripPeople(){
-  var seen={}, out=[];
-  [getMe()].concat(store.data.checklist.map(function(i){ return i.done_by; }), store.data.checklist.map(function(i){ return i.assignee; }))
-    .forEach(function(n){ n=String(n||"").trim(); if(n && !seen[n.toLowerCase()]){ seen[n.toLowerCase()]=1; out.push(n); } });
-  return out.sort(function(a,b){ return a===getMe() ? -1 : b===getMe() ? 1 : a.localeCompare(b); });
 }
 
 /* Delete and rename, for one item or a whole section. Deleting is soft (removed
@@ -3042,28 +2851,6 @@ function setItems(scope, items){
     return p.then(function(){ return store.write("saveChecklistItem", n, function(){}); });
   }, Promise.resolve()).then(updateStatus);
 }
-function removeItems(scope, items, section){
-  items=(items||[]).filter(Boolean);
-  if(!items.length) return;
-  var before=items.map(function(i){ return Object.assign({}, i, { removed:"" }); });
-  setItems(scope, items.map(function(i){ return Object.assign({}, i, { removed:"1" }); }));
-  renderPrep(); if(ui.view!=="prep") render();
-  var what = section ? "“"+section+"” · "+items.length+" item"+(items.length===1?"":"s")
-                     : "“"+String(items[0].text).slice(0,34)+(String(items[0].text).length>34?"…":"")+"”";
-  toast("Deleted "+what, 5000, function(){
-    setItems(scope, before); renderPrep(); if(ui.view!=="prep") render(); toast("Restored");
-  });
-}
-function sectionForm(scope, kind, sec){
-  var n=sectionItems(scope, kind, sec).length;
-  openSheet("Section",
-    '<div class="field"><label>Name</label><input id="c_secname" value="'+esc(sec)+'"></div>'+
-    '<p class="hint small muted">'+n+' item'+(n===1?"":"s")+(scope==="mine" ? ", on this phone only." : ", on everyone\'s phone.")+'</p>'+
-    '<div class="formactions">'+
-      '<button class="btn primary" data-act="ck-section-save" data-scope="'+scope+'" data-kind="'+kind+'" data-section="'+esc(sec)+'">Save</button>'+
-      '<button class="btn danger" data-act="ck-section-del2" data-scope="'+scope+'" data-kind="'+kind+'" data-section="'+esc(sec)+'">Delete all '+n+'</button>'+
-    '</div>');
-}
 
 /* ---------- ticket links ----------
    A link to the e-ticket (a Trip.com order, a PDF in Drive, the airline's
@@ -3073,27 +2860,6 @@ function shortTitle(s){ return String(s||"").split(/\s+—\s+/)[0]; }
 function ticketLink(url, label, cls){
   var u=safeUrl(url); if(!u) return "";
   return '<a class="'+(cls||"btn sm")+'" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(label||"Open ticket")+' ↗</a>';
-}
-function setBookingTicket(bid){
-  var b=store.data.bookings.filter(function(x){ return x.id===bid; })[0]; if(!b) return;
-  var v=window.prompt("Link to the ticket for "+shortTitle(b.description)+" (https://…, blank to remove)", b.ticket_url||"");
-  if(v===null) return;
-  v=v.trim();
-  if(v && !safeUrl(v)){ toast("The link needs to start with https://"); return; }
-  // Only the link goes to the Sheet, so nothing else on the booking is rewritten
-  store.write("saveBooking", { id:b.id, ticket_url:v }, function(){ b.ticket_url=v; }).then(function(){
-    render(); toast(v ? "Ticket link saved" : "Ticket link removed");
-  });
-}
-/** The zone a booking's time is in, when it isn't the trip's — a flight out
- *  of home, say. Only the zone goes to the Sheet. */
-function setBookingTz(bid){
-  var b=store.data.bookings.filter(function(x){ return x.id===bid; })[0]; if(!b) return;
-  var v=window.prompt("Time zone for "+shortTitle(b.description)+"'s time, e.g. Australia/Sydney. Blank uses the trip's ("+tripTz()+").", b.tz||"");
-  if(v===null) return;
-  v=v.trim().replace(/\s+/g,"_");
-  if(v && !validTz(v)){ toast("Not a time zone this phone knows — try Region/City, like Europe/London"); return; }
-  store.write("saveBooking", { id:b.id, tz:v }, function(){ b.tz=v; }).then(function(){ render(); toast("Saved"); });
 }
 /** Upcoming tickets: travel bookings (with or without a link yet) and any
  *  booking or scheduled place that has one, soonest first. */
@@ -3114,39 +2880,6 @@ function walletItems(){
                type:"place", title:l.name_en, zh:l.name_zh, url:l.ticket_url });
   });
   return out.sort(function(a,b){ return (a.date||"9")+(a.time||"") < (b.date||"9")+(b.time||"") ? -1 : 1; });
-}
-
-function renderBookings(){
-  $("#viewTitle").textContent="Bookings · 预订";
-  var bs=store.data.bookings.slice().sort(function(a,b){
-    if(a.date!==b.date) return a.date<b.date?-1:1;
-    return String(a.time||"").localeCompare(String(b.time||""));
-  });
-  $("#viewSub").textContent=bs.length+" flights, trains, ferries and hotels · 交通与住宿";
-  $("#view-bookings").innerHTML = statusBar()+
-    '<div class="toolrow"><button class="btn sm primary" data-act="bk-new">+ Add booking</button></div>'+
-    (bs.length? bs.map(function(b){
-      var dnum = DAYS.indexOf(b.date)>=0 ? "Day "+(DAYS.indexOf(b.date)+1)+" · " : "";
-      return '<div class="bk" data-bid="'+esc(b.id)+'">'+
-        '<button class="bk-head" data-act="bk">'+
-          '<div class="bk-ic">'+(BK_ICON[b.type]||svgIc('<circle cx="12" cy="12" r="6"/>'))+'</div>'+
-          '<div class="bk-b">'+
-            '<div class="bk-when">'+esc(dnum+fmtDate(b.date,false))+(bkWhenText(b)?" · "+esc(bkWhenText(b)):"")+
-              (tzOffset(depTz(b),Date.now())!==tzOffset(tripTz(),Date.now()) ? " · "+esc(tzName(depTz(b)))+" time" : "")+'</div>'+
-            '<div class="bk-t">'+escz(bkTitle(b))+'</div>'+
-            (b.confirmation_no?'<div class="bk-cn">Ref <b>'+esc(b.confirmation_no)+'</b></div>':'')+
-            (safeUrl(b.ticket_url)?'<div class="bk-cn"><span class="pill ok">Ticket link · 票券</span></div>':'')+
-          '</div><span class="chev">'+IC.chev+'</span>'+
-        '</button>'+
-        '<div class="bk-body">'+escz(b.details).replace(/\n/g,"<br>")+
-          '<div class="bk-acts">'+(safeUrl(b.ticket_url)
-            ? ticketLink(b.ticket_url,"Open ticket","btn sm primary")+'<button class="btn sm ghost" data-act="bk-ticket" data-bid="'+esc(b.id)+'">Change link</button>'
-            : '<button class="btn sm" data-act="bk-ticket" data-bid="'+esc(b.id)+'">+ Add ticket link</button>')+
-            '<button class="btn sm ghost" data-act="bk-tz" data-bid="'+esc(b.id)+'">Time zone</button>'+
-            '<button class="btn sm ghost" data-act="bk-edit" data-bid="'+esc(b.id)+'">Edit</button></div>'+
-        '</div>'+
-      '</div>';
-    }).join("") : '<div class="card empty">No bookings yet. Add one, or paste a confirmation email and let the app read it.</div>');
 }
 
 /* ==========================================================================
@@ -3238,88 +2971,6 @@ function locationDetail(id){
       '<button class="btn" data-act="edit-location" data-lid="'+esc(l.id)+'">Edit this place</button>'+
     '</div>';
   openSheet(l.name_en, html, '<svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5h3.2L18.9 8.3a2.2 2.2 0 0 0-3.2-3.2L4.5 16.3z"/><path d="m14.6 6.2 3.2 3.2"/></svg>', function(){ locationForm(l.id); });
-}
-
-function locationForm(id){
-  var l = id ? store.loc(id) : null;
-  var isNew = !l;
-  var cities=cityOptions();
-  l = l || { id:"", name_en:"", name_zh:"", city:cities[0]||"", type:"attraction",
-             lat:"", lng:"", nav_app:mapAppFor(cities[0]), history_blurb:"", recommendations:"",
-             dishes_to_order:"", souvenirs:"", notes:"", getting_there:"", arrive_by:"", tickets:"" };
-  if(l.city && cities.indexOf(l.city)<0) cities.push(l.city);
-
-  function sel(name,val,opts){
-    return '<select id="f_'+name+'">'+opts.map(function(o){
-      return '<option value="'+esc(o)+'"'+(String(val)===String(o)?" selected":"")+'>'+esc(o)+'</option>';
-    }).join("")+'</select>';
-  }
-  linkEditing = isNew ? null : l.id;
-  var html = (isNew ? findBoxHTML()+linkBoxHTML() : linkBoxHTML(true))+
-    '<div class="field"><label>Name (English)</label><input id="f_name_en" value="'+esc(l.name_en)+'" placeholder="English name"></div>'+
-    '<div class="field"><label>名称 (Chinese) — required in China</label>'+
-      '<input id="f_name_zh" class="zh" value="'+esc(l.name_zh)+'" placeholder="中文名" style="font-size:19px">'+
-      '<div class="hint">Every place in mainland China, Hong Kong and Macau needs a Chinese name — it is what search, the map apps and showing your phone to a local all run on.</div></div>'+
-    '<div class="grid2">'+
-      '<div class="field"><label>City</label>'+sel("city",l.city,cities)+'</div>'+
-      '<div class="field"><label>Type</label>'+sel("type",l.type,["attraction","restaurant","shopping","hotel"])+'</div>'+
-    '</div>'+
-    '<div class="grid2">'+
-      '<div class="field"><label>Latitude</label><input id="f_lat" inputmode="decimal" value="'+esc(l.lat)+'" placeholder="30.6690"></div>'+
-      '<div class="field"><label>Longitude</label><input id="f_lng" inputmode="decimal" value="'+esc(l.lng)+'" placeholder="104.0570"></div>'+
-    '</div>'+
-    '<div class="field"><label>Map link — Navigate opens this</label><input id="f_map_url" inputmode="url" autocapitalize="off" autocorrect="off" value="'+esc(l.map_url||"")+'" placeholder="https://maps.app.goo.gl/… or https://surl.amap.com/…">'+
-      '<div class="hint">The share link from Google Maps or Amap, short ones included. Pasting into the box at the top fills this in too. Leave it empty to navigate by the pin or the Chinese name.</div></div>'+
-    '<div class="field"><label>Map app</label>'+sel("nav_app",l.nav_app,MAP_APPS)+
-      '<div class="hint">Amap 高德 for the mainland, Google Maps for Hong Kong, Macau and most other places. Set automatically when you pick a city, unless you change it.</div></div>'+
-    '<div class="field"><label>Getting there</label><textarea id="f_getting_there" style="min-height:80px" placeholder="Nearest station and exit, and when a taxi is better.">'+esc(l.getting_there||"")+'</textarea></div>'+
-    '<div class="field"><label>Best way to arrive</label><input id="f_arrive_by" value="'+esc(l.arrive_by||"")+'" placeholder="Optional — e.g. Peak Tram from Central">'+
-      '<div class="hint">Only for places reached one particular way. It replaces the worked-out walk / taxi line on the day view, so leave it blank for anywhere a taxi or the metro is fine.</div></div>'+
-    '<div class="field"><label>Tickets</label><textarea id="f_tickets" style="min-height:80px" placeholder="Price, where to buy, booking rules, closing days.">'+esc(l.tickets||"")+'</textarea></div>'+
-    '<div class="field"><label>Background / history</label><textarea id="f_history_blurb" placeholder="A couple of paragraphs you would happily read out loud.">'+esc(l.history_blurb)+'</textarea></div>'+
-    '<div class="field"><label>What to do here</label><textarea id="f_recommendations" placeholder="One per line.">'+esc(l.recommendations)+'</textarea>'+
-      '<div class="hint">One item per line.</div></div>'+
-    '<div class="field"><label>Dishes to order</label><textarea id="f_dishes_to_order" placeholder="麻婆豆腐 Mapo tofu — why it matters">'+esc(l.dishes_to_order)+'</textarea>'+
-      '<div class="hint">One per line, Chinese name first then English.</div></div>'+
-    '<div class="field"><label>Worth buying</label><textarea id="f_souvenirs" placeholder="郫县豆瓣酱 Pixian chilli bean paste">'+esc(l.souvenirs)+'</textarea></div>'+
-    '<div class="field"><label>Practical notes</label><textarea id="f_notes" style="min-height:70px">'+esc(l.notes)+'</textarea></div>'+
-    '<div class="field"><label>Ticket link</label><input id="f_ticket_url" inputmode="url" autocapitalize="off" autocorrect="off" value="'+esc(l.ticket_url||"")+'" placeholder="https://… your e-ticket or booking page">'+
-      '<div class="hint">A link to the ticket — a Trip.com order, a PDF in Google Drive. Never the QR code itself. It opens from this page and from the trip overview.</div></div>'+
-    '<div class="field"><label>Photo link</label><input id="f_photo_url" inputmode="url" autocapitalize="off" autocorrect="off" value="'+esc(l.photo_url||"")+'" placeholder="Found automatically — or paste an https image link">'+
-      '<div class="hint">Photos are found on Wikipedia by each phone and saved for offline use. Paste a link to use your own, or type <b>none</b> for no photo.</div></div>'+
-    '<div class="formactions">'+
-      '<button class="btn primary" data-act="save-location" data-lid="'+esc(l.id)+'">Save</button>'+
-      (isNew?"":'<button class="btn danger" data-act="delete-location" data-lid="'+esc(l.id)+'">Delete</button>')+
-    '</div>';
-  openSheet(isNew?"New place":"Edit place", html);
-  bindLinkBox(); bindFindBox();
-
-  var citySel=$("#f_city"), navSel=$("#f_nav_app");
-  citySel.addEventListener("change", function(){ navSel.value = mapAppFor(this.value); });
-}
-
-function collectLocationForm(existingId){
-  var g=function(k){ var e=$("#f_"+k); return e?e.value.trim():""; };
-  var o={
-    id: existingId || "",
-    name_en:g("name_en"), name_zh:g("name_zh"), city:g("city"), type:g("type"),
-    lat:g("lat"), lng:g("lng"), nav_app:g("nav_app"),
-    // g() is null-safe on purpose: the day view's quick-add form has only a
-    // few of these fields, and reading .value off a missing one used to throw.
-    history_blurb:g("history_blurb"), recommendations:g("recommendations"),
-    dishes_to_order:g("dishes_to_order"), souvenirs:g("souvenirs"), notes:g("notes"),
-    getting_there:g("getting_there"), arrive_by:g("arrive_by"), tickets:g("tickets"),
-    ticket_url:g("ticket_url"), photo_url:g("photo_url"), map_url:g("map_url")
-  };
-  if(o.map_url && !mapLinkOf(o)) return { error:"The map link needs to be a Google Maps or Amap https:// link" };
-  if(o.ticket_url && !safeUrl(o.ticket_url)) return { error:"The ticket link needs to start with https://" };
-  if(o.photo_url && o.photo_url.toLowerCase()==="none") o.photo_url="none";
-  else if(o.photo_url && !safeUrl(o.photo_url)) return { error:"The photo link needs to start with https://" };
-  if(!o.name_en && !o.name_zh) return { error:"Give the place a name." };
-  if(!o.name_zh && CHINA_REGIONS[cityRegion(o.city)]) return { error:"The Chinese name is required — you will need it on the ground." };
-  if(!o.name_en) o.name_en=o.name_zh;
-  if(!o.id) o.id=uid("loc");
-  return { value:o };
 }
 
 /* ==========================================================================
@@ -3420,7 +3071,6 @@ function splitNames(name){
   if(!/[A-Za-z]/.test(en)) en="";
   return { zh:zh.trim(), en:en };
 }
-function isShortMapLink(u){ return /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs|surl\.amap\.com|a\.amap\.com|m\.amap\.com\/share)/i.test(u); }
 function mapSource(u){ return /amap\.com|autonavi/i.test(u) ? "amap" : /goo\.gl|google\./i.test(u) ? "google" : ""; }
 function safeDecode(x){ try{ return decodeURIComponent(String(x).replace(/\+/g," ")); }catch(e){ return String(x); } }
 
@@ -3452,10 +3102,6 @@ function nameFromUrl(u){
   }
   if((m=u.match(/[?&](?:q|query)=([^&#]+)/))){ var q=safeDecode(m[1]); if(!/^-?\d+\.\d+[,，]/.test(q)) return q; }
   return "";
-}
-function nameFromTitle(t){
-  t=String(t||"").replace(/\s*[-–—|]\s*(Google\s*Maps?|Google 地圖|Google 地图|高德地图|高德地圖|Amap).*$/i,"").trim();
-  return /^(Google\s*Maps?|高德地图|Amap)$/i.test(t) ? "" : t;
 }
 
 /** Everything that can be read from what was pasted, without the network. */
@@ -3493,40 +3139,6 @@ function parseMapText(text){
   if(out.url && !out.name) out.name=nameFromUrl(out.url);
   return out;
 }
-/** Merges what the backend found at the end of a short link. */
-function mergeResolved(p, r){
-  var q=JSON.parse(JSON.stringify(p));
-  var fin=(r && r.final_url)||"";
-  q.source=q.source||mapSource(fin);
-  var c=coordsFrom(fin);
-  if(!c && r && r.hints) for(var i=0;i<r.hints.length && !c;i++) c=coordsFrom(r.hints[i]);
-  if(c && q.lat==null){ q.lat=c.lat; q.lng=c.lng; }
-  // The share text and the link can disagree on language: Amap set to
-  // English shares an English name, while the link still carries the
-  // Chinese one. Take each language from wherever it turns up first.
-  var zh="", en="";
-  [q.name, nameFromUrl(fin), nameFromTitle(r && r.title)].forEach(function(n){
-    var s=splitNames(n); zh=zh||s.zh; en=en||s.en;
-  });
-  q.name=[en, zh].filter(Boolean).join(" ");
-  return q;
-}
-/** The pasted place in the app's terms: GPS coordinates, city, names, type. */
-function placeFromParsed(p){
-  var out={ names:splitNames(p.name), address:p.address, lat:null, lng:null, city:"", shiftedM:0, source:p.source };
-  if(p.lat!=null){
-    var lat=p.lat, lng=p.lng;
-    if(regionOf(lat,lng)==="mainland" && (p.source==="amap"||p.source==="google")){
-      var w=gcjToWgs(lat,lng);
-      out.shiftedM=Math.round(roadKm({lat:lat,lng:lng},{lat:w[0],lng:w[1]})/ROAD_FACTOR*1000);
-      lat=w[0]; lng=w[1];
-    }
-    out.lat=+lat.toFixed(6); out.lng=+lng.toFixed(6);
-    out.city=cityFor(out.lat,out.lng);
-  }
-  out.type=guessType(p.name);
-  return out;
-}
 function nearDuplicate(pl){
   var hit=null;
   store.data.locations.forEach(function(l){
@@ -3536,119 +3148,7 @@ function nearDuplicate(pl){
   });
   return hit;
 }
-
-/* The place being edited, when the link box is on an existing place: a
-   pasted link then sets or moves its pin and leaves its names, city and type
-   as they are — names often carry the user's own notes, like "(FAR)". */
-var linkEditing=null;
-function linkBoxHTML(editing){
-  return '<div class="field linkbox"><label for="f_link">'+(editing ? "Set the pin from a map link" : "From a map link")+'</label>'+
-    '<textarea id="f_link" rows="2" placeholder="Paste a Google Maps or Amap link — or everything the Share button copies"></textarea>'+
-    '<div class="linkrow"><button class="btn sm" data-act="link-paste">Paste</button>'+
-      '<button class="btn sm primary" data-act="link-fill">Fill in</button></div>'+
-    '<div class="hint" id="f_link_status" role="status">'+(editing
-      ? 'Sets or moves this place&#39;s pin; its names stay as they are. Walking and taxi times, and when to leave for a train or flight, then work from the new pin.'
-      : 'On the mainland, share from Amap — it gives you the Chinese name. ')+
-      'Pins are moved from the Chinese map grid to GPS for you.</div></div>';
-}
-function setField(id, v, onlyIfEmpty){
-  var e=$("#"+id); if(!e || v==null || v==="") return false;
-  if(onlyIfEmpty && e.value.trim()) return false;
-  if(e.tagName==="SELECT" && ![].some.call(e.options,function(o){ return o.value===v; })){
-    var o=document.createElement("option"); o.value=v; o.textContent=v; e.appendChild(o);
-  }
-  e.value=v; e.dispatchEvent(new Event("change",{bubbles:true})); return true;
-}
 function linkStatus(html){ var s=$("#f_link_status"); if(s) s.innerHTML=html; }
-function applyPlace(pl){
-  setField("f_name_zh", pl.names.zh, true);
-  setField("f_name_en", pl.names.en, true);
-  if(pl.lat!=null){ setField("f_lat", String(pl.lat)); setField("f_lng", String(pl.lng)); }
-  if(!linkEditing){
-    if(pl.city){ setField("f_city", pl.city); setField("f_nav_app", mapAppFor(pl.city)); }
-    setField("f_type", pl.type);
-  }
-  var n=$("#f_notes");
-  if(pl.address && n && n.value.indexOf(pl.address)<0) n.value=(n.value?n.value+"\n":"")+"Address: "+pl.address;
-  // Describe what the form now holds, not just what this pass changed: a
-  // short link fills the names first and the pin a second later.
-  var zh=$("#f_name_zh").value.trim(), en=$("#f_name_en").value.trim(), hasPin=!!$("#f_lat").value.trim();
-  var msg=[];
-  if(!zh && !en && !hasPin){ linkStatus("Nothing usable in that yet."); return; }
-  msg.push("<b>"+esc(zh||en)+"</b>"+(zh&&en?" · "+esc(en):"")+($("#f_city").value?" · "+esc($("#f_city").value):"")+
-           (hasPin?" · pin set.":"."));
-  if(n && /Address: /.test(n.value)) msg.push("Address added to notes.");
-  if(pl.shiftedM>0) msg.push("Pin moved "+pl.shiftedM+" m from the Chinese map grid to GPS.");
-  if(!$("#f_name_zh").value.trim()) msg.push("<b>Add the Chinese name</b> — "+(pl.source==="google"?"Google only gave the English one.":"it's required."));
-  var dup=nearDuplicate(pl);
-  if(dup && dup.id!==linkEditing) msg.push("<b>Already on your list:</b> "+esc(dup.name_en)+" "+esc(dup.name_zh)+" — to use it, add it from “+ Add a stop” instead.");
-  linkStatus(msg.join(" "));
-}
-function fillFromLink(){
-  var box=$("#f_link"); if(!box) return;
-  var p=parseMapText(box.value);
-  if(!p.url && !p.name && p.lat==null){ linkStatus("Paste a Google Maps or Amap link, or the text their Share button copies."); return; }
-  applyPlace(placeFromParsed(p));
-  if(p.url && mapLinkOf({ map_url:p.url })) setField("f_map_url", p.url);
-  if(p.lat!=null || !p.url || !isShortMapLink(p.url)) return;
-  // A bare short link has nothing readable on this side; say why, plainly.
-  var got=$("#f_name_zh").value.trim()||$("#f_name_en").value.trim();
-  var lead=got ? $("#f_link_status").innerHTML+" " : "";
-  if(!store.configured()){
-    linkStatus(lead+"That's a short link — reading it needs the Sheet connected. For now, type the Chinese name: that alone is enough for the map app to find it.");
-    return;
-  }
-  var before=got ? $("#f_link_status").innerHTML : "";
-  linkStatus(before+" <i>Looking up the link…</i>");
-  store.call("resolvePlace", { url:p.url }).then(function(r){
-    var pl=placeFromParsed(mergeResolved(p, r));
-    applyPlace(pl);
-    if(pl.lat==null) linkStatus($("#f_link_status").innerHTML+" The link didn't include a pin — the map app will search the Chinese name instead, which usually works.");
-  }).catch(function(err){
-    linkStatus((got?before+" ":"")+(isUnknownAction(err)
-      ? "That's a short link, and your Sheet's script is too old to read it — it needs the one-off update. For now, type the Chinese name: that alone is enough for the map app to find it."
-      : "Couldn't look the link up just now — no signal to Google? Type the Chinese name for now; that alone is enough to navigate."));
-  });
-}
-function bindLinkBox(){
-  var box=$("#f_link"); if(!box) return;
-  box.addEventListener("paste", function(){ setTimeout(fillFromLink, 0); });
-}
-
-function quickAddForm(date){
-  linkEditing=null;
-  var html =
-    '<p class="blurb muted small" style="margin-bottom:14px">Just enough to navigate to it. Fill in the rest later.</p>'+
-    findBoxHTML()+linkBoxHTML()+'<input type="hidden" id="f_map_url">'+
-    '<div class="field"><label>Name (English)</label><input id="f_name_en" placeholder="That noodle place"></div>'+
-    '<div class="field"><label>名称 (Chinese) — required in China</label><input id="f_name_zh" class="zh" style="font-size:19px" placeholder="小面馆"></div>'+
-    '<div class="grid2">'+
-      '<div class="field"><label>City</label><select id="f_city">'+
-        cityOptions().map(function(c){
-          return '<option'+(c===(guessCity(date)||"")?" selected":"")+'>'+esc(c)+'</option>'; }).join("")+
-      '</select></div>'+
-      '<div class="field"><label>Type</label><select id="f_type">'+
-        ["attraction","restaurant","shopping","hotel"].map(function(t){return "<option>"+t+"</option>";}).join("")+
-      '</select></div>'+
-    '</div>'+
-    '<div class="grid2">'+
-      '<div class="field"><label>Latitude</label><input id="f_lat" inputmode="decimal" placeholder="optional"></div>'+
-      '<div class="field"><label>Longitude</label><input id="f_lng" inputmode="decimal" placeholder="optional"></div>'+
-    '</div>'+
-    '<div class="field"><label>Map app</label><select id="f_nav_app">'+
-      MAP_APPS.map(function(a){ return '<option value="'+a+'">'+a+'</option>'; }).join("")+'</select>'+
-      '<div class="hint">Without coordinates the map app will search the Chinese name instead, which usually works.</div></div>'+
-    '<div class="field"><label>Time on this day</label><input id="f_time" placeholder="e.g. 14:30"></div>'+
-    '<div class="field"><label>Notes</label><textarea id="f_notes" style="min-height:60px" placeholder="Optional"></textarea></div>'+
-    '<div class="formactions"><button class="btn primary block" data-act="save-quick" data-date="'+esc(date)+'">Add to Day '+dayNumber(date)+'</button></div>';
-  openSheet("New place · Day "+dayNumber(date), html);
-  bindLinkBox(); bindFindBox();
-  var c=$("#f_city"), n=$("#f_nav_app");
-  function syncNav(){ n.value=mapAppFor(c.value); }
-  syncNav(); c.addEventListener("change", syncNav);
-}
-
-var MAP_APPS = ["amap","google","apple"];
 /** Cities for the place forms: this trip's first, in the order it visits
  *  them, then every other known city. */
 function cityOptions(){
@@ -3660,172 +3160,11 @@ function cityOptions(){
   cityList().forEach(function(c){ if(out.indexOf(c.name)<0) out.push(c.name); });
   return out;
 }
-function guessCity(date){
-  var stops=store.dayStops(date);
-  for(var i=0;i<stops.length;i++){ var l=store.loc(stops[i].location_id); if(l) return l.city; }
-  var here=baseOn(date, tripBases()); if(here) return here;
-  var lbl=dayLabel(date), known=cityList();
-  for(var j=0;j<known.length;j++) if(lbl.indexOf(known[j].name)>=0) return known[j].name;
-  return "";
-}
 
-function pickLocationForDay(date){
-  function results(q){
-    var list=store.data.locations.filter(function(l){ return matches(l,q); });
-    var already={}; store.dayStops(date).forEach(function(s){ already[s.location_id]=1; });
-    return '<div class="loclist">'+list.map(function(l){
-        return '<button class="locrow" data-act="pick" data-lid="'+esc(l.id)+'" data-date="'+esc(date)+'">'+
-          (photoOf(l) ? '<div class="thumb photo" style="'+bgStyle(photoOf(l))+'"></div>' : '<div class="thumb">'+typeIcon(l.type)+'</div>')+
-          '<div class="lb"><div class="en">'+hilite(l.name_en,q)+'</div>'+
-            '<div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
-            '<div class="mt">'+esc(l.city)+' · '+esc(l.type)+(already[l.id]?" · already on this day":"")+'</div></div>'+
-          '<span class="rowend">'+IC.plus+'</span></button>';
-      }).join("")+'</div>'+
-      (list.length?"":'<div class="card empty">No match.</div>');
-  }
-  openSheet("Add to Day "+dayNumber(date),
-    '<div class="searchwrap" style="margin-top:12px">'+
-      '<span class="mag"><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/></svg></span>'+
-      '<input id="pq" type="search" placeholder="Search — English or 中文" autocomplete="off">'+
-    '</div>'+
-    '<div id="pickResults">'+results("")+'</div>'+
-    (otherTripPlaces().length ? '<button class="btn block ghost" data-act="library" style="margin-top:12px">Copy a place from another trip</button>' : ''));
-  var i=$("#pq");
-  if(i) i.addEventListener("input", function(){
-    // Only the list is redrawn — see renderPlaces for why the box must stay put.
-    var r=$("#pickResults"); if(r) r.innerHTML=results(this.value);
-    var w=this.closest(".searchwrap"); if(w) w.classList.toggle("has", !!this.value);
-  });
-}
-
-function pickDayForLocation(lid){
-  var html='<div class="loclist" style="margin-top:12px">'+DAYS.map(function(d,i){
-    var n=store.dayStops(d).length;
-    return '<button class="locrow" data-act="pick" data-lid="'+esc(lid)+'" data-date="'+d+'">'+
-      '<div class="thumb">'+(i+1)+'</div>'+
-      '<div class="lb"><div class="en">'+esc(fmtDate(d,true))+'</div>'+
-      '<div class="mt">'+esc(dayLabel(d))+' · '+n+' stop'+(n===1?"":"s")+'</div></div>'+
-      '<span class="rowend">'+IC.plus+'</span></button>';
-  }).join("")+'</div>';
-  openSheet("Add to which day?", html);
-}
-
-function settingsForm(){
-  var c=store.cfg;
-  var html=
-    '<p class="blurb small muted" style="margin:12px 0 16px">The trip lives in the Google Sheet — nothing about it is in the '+
-    'public repo. This phone holds a cached copy, so the app keeps working with no signal, which you will need in '+
-    'mainland China where Google is blocked. Every edit is saved to the Sheet and shared across devices.</p>'+
-    '<div class="field"><label>Your name</label>'+
-      '<input id="s_me" autocomplete="given-name" value="'+esc(getMe())+'" placeholder="Optional">'+
-      '<div class="hint">Shown on shared items you tick, so the others know who is bringing what. Saved on this phone.</div></div>'+
-    '<div class="field"><label>Web App URL</label>'+
-      '<input id="s_url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="https://script.google.com/macros/s/.../exec" value="'+esc(c.url)+'"></div>'+
-    '<div class="field"><label>API key</label>'+
-      '<input id="s_key" autocapitalize="off" autocorrect="off" placeholder="the API_KEY you set in Code.gs" value="'+esc(c.key)+'">'+
-      '<div class="hint">Stored only on this phone, never in the public repo.</div></div>'+
-    '<div class="formactions">'+
-      '<button class="btn primary" data-act="save-cfg">Save &amp; connect</button>'+
-      '<button class="btn" data-act="test-cfg">Test</button>'+
-    '</div>'+
-    (store.lastError && store.lastError.kind ? '<div class="loclist" style="margin-top:12px"><div class="locrow syncerr"><div class="lb"><div class="en">Last sync</div>'+
-      '<div class="mt">'+esc(syncProblem(store.lastError))+'</div></div></div></div>' : '')+
-    peopleSectionHTML()+tripsSectionHTML()+citiesSectionHTML()+
-    '<div class="section-title">Data</div>'+
-    '<div class="loclist">'+
-      '<div class="locrow"><div class="lb"><div class="en">Pending changes</div>'+
-        '<div class="mt">'+store.queue.length+' waiting to be sent to the Sheet</div></div>'+
-        '<button class="btn sm" data-act="flush">Send</button></div>'+
-      '<div class="locrow"><div class="lb"><div class="en">Pull from the Sheet</div>'+
-        '<div class="mt">Replace this phone’s copy with what is in the Sheet</div></div>'+
-        '<button class="btn sm" data-act="sync">Pull</button></div>'+
-      '<div class="locrow"><div class="lb"><div class="en">Import trip notes</div>'+
-        '<div class="mt">Getting there, tickets and arrival notes from a .json file — kept on this phone</div></div>'+
-        '<button class="btn sm" data-act="import-notes">Import</button></div>'+
-      '<input type="file" id="importFile" accept="application/json,.json,text/plain" hidden>'+
-      (function(){ var ps=photoStats();
-        return '<div class="locrow"><div class="lb"><div class="en">Photos</div>'+
-          '<div class="mt" id="photoStat">'+ps.n+' of '+ps.of+' places · '+ps.mb+' MB saved for offline · from Wikipedia, checked against each pin</div></div>'+
-          '<button class="btn sm" data-act="find-photos">Find</button></div>'; })()+
-      '<div class="locrow"><div class="lb"><div class="en">Reset this phone</div>'+
-        '<div class="mt">Discards the local copy and downloads the trip again</div></div>'+
-        '<button class="btn sm danger" data-act="reset-local">Reset</button></div>'+
-    '</div>'+
-    '<div class="section-title">About</div>'+
-    '<p class="blurb small muted">'+store.data.locations.length+' places, '+store.data.bookings.length+' bookings, '+
-      store.data.schedule.length+' scheduled stops across '+DAYS.length+' days.<br>'+
-      esc(TRIP.name)+': '+esc(tripRange())+'.</p>';
-  openSheet("Settings", html);
-  var fi=$("#importFile");
-  if(fi) fi.addEventListener("change", function(){ var f=this.files && this.files[0]; withExtras(function(){ importNotes(f); }); });
-  var meIn=$("#s_me");
-  if(meIn) meIn.addEventListener("change", function(){ save(LS.me, this.value.trim()); toast("Saved"); });
-}
-
-/* ---------- trips and cities (Settings) ---------- */
-var NEEDS_UPGRADE = '<p class="blurb small muted">Adding trips and cities needs the one-off update to the Sheet’s '+
-  'script — see the README, section 12. Until then this phone has the one trip.</p>';
-function peopleSectionHTML(){
-  if(!store.configured() || !(store.raw && store.raw.me)) return "";
-  var me=whoAmI();
-  if(!me.owner){
-    var n=me.trips==="*" ? "every trip" : (me.trips||[]).length+" trip"+((me.trips||[]).length===1?"":"s");
-    return '<div class="section-title">Signed in</div><p class="blurb small">As <b>'+esc(me.name||"a guest")+'</b> · '+
-      (me.role==="viewer" ? "view only" : "can edit")+' · '+esc(n)+'. The trip owner decides who sees which trip.</p>';
-  }
-  return '<div class="section-title">People</div>'+
-    '<p class="blurb small muted" style="margin:-2px 0 10px">Who can see which trip. Each person gets their own key; remove someone and only their access stops.</p>'+
-    '<div class="formactions" style="margin-top:0"><button class="btn" data-act="people">Manage people</button></div>';
-}
-function isArchived(t){ return /^(1|true|yes)$/i.test(String(t && t.archived || "")); }
-/** The backend has the Trips tab's archived column. */
-function canArchive(){ return store.supportsTrips && (store.raw.trips||[]).some(function(t){ return "archived" in t; }); }
-/** How many places a trip has, from the count the backend sends with each sync. */
-function placesIn(t){
-  var ix=store.raw.index; if(!ix) return null;
-  return (ix[t.id]||0) + (t.id===defaultTripId() ? (ix[""]||0) : 0);
-}
-function setArchived(id, on){
-  var t=(store.raw.trips||[]).filter(function(x){ return x.id===id; })[0]; if(!t) return;
-  var row={ id:id, archived:on?"1":"", updated:nowISO() };
-  store.write("saveTrip", row, function(){
-    store.raw.trips=(store.raw.trips||[]).map(function(x){ return x.id===id ? Object.assign({}, x, row) : x; });
-  }).then(function(){ closeSheet(); settingsForm(); toast(on ? "Archived — it's under Archived trips" : "Back in the trip list"); });
-}
-function tripsSectionHTML(){
-  var list=allTrips().slice().sort(function(a,b){ return a.start<b.start?-1:1; });
-  var row=function(t){
-      var open=t.id===TRIP.id, n=placesIn(t), arch=isArchived(t);
-      return '<div class="locrow"><div class="lb"><div class="en">'+esc(t.name)+(t.name_zh?' <span class="zh">'+escz(t.name_zh)+'</span>':'')+'</div>'+
-        '<div class="mt">'+esc(rangeText(t.start,t.end))+(n!==null?' · '+n+' place'+(n===1?'':'s'):'')+(open?' · open now':'')+'</div></div>'+
-        (open ? (store.supportsTrips && isOwner() ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
-              : '<button class="btn sm primary" data-act="trip-open" data-tid="'+esc(t.id)+'">Open</button>')+
-        (!open && canArchive() && isOwner() && t.id!==defaultTripId()
-          ? '<button class="btn sm ghost" data-act="'+(arch?'trip-unarchive':'trip-archive')+'" data-tid="'+esc(t.id)+'">'+(arch?'Unarchive':'Archive')+'</button>' : '')+
-        '</div>';
-    };
-  var live=list.filter(function(t){ return !isArchived(t) || t.id===TRIP.id; });
-  var gone=list.filter(function(t){ return isArchived(t) && t.id!==TRIP.id; });
-  return '<div class="section-title">Trips</div><div class="loclist">'+live.map(row).join("")+'</div>'+
-    (gone.length ? '<details class="archived"><summary>Archived trips ('+gone.length+')</summary><div class="loclist">'+gone.map(row).join("")+'</div></details>' : '')+
-    (store.supportsTrips ? (isOwner() ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="trip-new">+ New trip</button></div>' : '') : NEEDS_UPGRADE);
-}
-function citiesSectionHTML(){
-  var here=cityOptions(), list=cityList().slice().sort(function(a,b){
-    var ia=here.indexOf(a.name), ib=here.indexOf(b.name);
-    return (ia<0?999:ia)-(ib<0?999:ib) || (a.name<b.name?-1:1);
-  });
-  var REG={ cn:"mainland China", hk:"Hong Kong", mo:"Macau", tw:"Taiwan" };
-  return '<div class="section-title">Cities</div>'+
-    '<p class="blurb small muted" style="margin:-2px 0 10px">Time zone, map app and taxi fares for each city. Add a city before adding places in it.</p>'+
-    '<div class="loclist">'+list.map(function(c){
-      return '<div class="locrow"><div class="lb"><div class="en">'+esc(c.name)+(c.name_zh?' <span class="zh">'+escz(c.name_zh)+'</span>':'')+'</div>'+
-        '<div class="mt">'+[REG[c.region]||"", tzName(c.tz)===REG[c.region] ? "" : (c.tz ? tzName(c.tz)+" time" : "no time zone"),
-          mapAppFor(c.name), c.taxi?"fares set":"no fares"].filter(Boolean).map(esc).join(" · ")+'</div></div>'+
-        (store.supportsTrips ? '<button class="btn sm" data-act="city-edit" data-v="'+esc(c.name)+'">Edit</button>' : '')+'</div>';
-    }).join("")+'</div>'+
-    (store.supportsTrips ? '<div class="formactions" style="margin-top:10px"><button class="btn" data-act="city-new">+ Add city</button></div>' : '');
-}
+/* Says so when the backend is older than this app was built for. Nothing
+   stops working — the app only asks an older backend for what it has — but
+   the newer parts stay off until Code.gs is pasted again. */
+function backendBehind(){ return store.configured() && store.v>0 && store.v<BACKEND_WANT; }
 var COMMON_TZ=["Asia/Shanghai","Asia/Hong_Kong","Asia/Macau","Asia/Taipei","Asia/Tokyo","Asia/Seoul","Asia/Singapore",
   "Asia/Bangkok","Asia/Kuala_Lumpur","Asia/Jakarta","Asia/Ho_Chi_Minh","Asia/Kolkata","Asia/Dubai","Europe/London",
   "Europe/Paris","Europe/Berlin","Europe/Rome","Europe/Madrid","Europe/Istanbul","America/New_York","America/Los_Angeles",
@@ -3835,148 +3174,7 @@ function tzDatalist(id){
   try{ if(Intl.supportedValuesOf) all=Intl.supportedValuesOf("timeZone"); }catch(e){}
   return '<datalist id="'+id+'">'+all.map(function(z){ return '<option value="'+esc(z)+'">'; }).join("")+'</datalist>';
 }
-function tripForm(id){
-  var t=id ? allTrips().filter(function(x){ return x.id===id; })[0] : null;
-  var isNew=!t;
-  t=t || { id:"", name:"", name_zh:"", start:"", end:"", tz:tripTz(), zh_script:"", notes:"" };
-  var opt=function(v,l){ return '<option value="'+v+'"'+((t.zh_script||"")===v?" selected":"")+'>'+l+'</option>'; };
-  var html=
-    (isNew ? '<p class="blurb small muted" style="margin:12px 0 16px">A new trip opens empty. Add its cities in ⚙ Settings › Cities first, so places get the right map app, time zone and fares.</p>' : '<div style="height:12px"></div>')+
-    '<div class="field"><label>Name</label><input id="t_name" value="'+esc(t.name)+'" placeholder="Japan 2027"></div>'+
-    '<div class="field"><label>中文名 (optional)</label><input id="t_name_zh" class="zh" value="'+esc(t.name_zh)+'"></div>'+
-    '<div class="grid2">'+
-      '<div class="field"><label>First day</label><input id="t_start" type="date" value="'+esc(t.start)+'"></div>'+
-      '<div class="field"><label>Last day</label><input id="t_end" type="date" value="'+esc(t.end)+'"></div>'+
-    '</div>'+
-    (isNew ? '' : '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="t_move" checked> '+
-      'Move the plan with the first day — stops, day names. Bookings stay put; change those yourself.</label>')+
-    '<div class="field"><label>Time zone</label><input id="t_tz" list="tzlist" autocapitalize="off" value="'+esc(t.tz)+'">'+tzDatalist("tzlist")+
-      '<div class="hint">Where most of the trip is. Booking times are read in it, unless a booking has its own.</div></div>'+
-    '<div class="field"><label>Chinese characters</label><select id="t_script">'+
-      opt("","Automatic")+opt("simplified","Always Simplified")+opt("original","As written")+'</select>'+
-      '<div class="hint">Automatic shows Simplified when the trip takes in mainland China, Hong Kong or Macau.</div></div>'+
-    '<div class="field"><label>Notes</label><textarea id="t_notes" style="min-height:60px">'+esc(t.notes||"")+'</textarea></div>'+
-    '<div class="formactions"><button class="btn primary" data-act="trip-save" data-tid="'+esc(t.id)+'">'+(isNew?"Create and open":"Save")+'</button>'+
-      (!isNew && t.id!==defaultTripId() ? '<button class="btn danger" data-act="trip-delete" data-tid="'+esc(t.id)+'">Delete trip</button>' : '')+'</div>';
-  openSheet(isNew?"New trip":"Edit trip", html);
-}
 function daysBetween(a,b){ return Math.round((parseISO(b)-parseISO(a))/86400000); }
-function saveTripForm(id){
-  var g=function(k){ var e=$("#t_"+k); return e ? e.value.trim() : ""; };
-  var old=id ? allTrips().filter(function(x){ return x.id===id; })[0] : null;
-  var t=Object.assign({}, old || { id:uid("trip"), is_default:"" });
-  t.name=g("name"); t.name_zh=g("name_zh"); t.start=g("start"); t.end=g("end");
-  t.tz=g("tz").replace(/\s+/g,"_"); t.zh_script=g("script"); t.notes=g("notes"); t.updated=nowISO();
-  if(!t.name){ toast("Give the trip a name"); return; }
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(t.start) || !/^\d{4}-\d{2}-\d{2}$/.test(t.end)){ toast("Set the first and last day"); return; }
-  if(t.end<t.start){ toast("The last day is before the first"); return; }
-  if(daysBetween(t.start,t.end)>120){ toast("That's over 120 days — check the dates"); return; }
-  if(t.tz && !validTz(t.tz)){ toast("Not a time zone this phone knows — pick one from the list"); return; }
-  var shift = old && $("#t_move") && $("#t_move").checked ? daysBetween(old.start, t.start) : 0;
-  var row=function(o){ var r={}; ["id","name","name_zh","start","end","tz","zh_script","is_default","notes","updated","archived"].forEach(function(k){ r[k]=o[k]==null?"":o[k]; }); return r; };
-  // The Sheet's first trip row: the one there is, written out before any other joins it
-  if(!(store.raw.trips||[]).length && t.id!==LEGACY_TRIP.id){
-    var first=row(Object.assign({}, LEGACY_TRIP, { updated:nowISO() }));
-    store.raw.trips=[first]; store.enqueue("saveTrip", first);
-  }
-  var r=row(t);
-  store.raw.trips=(store.raw.trips||[]).filter(function(x){ return x.id!==r.id; }).concat([r]);
-  store.enqueue("saveTrip", r);
-  if(shift && old.id===TRIP.id){
-    // Day names first, while dayLabel still reads the old dates
-    var named=DAYS.map(function(d){ return { d:d, label:dayLabel(d), own:(store.raw.days||[]).some(function(x){ return x.date===d && tripOf(x)===old.id && x.label; }) }; });
-    (store.raw.days||[]).filter(function(x){ return tripOf(x)===old.id; }).forEach(function(x){ store.enqueue("deleteDay", { id:x.id }); });
-    store.raw.days=(store.raw.days||[]).filter(function(x){ return tripOf(x)!==old.id; });
-    named.forEach(function(n){
-      if(!n.own) return;
-      var nd=addDaysISO(n.d, shift);
-      var dr={ id:"day-"+old.id+"-"+nd.replace(/-/g,""), trip_id:old.id, date:nd, label:n.label };
-      store.raw.days.push(dr); store.enqueue("saveDay", dr);
-    });
-    store.data.schedule.forEach(function(e){ e.date=addDaysISO(e.date, shift); store.enqueue("saveScheduleEntry", e); });
-  }
-  store.persist();
-  if(!old){ switchTrip(t.id, true); }
-  else { store.data=null; applyTrip(); store.persist(); closeSheet(); render(); toast(shift ? "Saved — plan moved "+Math.abs(shift)+" day"+(Math.abs(shift)===1?"":"s")+(shift>0?" later":" earlier") : "Saved"); }
-  if(store.configured()) store.flush().then(updateStatus).catch(function(){});
-}
-function deleteTrip(id){
-  var t=allTrips().filter(function(x){ return x.id===id; })[0];
-  if(!t || id===defaultTripId()) return;
-  if(!window.confirm("Delete “"+t.name+"” and everything in it — places, stops, bookings, checklist? This can't be undone.")) return;
-  store.persist();
-  store.write("deleteTrip", { id:id }, function(){
-    TRIP_TABS.concat(["days"]).forEach(function(k){ store.raw[k]=(store.raw[k]||[]).filter(function(r){ return r.trip_id!==id; }); });
-    store.raw.trips=(store.raw.trips||[]).filter(function(x){ return x.id!==id; });
-    store.data=null; ui.trip=defaultTripId(); save(LS.ui, ui); applyTrip();
-  }).then(function(){ closeSheet(); setView("today"); toast("Trip deleted"); });
-}
-function cityForm(name){
-  var c=name ? cityInfo(name) : null, isNew=!c;
-  c=c || { name:"", name_zh:"", lat:"", lng:"", tz:tripTz(), region:"", map_app:"", taxi:null };
-  var x=c.taxi||{}, v=function(k){ return x[k]==null ? "" : x[k]; };
-  var f=function(id,label,val,ph,mode){ return '<div class="field"><label>'+label+'</label><input id="y_'+id+'"'+(mode?' inputmode="'+mode+'"':'')+
-    ' value="'+esc(val)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+'></div>'; };
-  var sel=function(id,val,opts){ return '<select id="y_'+id+'">'+opts.map(function(o){
-    return '<option value="'+o[0]+'"'+(String(val||"")===o[0]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select>'; };
-  var html=
-    (isNew ? '' : '<p class="blurb small muted" style="margin:12px 0">Places are matched to their city by name, so a renamed city loses its places — add a new one instead.</p>')+
-    '<div class="grid2">'+f("name","City",c.name,"Kyoto").replace("<input ", isNew?"<input ":"<input readonly ")+f("name_zh","中文名",c.name_zh,"京都")+'</div>'+
-    '<div class="field linkbox"><label for="y_link">Centre from a map link</label>'+
-      '<textarea id="y_link" rows="2" placeholder="Paste a Google Maps or Amap link with a pin in it"></textarea>'+
-      '<div class="hint" id="y_link_status">Or type the coordinates. The centre is used to match new places to the city.</div></div>'+
-    '<div class="grid2">'+f("lat","Latitude",c.lat,"35.01","decimal")+f("lng","Longitude",c.lng,"135.77","decimal")+'</div>'+
-    '<div class="field"><label>Time zone</label><input id="y_tz" list="tzlist2" autocapitalize="off" value="'+esc(c.tz)+'">'+tzDatalist("tzlist2")+'</div>'+
-    '<div class="grid2">'+
-      '<div class="field"><label>Region</label>'+sel("region",c.region,[["","Elsewhere"],["cn","Mainland China"],["hk","Hong Kong"],["mo","Macau"],["tw","Taiwan"]])+'</div>'+
-      '<div class="field"><label>Map app</label>'+sel("map_app",c.map_app,[["","Automatic"],["amap","Amap 高德"],["google","Google Maps"],["apple","Apple Maps"]])+'</div>'+
-    '</div>'+
-    '<p class="blurb small muted" style="margin:-6px 0 14px">The region is filled in from the centre. Mainland China switches on Amap, the China guide and Simplified Chinese.</p>'+
-    '<div class="section-title">Taxi fares (optional)</div>'+
-    '<div class="grid2">'+f("currency","Currency symbol",v("cur"),"¥ or €")+f("round","Round to",v("step"),"1","decimal")+'</div>'+
-    '<div class="grid2">'+f("flag","Flag fall",v("flag"),"500","decimal")+f("flag_km","Km it covers",v("flagKm"),"1.1","decimal")+'</div>'+
-    '<div class="grid2">'+f("per_km","Per km after",v("perKm"),"400","decimal")+f("transit","Public transport is",v("transit"),"subway")+'</div>'+
-    '<div class="grid2">'+f("car","Cars are",v("car"),"taxi")+'<div></div></div>'+
-    '<details class="small" style="margin:-4px 0 14px"><summary>Cheaper rate past a fare</summary><div class="grid2" style="margin-top:10px">'+
-      f("high_at","From a fare of",v("highAt"),"","decimal")+f("per_km_high","Per km then",v("perKmHigh"),"","decimal")+'</div></details>'+
-    '<div class="formactions"><button class="btn primary" data-act="city-save" data-v="'+esc(c.name)+'">Save</button></div>';
-  openSheet(isNew?"New city":"Edit city", html);
-  var box=$("#y_link");
-  function fromLink(){
-    var p=placeFromParsed(parseMapText(box.value)), st=$("#y_link_status");
-    if(p.lat==null){ st.textContent="No pin in that — paste the full link (not a short one), or type the coordinates."; return; }
-    $("#y_lat").value=p.lat; $("#y_lng").value=p.lng;
-    var r=regionCode(p.lat,p.lng); $("#y_region").value=r;
-    if(!$("#y_name_zh").value && p.names.zh) $("#y_name_zh").value=p.names.zh;
-    st.textContent="Centre set"+(p.shiftedM?" (moved "+p.shiftedM+" m from the Chinese map grid to GPS)":"")+".";
-  }
-  box.addEventListener("paste", function(){ setTimeout(fromLink,0); });
-  box.addEventListener("change", fromLink);
-  ["y_lat","y_lng"].forEach(function(id){ $("#"+id).addEventListener("change", function(){
-    var a=parseFloat($("#y_lat").value), b=parseFloat($("#y_lng").value);
-    if(isFinite(a) && isFinite(b)) $("#y_region").value=regionCode(a,b);
-  }); });
-}
-function saveCityForm(oldName){
-  var g=function(k){ var e=$("#y_"+k); return e ? e.value.trim() : ""; };
-  var name=g("name"), cur=oldName ? cityInfo(oldName) : null;
-  if(!name){ toast("Give the city a name"); return; }
-  if(!oldName && cityInfo(name)){ toast(name+" is already on the list — edit it instead"); return; }
-  var lat=g("lat"), lng=g("lng");
-  if((lat||lng) && !(isFinite(parseFloat(lat)) && isFinite(parseFloat(lng)))){ toast("Latitude and longitude need to be numbers"); return; }
-  var tz=g("tz").replace(/\s+/g,"_");
-  if(tz && !validTz(tz)){ toast("Not a time zone this phone knows — pick one from the list"); return; }
-  var num=function(k){ var x=g(k); return x && isFinite(parseFloat(x)) ? String(parseFloat(x)) : ""; };
-  var r={ id:(cur && cur.id) || "city-"+(name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || Date.now().toString(36)),
-    name:oldName||name, name_zh:g("name_zh"), lat:lat?parseFloat(lat):"", lng:lng?parseFloat(lng):"", tz:tz,
-    region:g("region"), map_app:g("map_app"), currency:g("currency"), round:num("round"), flag:num("flag"),
-    flag_km:num("flag_km"), per_km:num("per_km"), high_at:num("high_at"), per_km_high:num("per_km_high"),
-    transit:g("transit"), car:g("car") };
-  if((r.flag || r.per_km) && !(r.flag && r.per_km)){ toast("Fares need both the flag fall and the per-km rate"); return; }
-  store.write("saveCity", r, function(){
-    store.raw.cities=(store.raw.cities||[]).filter(function(x){ return x.id!==r.id && String(x.name).toLowerCase()!==r.name.toLowerCase(); }).concat([r]);
-  }).then(function(){ closeSheet(); render(); toast("Saved"); });
-}
 
 /* ==========================================================================
    Maps — Leaflet and OpenStreetMap tiles, loaded from map.js the first time a
@@ -3998,15 +3196,9 @@ var mapJs=null;
 /* The file importers (trip notes; places from My Maps or Takeout) live in
    extras.js, loaded the first time a file is picked — index.html has a size
    ceiling, and these run rarely. The service worker caches it for offline. */
-var extrasJs=null;
 function withExtras(fn){
-  if(window.importNotes && window.importPlacesFile) return fn();
-  if(!extrasJs) extrasJs=new Promise(function(res, rej){
-    var s=document.createElement("script"); s.src="extras.js";
-    s.onload=function(){ res(); }; s.onerror=function(){ extrasJs=null; rej(new Error("extras-load")); };
-    document.head.appendChild(s);
-  });
-  extrasJs.then(fn, function(){ toast("Couldn't load the importer — try again with a connection"); });
+  if(window.importNotes && window.importPlacesFile && !isStub(window.importNotes)) return fn();
+  loadPart("extras").then(fn, function(){ toast("Couldn't load the importer — try again with a connection"); });
 }
 function loadMapJs(){
   if(window.TripMap) return window.TripMap.load();
@@ -4077,129 +3269,11 @@ function dayMap(date){
 }
 
 /* ==========================================================================
-   Best order for a day: the shortest way round, starting and ending at the
-   hotel as the day view does. Stops with a time, hotels and stops without a
-   pin stay in their order; the rest are fitted in where they add the least,
-   then each is moved again while that still shortens the day. Straight-line
-   distances, so it is a suggestion — it asks before changing anything.
-   ========================================================================== */
-function routeKm(seq, start, end){
-  var pts=[start].concat(seq.map(function(x){ return x.l; })).concat([end]).filter(function(p){ return p && hasXY(p); }), km=0;
-  for(var i=1;i<pts.length;i++) km+=roadKm(pts[i-1],pts[i]);
-  return km;
-}
-function bestInsert(seq, it, start, end){
-  var best=0, bestKm=1e12;
-  for(var i=0;i<=seq.length;i++){
-    var t=seq.slice(0,i).concat([it]).concat(seq.slice(i)), k=routeKm(t,start,end);
-    if(k<bestKm-1e-9){ bestKm=k; best=i; }
-  }
-  return seq.slice(0,best).concat([it]).concat(seq.slice(best));
-}
-function orderDay(items, start, end){
-  var fixedOf=function(x){ return !x.l || !hasXY(x.l) || !!String(x.s.planned_time||"").trim() || x.l.type==="hotel"; };
-  var fixed=items.filter(fixedOf), free=items.filter(function(x){ return !fixedOf(x); });
-  var tries=[free, free.slice().reverse(), free.slice().sort(function(a,b){
-    return (start&&hasXY(start) ? roadKm(start,b.l)-roadKm(start,a.l) : 0); })];
-  var best=null, bestKm=1e12;
-  tries.forEach(function(order){
-    var seq=fixed.slice();
-    order.forEach(function(it){ seq=bestInsert(seq,it,start,end); });
-    for(var round=0, moved=true; moved && round<40; round++){
-      moved=false;
-      free.forEach(function(it){
-        var before=routeKm(seq,start,end), without=seq.filter(function(x){ return x!==it; });
-        var again=bestInsert(without,it,start,end);
-        if(routeKm(again,start,end) < before-1e-6){ seq=again; moved=true; }
-      });
-    }
-    var k=routeKm(seq,start,end); if(k<bestKm){ bestKm=k; best=seq; }
-  });
-  return { seq:best||items, km:bestKm, free:free.length };
-}
-function bestOrder(date){
-  var items=store.dayStops(date).map(function(s){ return { s:s, l:store.loc(s.location_id) }; });
-  var locs=items.map(function(x){ return x.l; }).filter(Boolean);
-  if(!locs.length) return;
-  var first=locs[0], last=locs[locs.length-1];
-  var start=first.type!=="hotel" ? hotelFor(first) : null, end=last.type!=="hotel" ? hotelFor(last) : null;
-  var r=orderDay(items, start, end), now=routeKm(items, start, end);
-  if(r.free<2){ toast("Nothing to move — stops with a time, hotels and stops without a pin stay put", 3200); return; }
-  var saved=(now-r.km)/ROAD_FACTOR;
-  if(saved<0.3 || r.seq.every(function(x,i){ return x===items[i]; })){ toast("This order is already about as short as it gets"); return; }
-  var msg="Best order — about "+distText(saved)+" less travel ("+distText(now/ROAD_FACTOR)+" → "+distText(r.km/ROAD_FACTOR)+" in straight lines):\n\n"+
-    r.seq.map(function(x,i){ return (i+1)+". "+(x.l?x.l.name_en:"?")+(x.s.planned_time?"  ("+x.s.planned_time+")":""); }).join("\n")+
-    "\n\nUse this order?";
-  if(!window.confirm(msg)) return;
-  commitOrder(date, r.seq.map(function(x){ return x.s.id; })).then(function(){ render(); toast("Reordered"); });
-}
-
-/* ==========================================================================
    Find a place by name — OpenStreetMap's place search (Nominatim), near the
    city picked in the form. Only the words typed are sent. Its coordinates
    are plain GPS, so nothing is shifted, in China or anywhere else.
    ========================================================================== */
-function findBoxHTML(){
-  return '<div class="field"><label for="f_find">Find by name</label>'+
-    '<div class="row" style="gap:8px"><input id="f_find" type="search" autocomplete="off" placeholder="e.g. noodle shop near the hotel" style="flex:1">'+
-    '<button class="btn sm" data-act="find-place">Search</button></div>'+
-    '<div class="hint" id="f_find_status">Searches OpenStreetMap near the city picked below. Smaller places are often missing — a map link works for anything.</div>'+
-    '<div class="findres" id="f_find_results"></div></div>';
-}
-function bindFindBox(){
-  var i=$("#f_find"); if(!i) return;
-  i.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); findPlace(); } });
-}
 var found=[];
-function osmSearch(q, near){
-  var u="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&namedetails=1&addressdetails=1&accept-language=en&q="+encodeURIComponent(q);
-  if(near && hasXY(near)) u+="&viewbox="+[(+near.lng-0.6),(+near.lat+0.6),(+near.lng+0.6),(+near.lat-0.6)].map(function(x){ return x.toFixed(4); }).join(",");
-  return fetch(u, { headers:{ "Accept":"application/json" } }).then(function(r){
-    if(!r.ok) throw new Error("search "+r.status); return r.json();
-  });
-}
-function osmPlace(r){
-  var nd=r.namedetails||{}, raw=String(nd.name||r.name||"");
-  var zh=nd["name:zh-Hans"]||nd["name:zh"]||nd["name:zh-Hant"]||nd["name:zh-CN"]||nd["name:zh-HK"]||"";
-  var en=nd["name:en"]||"";
-  if(!zh || !en){ var sp=splitNames(raw); zh=zh||sp.zh; en=en||sp.en; }
-  if(!en && !CJK.test(raw)) en=raw;
-  var cat=r.category||r["class"]||"", typ=r.type||"";
-  var type = cat==="tourism" && /hotel|hostel|guest_house|motel|apartment/.test(typ) ? "hotel"
-           : cat==="amenity" && /restaurant|cafe|fast_food|food_court|bar|pub|ice_cream|biergarten/.test(typ) ? "restaurant"
-           : cat==="shop" || /marketplace|mall|department_store/.test(typ) ? "shopping"
-           : guessType(raw);
-  var lat=+(+r.lat).toFixed(6), lng=+(+r.lon).toFixed(6);
-  var parts=String(r.display_name||"").split(", ");
-  var address=parts.slice(raw && parts[0]===raw ? 1 : 0, Math.max(1, parts.length-1)).join(", ");
-  return { names:{ zh:zh, en:en }, lat:lat, lng:lng, city:cityFor(lat,lng), type:type, address:address, source:"osm", shiftedM:0,
-           kind:(typ||cat).replace(/_/g," ") };
-}
-function findPlace(){
-  var q=($("#f_find")||{}).value||"", st=$("#f_find_status"), box=$("#f_find_results");
-  q=q.trim(); if(!q || !box) return;
-  if(!navigator.onLine){ st.textContent="Searching needs a connection. A map link, or the Chinese name alone, works offline."; return; }
-  var c=$("#f_city"), near=cityInfo(c ? c.value : "");
-  st.textContent="Searching…"; box.innerHTML="";
-  osmSearch(q, near).then(function(rows){
-    found=(rows||[]).map(osmPlace);
-    if(!found.length){ st.textContent="Nothing found. Try fewer words, the Chinese name, or paste a map link below."; return; }
-    st.textContent="Pick one:";
-    box.innerHTML=found.map(function(p,i){
-      return '<button data-act="find-pick" data-i="'+i+'"><div class="en">'+esc(p.names.en||p.names.zh)+
-        (p.names.en&&p.names.zh?' <span class="zh">'+escz(p.names.zh)+'</span>':'')+'</div>'+
-        '<div class="mt">'+esc([p.kind, p.city||"", p.address].filter(Boolean).join(" · ").slice(0,140))+'</div></button>';
-    }).join("");
-  }).catch(function(){ st.textContent="The search didn't answer. Try again, or paste a map link below."; });
-}
-function pickFound(i){
-  var p=found[i]; if(!p) return;
-  var en=$("#f_name_en"), zh=$("#f_name_zh");
-  if(en) en.value=p.names.en||""; if(zh) zh.value=p.names.zh||"";
-  applyPlace(p);
-  var box=$("#f_find_results"); if(box) box.innerHTML="";
-  var st=$("#f_find_status"); if(st) st.textContent="Filled in from OpenStreetMap — check the names below.";
-}
 
 /* ==========================================================================
    Places from other trips: every trip's places are already on the phone, so
@@ -4215,244 +3289,13 @@ function otherTripPlaces(){
   return own.length ? own : (libCache||[]).filter(function(l){ return tripOf(l)!==TRIP.id; });
 }
 function tripName(id){ var t=allTrips().filter(function(x){ return x.id===id; })[0]; return t ? t.name : "another trip"; }
-function libraryForm(){
-  if(store.configured() && !store.raw.locations.some(function(l){ return tripOf(l)!==TRIP.id; })){
-    openSheet("From other trips", '<p class="blurb small muted" style="margin:12px 0">Fetching places from your other trips…</p>');
-    store.call("locations").then(function(d){ libCache=(d && d.locations) || []; libraryShow(); }, function(err){
-      $("#sheetBody").innerHTML='<div class="card empty" style="margin-top:12px">'+
-        (err && err.kind && err.kind!=="net" ? esc(syncProblem(err)) : "Places from other trips need a connection — they aren't kept on the phone.")+'</div>';
-    });
-    return;
-  }
-  libraryShow();
-}
-function libraryShow(){
-  function results(q){
-    var list=otherTripPlaces().filter(function(l){ return matches(l,q); })
-      .sort(function(a,b){ return (a.city+a.name_en)<(b.city+b.name_en)?-1:1; });
-    return list.length ? '<div class="loclist">'+list.map(function(l){
-      var here=nearDuplicate({ names:{ zh:l.name_zh }, lat:hasXY(l)?+l.lat:null, lng:hasXY(l)?+l.lng:null });
-      return '<div class="locrow">'+
-        (photoOf(l) ? '<div class="thumb photo" style="'+bgStyle(photoOf(l))+'"></div>' : '<div class="thumb">'+typeIcon(l.type)+'</div>')+
-        '<div class="lb"><div class="en">'+hilite(l.name_en,q)+'</div><div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
-        '<div class="mt">'+esc(l.city)+' · '+esc(l.type)+' · '+esc(tripName(tripOf(l)))+'</div></div>'+
-        (here ? '<span class="pill ok">Here</span>' : '<button class="btn sm" data-act="lib-copy" data-lid="'+esc(l.id)+'">Copy</button>')+'</div>';
-    }).join("")+'</div>' : '<div class="card empty">No match.</div>';
-  }
-  openSheet("From other trips",
-    '<p class="blurb small muted" style="margin:12px 0">Places from your other trips. Copy one into '+esc(TRIP.name)+' with its notes, tickets and photo; then add it to a day.</p>'+
-    '<div class="searchwrap"><span class="mag">'+IC.mag+'</span><input id="lq" type="search" placeholder="Search — English or 中文" autocomplete="off"></div>'+
-    '<div id="libResults">'+results("")+'</div>');
-  var i=$("#lq");
-  i.addEventListener("input", function(){ $("#libResults").innerHTML=results(this.value); this.closest(".searchwrap").classList.toggle("has", !!this.value); });
-}
-function copyPlace(lid, btn){
-  var src=otherTripPlaces().filter(function(l){ return l.id===lid; })[0]; if(!src) return;
-  var l={}; LOC_FIELDS.forEach(function(k){ l[k]=src[k]==null?"":src[k]; });
-  l.id=uid("loc"); l.trip_id="";
-  if(!cityInfo(l.city) && hasXY(l)) l.city=cityFor(+l.lat,+l.lng)||l.city;
-  saveLocation(l).then(function(){
-    if(btn){ var pill=document.createElement("span"); pill.className="pill ok"; pill.textContent="Copied"; btn.replaceWith(pill); }
-    toast("Copied into "+TRIP.name);
-  });
-}
-
-/* ==========================================================================
-   Packing templates — for the personal list, kept on this phone like the list
-   itself. A few general starters, your own saved lists, and your list from
-   any other trip. Using one adds only what isn't on the list already.
-   ========================================================================== */
-var PACK_STARTERS = [
-  { id:"st-essentials", name:"Essentials", items:[
-    ["Documents","Passport (6+ months left)"],["Documents","Visas / travel authority"],["Documents","Travel insurance details"],
-    ["Documents","Copies of passport and bookings (offline)"],["Money","Two cards from different banks"],["Money","Some local cash"],
-    ["Health","Prescription medicines, in original packaging"],["Health","Painkillers, plasters, hand sanitiser"],
-    ["Clothes","Comfortable walking shoes"],["Clothes","Sleepwear"],["Toiletries","Toothbrush and toothpaste"],["Toiletries","Sunscreen"] ]},
-  { id:"st-tech", name:"Phone and tech", items:[
-    ["Tech","Phone charger and cable"],["Tech","Power bank (in carry-on, under 100 Wh)"],["Tech","Plug adapter for each country"],
-    ["Tech","eSIM installed before leaving"],["Tech","Headphones"],["Tech","Offline maps downloaded"] ]},
-  { id:"st-warm", name:"Warm weather", items:[
-    ["Clothes","Light breathable shirts"],["Clothes","Shorts or light trousers"],["Clothes","Hat"],["Clothes","Sunglasses"],
-    ["Health","Insect repellent"],["Clothes","Light rain jacket or umbrella"] ]},
-  { id:"st-cold", name:"Cold weather", items:[
-    ["Clothes","Warm jacket"],["Clothes","Thermal layers"],["Clothes","Beanie, gloves and scarf"],["Clothes","Warm socks"],["Health","Lip balm and moisturiser"] ]},
-  { id:"st-china", name:"China extras", items:[
-    ["Phone","Alipay set up with a card, passport verified"],["Phone","WeChat installed"],["Phone","Amap installed"],
-    ["Phone","Translator with Chinese downloaded for offline"],["Toiletries","Tissues (often no paper in public toilets)"],
-    ["Documents","Hotel addresses written in Chinese"] ]}
-];
-var PACK_TPL_KEY="gct.packtpl";
-function myTemplates(){ return load(PACK_TPL_KEY, []); }
-function packingKeyFor(t){ return t.id===defaultTripId() ? LS.packing : LS.packing+"."+t.id; }
-function templateSources(){
-  var out=PACK_STARTERS.map(function(t){ return { src:"st:"+t.id, name:t.name, kind:"Starter", items:t.items.map(function(x){ return { section:x[0], text:x[1] }; }) }; });
-  myTemplates().forEach(function(t){ out.push({ src:"my:"+t.id, name:t.name, kind:"Yours", items:t.items, del:true }); });
-  allTrips().forEach(function(t){
-    if(t.id===TRIP.id) return;
-    var items=load(packingKeyFor(t), []).filter(function(i){ return !i.removed; });
-    if(items.length) out.push({ src:"trip:"+t.id, name:t.name, kind:"Your list from", items:items });
-  });
-  return out;
-}
-function templatesForm(){
-  var have={}; packing.items.forEach(function(i){ if(!i.removed) have[String(i.text).toLowerCase()]=1; });
-  openSheet("Packing templates",
-    '<p class="blurb small muted" style="margin:12px 0">Adds only what isn\u2019t on your list already. Nothing is ticked.</p>'+
-    '<div class="loclist">'+templateSources().map(function(t){
-      var add=t.items.filter(function(i){ return !have[String(i.text).toLowerCase()]; }).length;
-      return '<div class="locrow"><div class="lb"><div class="en">'+(t.kind==="Your list from" ? 'Your list from '+esc(t.name) : esc(t.name))+'</div>'+
-        '<div class="mt">'+(t.kind==="Your list from"?"":esc(t.kind)+' · ')+t.items.length+' items'+(add<t.items.length?' · '+add+' new':'')+'</div></div>'+
-        (t.del ? '<button class="btn sm ghost" data-act="pk-del-template" data-src="'+esc(t.src)+'">Delete</button>' : '')+
-        '<button class="btn sm'+(add?' primary':'')+'" data-act="pk-use" data-src="'+esc(t.src)+'"'+(add?'':' disabled')+'>Add</button></div>';
-    }).join("")+'</div>');
-}
-function useTemplate(src){
-  var t=templateSources().filter(function(x){ return x.src===src; })[0]; if(!t) return;
-  var have={}; packing.items.forEach(function(i){ if(!i.removed) have[String(i.text).toLowerCase()]=1; });
-  var n=0, base=Date.now().toString(36);
-  t.items.forEach(function(i){
-    var k=String(i.text).toLowerCase(); if(!i.text || have[k]) return; have[k]=1;
-    packing.items.push({ id:"my-"+base+(n++).toString(36), kind:"pack", section:i.section||"", text:i.text, done:"", removed:"",
-                         order_index:packing.items.length+1 });
-  });
-  packing.persist(); closeSheet(); renderPrep();
-  toast(n ? "Added "+n+" item"+(n===1?"":"s") : "Everything in it is on your list already");
-}
-function saveTemplate(){
-  var items=packing.items.filter(function(i){ return !i.removed; }).map(function(i){ return { section:i.section||"", text:i.text }; });
-  if(!items.length) return;
-  var name=window.prompt("Name for this template", TRIP.name+" packing"); if(name===null || !name.trim()) return;
-  var list=myTemplates(); list.push({ id:Date.now().toString(36), name:name.trim(), items:items }); save(PACK_TPL_KEY, list);
-  toast("Saved — "+items.length+" items");
-}
-function deleteTemplate(src){
-  if(!window.confirm("Delete this template? Your packing lists are not affected.")) return;
-  save(PACK_TPL_KEY, myTemplates().filter(function(t){ return "my:"+t.id!==src; }));
-  templatesForm();
-}
 
 /* ==========================================================================
    Calendar (.ics) and a printable itinerary, made on the phone from what it
    already holds. Times are written in UTC from each place's own time zone,
    so the calendar shows them right wherever the phone is.
    ========================================================================== */
-function icsText(s){ return String(s==null?"":s).replace(/\\/g,"\\\\").replace(/\r?\n/g,"\\n").replace(/([,;])/g,"\\$1"); }
-function icsFold(line){
-  // Lines are folded at 75 bytes; Chinese is 3 bytes a character, so count bytes, not characters
-  var out=[], cur="", n=0, lim=75;
-  for(var i=0;i<line.length;i++){
-    var ch=line[i], c=line.charCodeAt(i);
-    if(c>=0xD800 && c<=0xDBFF && i+1<line.length){ ch+=line[++i]; }
-    var b=ch.length>1 ? 4 : c<0x80 ? 1 : c<0x800 ? 2 : 3;
-    if(n+b>lim){ out.push(cur); cur=" "; n=1; lim=75; }
-    cur+=ch; n+=b;
-  }
-  out.push(cur); return out.join("\r\n");
-}
-function icsUtc(ms){ return new Date(ms).toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,""); }
-function icsDate(iso){ return String(iso).replace(/-/g,""); }
 function placeTz(l){ var c=l && cityInfo(l.city); return (c && c.tz) || tripTz(); }
-function buildIcs(o){
-  var ev=[], stamp=icsUtc(Date.now());
-  var push=function(uid, start, end, summary, desc, loc, geo){
-    var e=["BEGIN:VEVENT","UID:"+uid+"@trip-companion","DTSTAMP:"+stamp].concat(start).concat(end)
-      .concat(["SUMMARY:"+icsText(summary)]);
-    if(desc) e.push("DESCRIPTION:"+icsText(desc));
-    if(loc) e.push("LOCATION:"+icsText(loc));
-    if(geo) e.push("GEO:"+geo);
-    e.push("END:VEVENT"); ev.push(e.map(icsFold).join("\r\n"));
-  };
-  DAYS.forEach(function(d, di){
-    var stops=store.dayStops(d), next=addDaysISO(d,1);
-    if(o.days && stops.length){
-      push("day-"+TRIP.id+"-"+d, ["DTSTART;VALUE=DATE:"+icsDate(d)], ["DTEND;VALUE=DATE:"+icsDate(next)],
-        "Day "+(di+1)+" · "+(dayLabel(d)||TRIP.name),
-        stops.map(function(s){ var l=store.loc(s.location_id); return (s.planned_time?s.planned_time+" ":"")+(l?l.name_en+(l.name_zh?" "+l.name_zh:""):""); }).join("\n"));
-    }
-    if(o.stops) stops.forEach(function(s, i){
-      var l=store.loc(s.location_id), m=String(s.planned_time||"").match(/^(\d{1,2}):(\d{2})/);
-      if(!l || !m) return;
-      var tz=placeTz(l), st=zonedMs(d, m[1]+":"+m[2], tz), en=st+3600000;
-      var nx=stops.slice(i+1).filter(function(x){ return /^\d{1,2}:\d{2}/.test(x.planned_time||""); })[0];
-      if(nx){ var nm=String(nx.planned_time).match(/^(\d{1,2}):(\d{2})/), ns=zonedMs(d, nm[1]+":"+nm[2], tz);
-        if(ns-st>=15*60000 && ns-st<=3*3600000) en=ns; }
-      push("stop-"+s.id, ["DTSTART:"+icsUtc(st)], ["DTEND:"+icsUtc(en)], l.name_en+(l.name_zh?" "+l.name_zh:""),
-        [s.notes, l.arrive_by||firstSentence(l.getting_there,200)].filter(Boolean).join("\n"),
-        [l.name_en, l.name_zh, l.city].filter(Boolean).join(", "), hasXY(l) ? (+l.lat).toFixed(6)+";"+(+l.lng).toFixed(6) : "");
-    });
-  });
-  if(o.bookings) store.data.bookings.forEach(function(b){
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(b.date||"")) return;
-    var m=String(b.time||"").match(/^(\d{1,2}):(\d{2})/), desc=[b.confirmation_no?"Ref "+b.confirmation_no:"", b.details].filter(Boolean).join("\n");
-    var title=(b.type==="hotel"?"Hotel · ":"")+bkTitle(b), arr=bkArrMs(b);
-    if(m && b.type!=="hotel"){ var st=bookingWhen(b); push("bk-"+b.id, ["DTSTART:"+icsUtc(st)], ["DTEND:"+icsUtc(arr && arr>st ? arr : st+3600000)], title, desc,
-      [b.from_place, b.to_place].filter(Boolean).join(" → ")); }
-    else push("bk-"+b.id, ["DTSTART;VALUE=DATE:"+icsDate(b.date)],
-      ["DTEND;VALUE=DATE:"+icsDate(b.type==="hotel" && b.arr_date>b.date ? b.arr_date : addDaysISO(b.date,1))], title, desc);
-  });
-  return { n:ev.length, text:["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Trip Companion//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH",
-    icsFold("X-WR-CALNAME:"+icsText(TRIP.name))].concat(ev).concat(["END:VCALENDAR"]).join("\r\n")+"\r\n" };
-}
-function icsForm(){
-  var cb=function(id,label,on){ return '<label class="row small" style="gap:8px;margin:0 0 10px"><input type="checkbox" id="'+id+'"'+(on?" checked":"")+'> '+label+'</label>'; };
-  var canShare=!!(navigator.canShare && window.File && navigator.canShare({ files:[new File(["x"],"t.ics",{type:"text/calendar"})] }));
-  openSheet("Add to calendar",
-    '<p class="blurb small muted" style="margin:12px 0 14px">Makes a calendar file of '+esc(TRIP.name)+'. Open it and your calendar offers to add the events. '+
-      'It is a copy: changes made in the app later aren\u2019t sent to the calendar — make a new file instead.</p>'+
-    cb("ic_days","Each day, as an all-day event listing its stops",true)+
-    cb("ic_stops","Stops that have a time",true)+
-    cb("ic_bk","Bookings — flights, trains, ferries, hotels",true)+
-    '<div class="formactions"><button class="btn primary" data-act="ics-go" data-how="download">Download</button>'+
-      (canShare ? '<button class="btn" data-act="ics-go" data-how="share">Share…</button>' : '')+'</div>');
-}
-function fileName(ext){ return (TRIP.name||"trip").replace(/[^\w\u4e00-\u9fff -]+/g,"").trim().replace(/\s+/g,"-")+ext; }
-function exportIcs(how){
-  var r=buildIcs({ days:$("#ic_days").checked, stops:$("#ic_stops").checked, bookings:$("#ic_bk").checked });
-  if(!r.n){ toast("Nothing to add — tick at least one kind"); return; }
-  var name=fileName(".ics"), blob=new Blob([r.text], { type:"text/calendar;charset=utf-8" });
-  if(how==="share" && navigator.share){
-    navigator.share({ files:[new File([blob], name, { type:"text/calendar" })], title:TRIP.name }).catch(function(){});
-    return;
-  }
-  var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
-  document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-  toast(r.n+" event"+(r.n===1?"":"s")+" in "+name);
-}
-/** The whole trip on paper: each day's bookings and stops, with the Chinese
- *  names large enough to show a driver. */
-function printHTML(withNotes){
-  var h='<div class="pv"><h1>'+esc(TRIP.name)+(TRIP.name_zh?' <span class="zh">'+escz(TRIP.name_zh)+'</span>':'')+'</h1>'+
-    '<div class="sub">'+esc(tripRange())+' · '+DAYS.length+' days</div>';
-  DAYS.forEach(function(d,i){
-    var stops=store.dayStops(d);
-    var bks=store.data.bookings.filter(function(b){ return b.date===d; }).sort(function(a,b){ return String(a.time||"")<String(b.time||"")?-1:1; });
-    if(!stops.length && !bks.length) return;
-    h+='<div class="day"><h2>Day '+(i+1)+' · '+esc(fmtDate(d,true))+' <span>· '+esc(dayLabel(d))+'</span></h2>'+
-      store.data.bookings.filter(function(b){ return MOVE_TYPES[b.type] && b.date!==d && bkArrDate(b)===d && hhmm(b.arr_time); }).map(function(b){
-        return '<div class="bk"><b>'+esc(hhmm(b.arr_time))+'</b> · '+(b.type==="flight"?"Land":"Arrive")+' · '+escz(bkTitle(b))+'</div>'; }).join("")+
-      bks.map(function(b){ return '<div class="bk"><b>'+esc(bkWhenText(b)||b.type)+'</b> · '+escz(bkTitle(b))+
-        (b.confirmation_no?' · Ref '+esc(b.confirmation_no):'')+(/TO BOOK/.test(b.details||"")?' · <b>TO BOOK</b>':'')+'</div>'; }).join("")+
-      (stops.length ? '<table>'+stops.map(function(s){
-        var l=store.loc(s.location_id); if(!l) return "";
-        var note=[s.notes, withNotes ? (l.arrive_by || firstSentence(l.getting_there,160)) : ""].filter(Boolean).join(" · ");
-        return '<tr><td class="t">'+esc(s.planned_time||"")+'</td><td><b>'+esc(l.name_en)+'</b>'+(l.name_zh?' <span class="zh">'+escz(l.name_zh)+'</span>':'')+
-          (note?'<div class="n">'+escz(note)+'</div>':'')+'</td></tr>';
-      }).join("")+'</table>' : '')+'</div>';
-  });
-  return h+'</div>';
-}
-function printForm(){
-  openSheet("Printable itinerary",
-    '<label class="row small" style="gap:8px;margin:12px 0 10px"><input type="checkbox" id="pr_notes" checked> Include how to get to each place</label>'+
-    '<div class="formactions"><button class="btn primary" data-act="print-go">Print or save as PDF</button></div>'+
-    '<div id="prPreview">'+printHTML(true)+'</div>');
-  $("#pr_notes").addEventListener("change", function(){ $("#prPreview").innerHTML=printHTML(this.checked); });
-}
-function printNow(){
-  $("#printView").innerHTML=printHTML($("#pr_notes") ? $("#pr_notes").checked : true);
-  document.title=TRIP.name+" itinerary";
-  setTimeout(function(){ window.print(); document.title=TRIP.name; }, 50);
-}
 
 /* ==========================================================================
    Bookings: add and edit, and read a pasted confirmation.
@@ -4461,215 +3304,7 @@ function printNow(){
    train numbers, airport codes, stations, check-in and check-out — fills the
    form, and leaves the rest to you. Passenger names are not copied.
    ========================================================================== */
-var MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12};
 function pad2(n){ return String(n).padStart(2,"0"); }
-function guessYear(m,d){
-  var y=+String(TRIP_START).slice(0,4), iso=y+"-"+pad2(m)+"-"+pad2(d);
-  return daysBetween(TRIP_START, iso) < -180 ? y+1 : y;
-}
-function findDates(text){
-  var out=[], add=function(i,y,m,d){ m=+m; d=+d; if(m<1||m>12||d<1||d>31) return; y=y?+y:guessYear(m,d); out.push({ i:i, iso:y+"-"+pad2(m)+"-"+pad2(d) }); };
-  var r, M="(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\\.?";
-  var re=/\b(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/g; while((r=re.exec(text))) add(r.index,r[1],r[2],r[3]);
-  re=/(?:(20\d{2})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日/g; while((r=re.exec(text))) add(r.index,r[1],r[2],r[3]);
-  re=new RegExp("\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+"+M+",?\\s*(20\\d{2})?","gi"); while((r=re.exec(text))) add(r.index,r[3],MONTHS[r[2].toLowerCase().slice(0,r[2].toLowerCase()==="sept"?4:3)]||MONTHS[r[2].toLowerCase().slice(0,3)],r[1]);
-  re=new RegExp("\\b"+M+"\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b,?\\s*(20\\d{2})?","gi"); while((r=re.exec(text))) add(r.index,r[3],MONTHS[r[1].toLowerCase().slice(0,3)],r[2]);
-  re=/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/g; while((r=re.exec(text))){
-    var a=+r[1], b=+r[2]; if(b>12) add(r.index,r[3],a,b); else add(r.index,r[3],b,a);   // day first, unless it can't be
-  }
-  return out.sort(function(a,b){ return a.i-b.i; });
-}
-function findTimes(text){
-  var out=[], r, re=/(?:^|[^\d:])([01]?\d|2[0-3])[:：](\d{2})(?!\d)\s*(am|pm|a\.m\.|p\.m\.)?/gi;
-  while((r=re.exec(text))){
-    var h=+r[1], ap=(r[3]||"").toLowerCase().replace(/\./g,"");
-    if(ap==="pm" && h<12) h+=12; if(ap==="am" && h===12) h=0;
-    out.push({ i:r.index, t:pad2(h)+":"+r[2] });
-  }
-  return out;
-}
-function after(list, text, re){
-  var m=text.search(re); if(m<0) return null;
-  return list.filter(function(x){ return x.i>=m; })[0] || null;
-}
-function findRef(text){
-  var keys=/(booking|confirmation|reservation|order|itinerary|record locator|pnr|e-?ticket|ticket)\s*(?:no\.?|number|num|#|code|id|ref(?:erence)?)?\s*[:：#]?|订单号|订单编号|确认号|預訂編號|预订号|取票号/gi, r;
-  while((r=keys.exec(text))){
-    var tail=text.slice(r.index+r[0].length, r.index+r[0].length+40);
-    var m=tail.match(/^[\s:：#]*((?=[A-Z0-9.-]*\d)[A-Z0-9][A-Z0-9.-]{4,19}|[A-Z]{6})(?![A-Za-z0-9])/);
-    if(m) return m[1].replace(/[.-]+$/,"");
-  }
-  return "";
-}
-function parseBookingText(text){
-  text=String(text||"").replace(/\u00a0/g," ");
-  var low=text.toLowerCase(), score={ hotel:0, flight:0, train:0, ferry:0 };
-  if(/check[- ]?in|入住/.test(low)) score.hotel+=2; if(/check[- ]?out|退房|离店/.test(low)) score.hotel+=2;
-  if(/\bhotel\b|酒店|\bnights?\b|\broom\b|resort/.test(low)) score.hotel+=2;
-  if(/flight|airline|airways|boarding|terminal|航班|登机/.test(low)) score.flight+=3;
-  if(/\btrain\b|railway|high-speed|12306|高铁|动车|车次|carriage|coach \d/.test(low)) score.train+=3;
-  if(/\b[GDC]\d{1,4}\b/.test(text)) score.train+=1;
-  if(/ferry|turbojet|cotai|water ?jet|船票|码头|pier/.test(low)) score.ferry+=3;
-  var type=Object.keys(score).sort(function(a,b){ return score[b]-score[a]; })[0];
-  if(!score[type]) type="other";
-  var dates=findDates(text), times=findTimes(text), o={ type:type, date:"", time:"", description:"", confirmation_no:findRef(text), details:"",
-    number:"", from_place:"", to_place:"", arr_date:"", arr_time:"" };
-  var det=[];
-  if(type==="hotel"){
-    var ci=after(dates,text,/check[- ]?in|入住/i)||dates[0], co=after(dates,text,/check[- ]?out|退房|离店/i);
-    if(co && ci && co.iso===ci.iso) co=dates.filter(function(x){ return x.iso>ci.iso; })[0]||null;
-    o.date=ci?ci.iso:"";
-    var cit=after(times,text,/check[- ]?in|入住/i); if(cit) o.time=cit.t;
-    if(co){ o.arr_date=co.iso; var cot=after(times,text,/check[- ]?out|退房/i); if(cot && (!cit || cot.i>cit.i)) o.arr_time=cot.t; }
-    var nights=(text.match(/(\d+)\s*(?:nights?|晚)/i)||[])[1] || (ci&&co ? daysBetween(ci.iso,co.iso) : 0);
-    var name="";
-    text.split(/\r?\n/).map(function(x){ return x.trim(); }).forEach(function(line){
-      if(name || line.length>80 || !/hotel|酒店|resort|inn\b|suites|hostel|宾馆/i.test(line)) return;
-      if(/check|confirm|thank|booking|reservation|dear|订单|入住|退房/i.test(line)) return;
-      name=line.replace(/^(hotel|property)\s*[:：]\s*/i,"");
-    });
-    o.description=(name||"Hotel")+(+nights ? " — "+nights+" night"+(+nights===1?"":"s") : "");
-  } else {
-    var dep=after(dates,text,/depart|departure|出发|发车|開車|开车|travel date|date of travel/i)||dates[0];
-    o.date=dep?dep.iso:"";
-    var dt=after(times,text,/depart|departure|出发|发车|開車|开车/i)||times[0];
-    o.time=dt?dt.t:"";
-    var at=after(times,text,/arriv|到达|抵达/i);
-    if(!at && times.length>1 && dt) at=times.filter(function(x){ return x.i>dt.i; })[0]||null;   // "08:12 … 14:05": the second time is the arrival
-    if(at && at.t!==o.time){
-      o.arr_time=at.t;
-      var ad=after(dates,text,/arriv|到达|抵达/i);
-      if(/^\s*(?:\(?\s*\+\s*1\b|\(?next day\)?)/i.test(text.slice(at.i+at.t.length+1, at.i+at.t.length+14))) o.arr_date=addDaysISO(o.date,1);
-      else if(ad && dep && ad.i>dep.i && ad.iso>=o.date) o.arr_date=ad.iso;
-    }
-    var from="", to="", m;
-    if(type==="flight"){
-      m=text.match(/\b([A-Z]{3})\s*(?:→|->|–|—|-|to)\s*([A-Z]{3})\b/);
-      if(m){ from=m[1]; to=m[2]; }
-      else { var codes=[], cr=/\(([A-Z]{3})\)/g, c; while((c=cr.exec(text))) if(codes.indexOf(c[1])<0) codes.push(c[1]); if(codes.length>1){ from=codes[0]; to=codes[1]; } }
-      var fn=(text.match(/\bflight\s*(?:no\.?|number)?\s*[:：]?\s*([A-Z][A-Z0-9]\s?\d{2,4})\b/i)||text.match(/\b((?:[A-Z]{2}|[A-Z]\d|\d[A-Z])\s?\d{2,4})\b(?=[^\n]{0,40}(?:\n|$))/)||[])[1]||"";
-      o.number=fn.replace(/\s+/,"");
-      o.description=(from&&to?from+" → "+to:"Flight")+(fn?" — "+o.number:"");
-    } else {
-      var tn=type==="train" ? ((text.match(/(?:train|车次)\s*(?:no\.?|number)?\s*[:：]?\s*([GDCZTKY]\d{1,4})\b/i)||text.match(/\b([GDC]\d{1,4})\b/)||[])[1]||"") : "";
-      var bare=tn ? text.split(tn).join(" ") : text;   // "G1234 Guangzhou South → …": the number isn't part of the station
-      var zh=bare.match(/([\u4e00-\u9fff]{2,8}站?)\s*(?:→|->|—|－|-|至|到)\s*([\u4e00-\u9fff]{2,8}站?)/);
-      var en=bare.match(/\bfrom\s+([A-Z][\w .'’()-]{2,40}?)\s+to\s+([A-Z][\w .'’()-]{2,40}?)(?=\s*(?:[\n,.;]|\bon\b|\bat\b|$))/)||
-             bare.match(/\b([A-Z][\w .'’()-]{2,40}?)\s*(?:→|->)\s*([A-Z][\w .'’()-]{2,40}?)(?=\s*(?:[\n,;]|$))/);
-      if(en){ from=en[1].trim(); to=en[2].trim(); } else if(zh){ from=zh[1]; to=zh[2]; }
-      o.number=tn;
-      o.description=(from&&to?from+" → "+to:(type==="train"?"Train":type==="ferry"?"Ferry":"Booking"))+(tn?" — "+tn:"");
-      var seat=(text.match(/\b(?:seat|座位)\s*(?:no\.?)?\s*[:：]?\s*([0-9]{1,2}[A-F]?(?:\s*(?:\/|,)\s*[0-9]{1,2}[A-F]?)*)/i)||[])[1];
-      var car=(text.match(/\b(?:coach|carriage|car|车厢)\s*(?:no\.?)?\s*[:：]?\s*(\d{1,2})\b/i)||[])[1];
-      if(car||seat) det.push([car?"Coach "+car:"", seat?"seat "+seat:""].filter(Boolean).join(", "));
-    }
-  }
-  o.from_place=from||""; o.to_place=to||"";
-  o.details=det.join(". ")+(det.length?".":"");
-  return o;
-}
-function bookingForm(id, presetType){
-  var b=id ? store.data.bookings.filter(function(x){ return x.id===id; })[0] : null, isNew=!b;
-  b=b || { id:"", type:presetType||"flight", date:"", time:"", description:"", confirmation_no:"", details:"", ticket_url:"", tz:"",
-           number:"", from_place:"", to_place:"", arr_date:"", arr_time:"", arr_tz:"" };
-  var types=["flight","train","ferry","hotel","ticket","other"];
-  var f=function(id,label,val,extra,cls){ return '<div class="field'+(cls?" "+cls:"")+'"><label id="'+id+'_l">'+label+'</label><input id="'+id+'" value="'+esc(val||"")+'"'+(extra||"")+'></div>'; };
-  var html=(isNew ? '<div class="field linkbox pastebox" style="margin-top:12px"><label for="b_paste">Paste the confirmation</label>'+
-      '<textarea id="b_paste" placeholder="Copy the confirmation email (or the booking page) and paste it here"></textarea>'+
-      '<div class="linkrow"><button class="btn sm primary" data-act="bk-read">Read it</button></div>'+
-      '<div class="hint" id="b_paste_status">Read on this phone — nothing is sent anywhere. Check each field before saving.</div></div>' : '<div style="height:12px"></div>')+
-    '<div class="grid2"><div class="field"><label>Type</label><select id="b_type">'+types.map(function(t){
-        return '<option'+(b.type===t?" selected":"")+'>'+t+'</option>'; }).join("")+'</select></div>'+
-      f("b_number","Flight no.",b.number,' autocapitalize="characters" placeholder="CX138"',"mv")+'</div>'+
-    '<div class="grid2 mv">'+f("b_from","From",b.from_place,' placeholder="SYD, or a station"')+f("b_to","To",b.to_place,' placeholder="HKG"')+'</div>'+
-    '<div class="grid2">'+f("b_date","Departs",b.date,' type="date"')+f("b_time","Time",hhmm(b.time)||"",' type="time"')+'</div>'+
-    '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="b_open"'+(isOpenTime(b.time)?" checked":"")+'> '+
-      '<span id="b_open_l">Open — no fixed time</span></label>'+
-    (b.time && !hhmm(b.time) && !isOpenTime(b.time) || /^\d{1,2}:\d{2}\s*[-–]/.test(b.time||"") ? '<p class="hint" style="margin:-8px 0 12px">Was “'+esc(b.time)+'” — now just the start; put the end in Arrives.</p>' : '')+
-    '<div class="grid2 arrrow">'+f("b_arr_date","Arrives",b.arr_date||"",' type="date"')+f("b_arr_time","Time",hhmm(b.arr_time)||"",' type="time"')+'</div>'+
-    '<p class="blurb small muted mv" id="b_arr_hint" style="margin:-8px 0 14px">The arrival goes on that day’s plan: when you can drop bags at the hotel and be out exploring.</p>'+
-    '<div class="field"><label>Reference</label><input id="b_confirmation_no" autocapitalize="characters" value="'+esc(b.confirmation_no)+'"></div>'+
-    '<div class="field"><label>Description</label><input id="b_description" value="'+esc(b.description)+'" placeholder="Filled in from the route if left blank"></div>'+
-    '<div class="field"><label>Details</label><textarea id="b_details" style="min-height:80px">'+esc(b.details)+'</textarea></div>'+
-    '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="b_tobook"'+(/TO BOOK/.test(b.details||"")?" checked":"")+'> Not booked yet (TO BOOK)</label>'+
-    '<details class="small" style="margin:-4px 0 14px"'+(b.tz||b.arr_tz?" open":"")+'><summary>Time zones</summary>'+
-      '<p class="hint" style="margin:8px 0">Worked out from airport codes and your cities. Set one only when that guess is wrong.</p>'+
-      '<div class="grid2"><div class="field"><label id="b_tz_l">Departure</label><input id="b_tz" list="tzlist3" autocapitalize="off" value="'+esc(b.tz||"")+'"></div>'+
-      '<div class="field"><label id="b_arr_tz_l">Arrival</label><input id="b_arr_tz" list="tzlist3" autocapitalize="off" value="'+esc(b.arr_tz||"")+'"></div></div>'+tzDatalist("tzlist3")+'</details>'+
-    '<div class="field"><label>Ticket link</label><input id="b_ticket_url" inputmode="url" autocapitalize="off" value="'+esc(b.ticket_url||"")+'" placeholder="https://…"></div>'+
-    '<div class="formactions"><button class="btn primary" data-act="bk-save" data-bid="'+esc(b.id)+'">Save</button>'+
-      (isNew?'':'<button class="btn danger" data-act="bk-delete" data-bid="'+esc(b.id)+'">Delete</button>')+'</div>';
-  openSheet(isNew?"New booking":"Edit booking", html);
-  var pb=$("#b_paste"); if(pb) pb.addEventListener("paste", function(){ setTimeout(readPasted, 0); });
-  ["b_type","b_from","b_to","b_open"].forEach(function(id){ $("#"+id).addEventListener("change", bookingFormShape); $("#"+id).addEventListener("input", bookingFormShape); });
-  bookingFormShape();
-}
-/** Labels and fields follow the type: a hotel has check-in and check-out, a
- *  journey a number, a route and departs/arrives. Time zones show their guess. */
-function bookingFormShape(){
-  var t=$("#b_type") ? $("#b_type").value : "flight", move=!!MOVE_TYPES[t];
-  document.querySelectorAll("#sheetBody .mv").forEach(function(e){ e.hidden=!move; });
-  var set=function(id,txt){ var e=$("#"+id); if(e) e.textContent=txt; };
-  set("b_number_l", t==="flight"?"Flight no.":t==="train"?"Train no.":"Sailing / no.");
-  set("b_date_l", t==="hotel"?"Check-in":move?"Departs":"Date");
-  set("b_arr_date_l", t==="hotel"?"Check-out":move?"Arrives":"Ends");
-  set("b_time_l", t==="ticket" ? "Entry time" : "Time");
-  set("b_open_l", move ? "Open ticket — any sailing or train that day" : t==="ticket" ? "Open — any time that day" : "Open — no fixed time");
-  document.querySelectorAll("#sheetBody .arrrow").forEach(function(e){ e.hidden=(t==="ticket"); });
-  var op=$("#b_open"), tm=$("#b_time"); if(op && tm){ tm.disabled=op.checked; if(op.checked) tm.value=""; }
-  var probe={ type:t, from_place:($("#b_from")||{}).value||"", to_place:($("#b_to")||{}).value||"", tz:"", arr_tz:"" };
-  var a=$("#b_tz"), c=$("#b_arr_tz");
-  if(a) a.placeholder=depTz(probe); if(c) c.placeholder=arrTz(probe);
-  var d=$("#b_description"); if(d && move) d.placeholder=bkRoute({ from_place:probe.from_place, to_place:probe.to_place, number:($("#b_number")||{}).value||"" }) || "Filled in from the route if left blank";
-}
-function readPasted(){
-  var box=$("#b_paste"), st=$("#b_paste_status"); if(!box || !box.value.trim()) return;
-  var o=parseBookingText(box.value), got=[];
-  var set=function(id,v,label){ if(!v) return; var e=$("#"+id); if(e){ e.value=v; if(label) got.push(label); } };
-  set("b_type", o.type==="other"?"":o.type, "type"); set("b_number", o.number, "number");
-  set("b_from", o.from_place, ""); set("b_to", o.to_place, o.from_place||o.to_place ? "route" : "");
-  set("b_date", o.date, "date"); set("b_time", o.time, "time");
-  set("b_arr_date", o.arr_date, ""); set("b_arr_time", o.arr_time, o.type==="hotel" ? "check-out" : "arrival");
-  if(o.type==="hotel" && o.arr_date && got.indexOf("check-out")<0) got.push("check-out");
-  set("b_description", o.description, "what it is"); set("b_confirmation_no", o.confirmation_no, "reference"); set("b_details", o.details, "details");
-  bookingFormShape();
-  if(o.date && (o.date<TRIP_START || o.date>TRIP_END)) got.push("<b>the date is outside this trip — check it</b>");
-  st.innerHTML=got.length ? "Filled in: "+got.join(", ")+". Check each field before saving." : "Couldn’t find anything to fill in — type it in below.";
-}
-function saveBookingForm(id){
-  var g=function(k){ var e=$("#b_"+k); return e ? e.value.trim() : ""; };
-  var old=id ? store.data.bookings.filter(function(x){ return x.id===id; })[0] : null;
-  var b=Object.assign({}, old||{});
-  ["type","date","time","description","confirmation_no","details","ticket_url","number","arr_date","arr_time"].forEach(function(k){ b[k]=g(k); });
-  b.from_place=g("from"); b.to_place=g("to");
-  b.tz=g("tz").replace(/\s+/g,"_"); b.arr_tz=g("arr_tz").replace(/\s+/g,"_");
-  if(!MOVE_TYPES[b.type]){ b.number=""; b.from_place=""; b.to_place=""; if(b.type!=="hotel") b.arr_tz=""; }
-  if($("#b_open") && $("#b_open").checked) b.time="open";
-  if(b.type==="ticket"){ b.arr_date=""; b.arr_time=""; }
-  b.number=b.number.toUpperCase().replace(/\s+/g,"");
-  var tb=$("#b_tobook") && $("#b_tobook").checked;
-  b.details=tb ? (/TO BOOK/.test(b.details) ? b.details : ("TO BOOK. "+b.details).trim()) : b.details.replace(/TO BOOK\.?\s*/g,"").trim();
-  if(!b.description) b.description=MOVE_TYPES[b.type] ? bkRoute(b) : "";
-  if(!b.description){ toast(b.type==="ticket" ? "Say what the ticket is for" : "Say what it is — a route, a hotel"); return; }
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(b.date)){ toast("Set the date"); return; }
-  if(b.arr_time && !b.arr_date) b.arr_date=bkArrDate(b);
-  if(b.arr_date && b.arr_date<b.date){ toast(b.type==="hotel" ? "Check-out is before check-in" : "The arrival is before the departure"); return; }
-  if(MOVE_TYPES[b.type] && b.arr_date && b.time && b.arr_time && bkArrMs(b)<=bookingWhen(b)){ toast("It arrives before it leaves — check the times and time zones"); return; }
-  if(b.ticket_url && !safeUrl(b.ticket_url)){ toast("The ticket link needs to start with https://"); return; }
-  if((b.tz && !validTz(b.tz)) || (b.arr_tz && !validTz(b.arr_tz))){ toast("Not a time zone this phone knows — pick one from the list"); return; }
-  if(!b.id) b.id=uid("bk");
-  store.write("saveBooking", b, function(){
-    var found=false;
-    store.data.bookings=store.data.bookings.map(function(x){ if(x.id===b.id){ found=true; return b; } return x; });
-    if(!found) store.data.bookings.push(b);
-  }).then(function(){ closeSheet(); render(); toast(old?"Saved":"Booking added"); });
-}
-function deleteBookingForm(id){
-  if(!window.confirm("Delete this booking?")) return;
-  store.write("deleteBooking", { id:id }, function(){
-    store.data.bookings=store.data.bookings.filter(function(x){ return x.id!==id; });
-  }).then(function(){ closeSheet(); render(); toast("Deleted"); });
-}
 
 /* ==========================================================================
    Mutations
@@ -4695,17 +3330,6 @@ function updateStop(sid, patch){
   if(!e) return Promise.resolve();
   Object.keys(patch).forEach(function(k){ e[k]=patch[k]; });
   return store.write("saveScheduleEntry", e, function(){});
-}
-/* A stop's own note, in a text box: notes run to phone numbers and several
-   lines, which the browser's one-line prompt cut off and couldn't show. */
-function stopNoteForm(sid){
-  var e=store.data.schedule.filter(function(s){ return s.id===sid; })[0]; if(!e) return;
-  var l=store.loc(e.location_id)||{};
-  openSheet("Note · Day "+dayNumber(e.date),
-    '<div class="field"><label>'+esc(l.name_en||"This stop")+(l.name_zh?' · <span class="zh">'+escz(l.name_zh)+'</span>':'')+'</label>'+
-      '<textarea id="f_stopnote" style="min-height:160px" placeholder="Booking number, what to order, when to leave…">'+esc(e.notes||"")+'</textarea>'+
-      '<div class="hint">Shown in full under this stop on the day. It belongs to this day only — notes for the place itself go in Edit this place.</div></div>'+
-    '<div class="formactions"><button class="btn primary" data-act="save-stop-note" data-sid="'+esc(sid)+'">Save</button></div>');
 }
 function commitOrder(date, ids){
   ids.forEach(function(id,i){
@@ -4808,6 +3432,7 @@ document.addEventListener("click", function(ev){
   var t=ev.target.closest("[data-act]");
   if(!t) return;
   var act=t.dataset.act;
+  if(runAct(act, t, ev)) return;
   var lid=t.dataset.lid, sid=t.dataset.sid || (t.closest("[data-sid]")||{dataset:{}}).dataset.sid;
   var date=t.dataset.date;
 
@@ -4929,7 +3554,7 @@ document.addEventListener("click", function(ev){
     case "trip-home": homeMode="trip"; setView("today"); return;
     case "go": setView(t.dataset.v); return;
     case "sync":
-      store.sync().catch(function(){}); return;
+      store.sync({ fresh: !!t.dataset.fresh }).catch(function(){}); return;
     case "gate-connect": {
       var gUrl=$("#g_url").value.trim(), gKey=$("#g_key").value.trim();
       var err=$("#gateErr");
@@ -5031,7 +3656,7 @@ document.addEventListener("click", function(ev){
     case "test-cfg": {
       var cfg={ url:$("#s_url").value.trim(), key:$("#s_key").value.trim() };
       var old=store.cfg; store.cfg=cfg;
-      store.call("ping").then(function(){ toast("Connected"); })
+      store.call("ping").then(function(){ toast(backendBehind() ? "Connected — the backend is an older version (see Settings)" : "Connected", backendBehind() ? 5000 : 0); })
         .catch(function(e){ store.cfg=old; toast(e.kind ? syncProblem(e) : "Could not connect: "+e.message, 9000); });
       return;
     }

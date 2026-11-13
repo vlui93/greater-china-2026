@@ -93,13 +93,16 @@ const NET = {
   'https://surl.amap.com/T3st': [302, { Location: 'https://wb.amap.com/?p=B0TEST0001,23.105432,113.248765,%E6%B5%8B%E8%AF%95%E9%9D%A2%E9%A6%86,%E5%B9%BF%E5%B7%9E&src=share' }, ''],
   'https://wb.amap.com/?p=B0TEST0001,23.105432,113.248765,%E6%B5%8B%E8%AF%95%E9%9D%A2%E9%A6%86,%E5%B9%BF%E5%B7%9E&src=share': [200, {}, '<title>测试面馆-高德地图</title>']
 };
-const CODE = { current: path.join(ROOT, 'Code.gs'), v1: path.join(FIX, 'Code.v1.gs') };
+/* pre2: the last backend from before replies carried a version number. */
+const CODE = { current: path.join(ROOT, 'Code.gs'), v1: path.join(FIX, 'Code.v1.gs'), pre2: path.join(FIX, 'Code.pre2.gs') };
 /** Code.gs (or the first release, `v1`) running against `SS`, seeded with `seed`. */
 function backend(SS, which, seed) {
   const box = { SpreadsheetApp: { getActive: () => SS },
     ContentService: { MimeType: { JSON: 'j' }, createTextOutput: t => ({ _t: t, setMimeType() { return this; } }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    Utilities: { formatDate: d => d.toISOString().slice(0, 10), getUuid: () => require('crypto').randomUUID() }, Logger: { log() {} }, console,
+    Utilities: { formatDate: d => d.toISOString().slice(0, 10), getUuid: () => require('crypto').randomUUID(),
+      computeDigest: (alg, text) => [...require('crypto').createHash('md5').update(String(text), 'utf8').digest()].map(b => b > 127 ? b - 256 : b),
+      DigestAlgorithm: { MD5: 'MD5' }, Charset: { UTF_8: 'UTF_8' } }, Logger: { log() {} }, console,
     UrlFetchApp: { fetch(u) { const r = NET[u] || [404, {}, '']; return { getResponseCode: () => r[0], getHeaders: () => r[1], getContentText: () => r[2] }; } } };
   vm.createContext(box);
   vm.runInContext(injectSeed(fs.readFileSync(CODE[which || 'current'], 'utf8'), seed || trip()), box);
