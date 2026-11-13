@@ -24,7 +24,7 @@ Vanilla HTML/CSS/JS, no build step, no framework. Data lives in a Google Sheet b
 ### 1.1 Create the Sheet
 
 1. Go to https://sheets.new — a new blank Google Sheet.
-2. Name it something like **Greater China 2026**.
+2. Name it after the trip, or just **Trips** — one Sheet holds every trip.
 3. **Extensions → Apps Script.** A script editor opens in a new tab.
 
 ### 1.2 Paste the script
@@ -108,7 +108,7 @@ The ⚙ gear has the same fields if you ever need to change them.
 1. Open **https://vlui93.github.io/greater-china-2026/** in **Safari** (it must be Safari — Chrome on iOS cannot install to the home screen).
 2. Tap the **Share** button (square with an up arrow).
 3. Scroll down → **Add to Home Screen**.
-4. Name it *Greater China* → **Add**.
+4. Name it *Trips* (or whatever you like) → **Add**.
 
 It launches full screen with no browser chrome, its own icon, and the status bar tinted to match.
 
@@ -185,7 +185,8 @@ The only control under 44px is the inline "Set up the backend" text link inside 
 
 | File | What | |
 |---|---|---|
-| `index.html` | The whole app — markup, styles and logic, and no trip content | committed |
+| `index.html` | The app's core — markup, styles, and what Home, All Days and Locations need. No trip content | committed |
+| `prep.js`, `bookings.js`, `manage.js`, `extras.js` | The rest of the app, each fetched the first time it's opened and kept offline: the Prep tab; Bookings, the calendar file and print; Settings, trips, cities, adding and editing places; importers, Plan with AI and People | committed |
 | `Code.gs` | Apps Script backend: `doGet`/`doPost` JSON API, `setup()`, `resetAndReseed()`. Empty `SEED`, placeholder key | committed |
 | `sw.js` | Service worker, caches the app shell so it runs with no connection | committed |
 | `t2s.js` | Traditional → Simplified character table (generated from OpenCC, Apache-2.0) | committed |
@@ -204,7 +205,7 @@ The only control under 44px is the inline "Set up the backend" text link inside 
 ```bash
 node src/build-seed.js    # merge + validate the per-city content into src/seed.json
 node src/build-code.js    # Code.head.gs + empty seed + Code.tail.gs -> Code.gs
-node src/build-html.js    # src/index.template.html -> index.html, verbatim
+node src/build-html.js    # src/index.template.html -> index.html, with the names of the on-demand files' functions filled in
 node src/prepare-code.js --generate   # Code.gs + key + src/seed.json -> Code.READY.local.gs
 node src/sheet.js push src/seed.json  # push the content straight to the Sheet instead
 ```
@@ -256,8 +257,11 @@ The browser suites drive the real `index.html` in headless Chromium against the 
 | `saveScheduleEntry` / `deleteScheduleEntry` | entry / `{id}` | |
 | `setDayOrder` | `{date, ids:[...]}` | rewrites `order_index` for that day |
 | `reseed` | – | re-adds any seed rows missing by `id` |
+| `batch` | `{jobs:[{action, payload}, …]}` | runs each in order under one lock; returns `{results:[…]}`, one `{ok, data}` or `{ok:false, error}` per job (up to 200; not `all`, `batch`, `reseed`, `setupTabs`, `resolvePlace`) |
+| `inboxAdd` | `{text, url?, trip?, by?}` | files a link or note in the Inbox of the trip under way or coming up next (or the one named). Also works as a `GET` with `action`, `key` and `text` |
+| `saveInboxItem` / `deleteInboxItem` | item / `{id}` | |
 
-Responses are `{ok:true, data:...}` or `{ok:false, error:"..."}`.
+Responses are `{ok:true, data:..., v:2}` or `{ok:false, error:"...", v:2}`; `v` is the backend's version. `all` takes `{trip, is_default, etag}`: with the `etag` from an earlier reply and nothing changed since, it answers `{unchanged:true, etag, fetched_at}`.
 
 ---
 
@@ -405,6 +409,8 @@ One Sheet holds every trip. The app shows one at a time; switch in ⚙ Settings 
 
 **Only the open trip comes to the phone.** Each sync brings the open trip's rows, plus every trip's name and how many places it has — so a sync, and the copy each phone keeps for offline use, stay one trip's size however many trips the Sheet collects (the Sheet itself can hold thousands; Google's limit is 10 million cells). Opening another trip fetches it, so do that with a connection; with none, the trip that's open stays open. *Other trips* in Locations fetches the other trips' places when you tap it. A phone on a backend from before this still gets every trip, and keeps only the open one.
 
+**No trip is built into the app.** The Sheet's Trips tab says what the trips are. A Sheet whose Trips tab is still empty shows one trip, *My trip*, running over the dates its plan and bookings use; adding a second trip writes that first one into the tab. A phone remembers the default trip it last synced, for a reply that lists none. (Six cities' facts — pin, time zone, map app, taxi tariff — are still built in as reference data; a row in the Cities tab overrides them, and any other city is added there.)
+
 **Archiving.** ⚙ Settings → Trips → **Archive** moves a finished trip under *Archived trips*, out of the list; it stays in the Sheet (`archived` = 1 in Trips) and **Unarchive** brings it back. The default trip and the open one can't be archived.
 
 ### Who sees which trip
@@ -453,6 +459,13 @@ The app works with the old backend — you just can't add trips or cities, and d
 3. Find the line `var API_KEY = 'CHANGE-ME…';` near the top and put **your existing key** back in (it's in the app under ⚙ Settings → API key). Save. *From the version with the Bin tab on, you only need to do this once:* the first request with your key saves it in the script's own settings (**Project Settings → Script properties**), so later versions can be pasted with the placeholder left as it is.
 4. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** Not *New deployment*, which would change the URL.
 5. In the app: ⚙ → **Pull**. **Trips** now has **+ New trip**.
+
+**How to tell it needs doing.** Every reply from the script carries its version number. When the app is built for a newer one, ⚙ Settings shows **Backend needs updating** with the two versions, and **Test** says so too. Nothing stops working in the meantime — the app only asks an older backend for what it has — but the newer parts stay off. Version 2 adds:
+
+- **One request for many changes.** Changes made with no signal used to go up one at a time, a second or more each; they now go together.
+- **Nothing downloaded when nothing changed.** A sync sends back a fingerprint of the last copy it got; if the Sheet still matches, the answer is a few bytes. The fingerprint is of the content itself, so a change typed into the Sheet, or made by a script, counts like any other. ⚙ → **Pull** always fetches the whole trip.
+- **The Inbox** tab, for links and notes sent in from other apps.
+- The people list is kept in the script's cache for two minutes. Adding or removing someone in the app takes effect at once; a change typed straight into the Members tab can take that long.
 
 The new tabs and columns are added the first time the script runs. From a laptop, `node src/sheet.js push` also takes `trips`, `cities` and `days` arrays.
 

@@ -336,8 +336,8 @@ function settingsForm(){
   var c=store.cfg;
   var html=
     '<p class="blurb small muted" style="margin:12px 0 16px">The trip lives in the Google Sheet — nothing about it is in the '+
-    'public repo. This phone holds a cached copy, so the app keeps working with no signal, which you will need in '+
-    'mainland China where Google is blocked. Every edit is saved to the Sheet and shared across devices.</p>'+
+    'public repo. This phone holds a cached copy, so the app keeps working with no signal, and where Google '+
+    'can’t be reached. Every edit is saved to the Sheet and shared across devices.</p>'+
     '<div class="field"><label>Your name</label>'+
       '<input id="s_me" autocomplete="given-name" value="'+esc(getMe())+'" placeholder="Optional">'+
       '<div class="hint">Shown on shared items you tick, so the others know who is bringing what. Saved on this phone.</div></div>'+
@@ -497,8 +497,9 @@ function saveTripForm(id){
   var shift = old && $("#t_move") && $("#t_move").checked ? daysBetween(old.start, t.start) : 0;
   var row=function(o){ var r={}; ["id","name","name_zh","start","end","tz","zh_script","is_default","notes","updated","archived"].forEach(function(k){ r[k]=o[k]==null?"":o[k]; }); return r; };
   // The Sheet's first trip row: the one there is, written out before any other joins it
-  if(!(store.raw.trips||[]).length && t.id!==LEGACY_TRIP.id){
-    var first=row(Object.assign({}, LEGACY_TRIP, { updated:nowISO() }));
+  var one=firstTrip();
+  if(!(store.raw.trips||[]).length && t.id!==one.id){
+    var first=row(Object.assign({}, one, { updated:nowISO() }));
     store.raw.trips=[first]; store.enqueue("saveTrip", first);
   }
   var r=row(t);

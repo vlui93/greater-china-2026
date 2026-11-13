@@ -618,7 +618,7 @@ function savePerson(id){
   // A Sheet still on its one built-in trip gets that trip's row first, so the
   // backend knows the trip a person is being given
   if(!(store.raw.trips||[]).length){
-    var lt={}; ["id","name","name_zh","start","end","tz","zh_script","is_default","notes"].forEach(function(k){ lt[k]=LEGACY_TRIP[k]||""; });
+    var lt={}, one=firstTrip(); ["id","name","name_zh","start","end","tz","zh_script","is_default","notes"].forEach(function(k){ lt[k]=one[k]||""; });
     lt.updated=nowISO(); first=store.call("saveTrip", lt).then(function(){ store.raw.trips=[lt]; });
   }
   first.then(function(){ return store.call("saveMember", { id:id||"", name:name, trips:trips, role:$("#pp_role").value }); }).then(function(d){

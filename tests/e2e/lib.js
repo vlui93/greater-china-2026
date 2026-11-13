@@ -116,6 +116,15 @@ function trip() { delete require.cache[require.resolve('./fixtures/trip.js')]; r
 function fixturePath(name) { return path.join(FIX, name); }
 function fixture(name) { return JSON.parse(fs.readFileSync(fixturePath(name), 'utf8')); }
 
+/* The app carries no trip of its own. A phone that has synced with a Sheet
+   that lists its trips remembers the default one (gct.trip0), and falls back
+   on it when a reply lists none. The suites' Sheet starts with an empty Trips
+   tab (and the first release's backend has no such tab at all), so each phone
+   starts the way such a phone would: already knowing the invented trip's name
+   and dates. `trip0: false` gives a phone that knows nothing. */
+const FIRST_TRIP = { id: 'gc2026', name: 'Greater China', name_zh: '', start: '2026-10-16', end: '2026-11-01',
+  tz: 'Asia/Shanghai', zh_script: '', is_default: '1', notes: '' };
+
 /* ---------- one suite ---------- */
 /** Everything a suite needs, set up the common way: a spreadsheet seeded with
  *  the trip, the backend over it, the app served, a browser. Each page made
@@ -155,6 +164,7 @@ async function setup(opts) {
       if (o.filter) out = JSON.stringify(o.filter(JSON.parse(out), JSON.parse(body)));
       route.fulfill({ status: 200, contentType: 'application/json', body: out });
     });
+    if (o.trip0 !== false) await ctx.addInitScript(t => { try { if (!localStorage.getItem('gct.trip0')) localStorage.setItem('gct.trip0', t); } catch (e) { /* no storage yet */ } }, JSON.stringify(FIRST_TRIP));
     if (o.init) await ctx.addInitScript(o.init.fn, o.init.arg);
     if (o.before) await o.before(ctx);   // extra routes, before the page loads
     const page = await ctx.newPage();

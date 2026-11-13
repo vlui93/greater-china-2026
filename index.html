@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Greater China 2026</title>
+<title>Trips</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Trip companion for Hong Kong, Macau, Guangzhou, Foshan, Chongqing and Chengdu, 16 Oct - 1 Nov 2026.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Greater China">
+<meta name="apple-mobile-web-app-title" content="Trips">
 <meta name="theme-color" content="#0d131a">
 <meta name="format-detection" content="telephone=no">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -757,18 +757,24 @@ a.btn{text-decoration:none}
 <script>
 "use strict";
 /* ==========================================================================
-   Greater China Trip Companion
+   Trip Companion
    Single page, vanilla JS. Data lives in a Google Sheet behind an Apps Script
    web app; everything is cached locally so the whole app works offline, which
-   matters because Google services are not reachable from mainland China.
+   matters where Google services can't be reached (mainland China, for one).
    ========================================================================== */
 
 /* Trips. The Sheet's Trips tab lists them, with rows in the other tabs
-   tagged by trip_id (blank = the default trip). Before the backend has that
-   tab, this is the one trip there is. TRIP is whichever one is open. */
-var LEGACY_TRIP = { id:"gc2026", name:"Greater China", name_zh:"", start:"2026-10-16", end:"2026-11-01",
-                    tz:"Asia/Shanghai", zh_script:"", is_default:"1", notes:"" };
-var TRIP = LEGACY_TRIP;
+   tagged by trip_id (blank = the default trip). TRIP is whichever one is
+   open. No trip is built into the app: until the Sheet lists one, the one
+   trip there is comes from firstTrip() — the trip this phone last knew as the
+   default, or else one worked out from the plan's own dates. */
+var FIRST_TRIP_ID = "trip-1";
+function blankTrip(start, end){
+  var d=new Date(), today=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  return { id:FIRST_TRIP_ID, name:"My trip", name_zh:"", start:start||today, end:end||start||today,
+           tz:"", zh_script:"", is_default:"1", notes:"" };
+}
+var TRIP = blankTrip();
 var TRIP_START = TRIP.start;
 var TRIP_END   = TRIP.end;
 
@@ -1007,7 +1013,7 @@ var IC = {
 function typeIcon(t){ return IC[t] || IC.attraction; }
 var LS = { cfg:"gct.cfg", cache:"gct.cache", queue:"gct.queue", ui:"gct.ui", photos:"gct.photos",
            packing:"gct.packing", me:"gct.me", rescued:"gct.rescued1", trips:"gct.trips",
-           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin", binOK:"gct.binok", v:"gct.v" };
+           assignee:"gct.assignee", synced:"gct.synced", bin:"gct.bin", binOK:"gct.binok", v:"gct.v", trip0:"gct.trip0" };
 /* The backend version this app is built for. Every reply from Code.gs says
    which version it is (`v`; a backend from before that counts as 1), so the
    app knows what it can ask for and Settings can say when Code.gs needs
@@ -1387,6 +1393,11 @@ var store = {
           if(Array.isArray(d.checklist) && d.checklist.length){ self.supportsAssignee = "assignee" in d.checklist[0]; save(LS.assignee, self.supportsAssignee); }
           // An older backend sends no trips, cities or day names: keep this phone's
           self.supportsTrips = Array.isArray(d.trips); save(LS.trips, self.supportsTrips);
+          if(self.supportsTrips && d.trips.length){
+            var dt=d.trips.filter(function(t){ return t.id===(d.default_trip||""); })[0] ||
+                   d.trips.filter(function(t){ return t.is_default && !/^(0|false)$/i.test(String(t.is_default)); })[0] || d.trips[0];
+            save(LS.trip0, dt);
+          }
           self.supportsBin = Array.isArray(d.bin); save(LS.binOK, self.supportsBin);
           self.raw = { bookings:d.bookings||[], locations:d.locations||[], schedule:d.schedule||[],
                        checklist:ck.items,
@@ -1533,13 +1544,27 @@ var packing = {
    A row's trip_id says which trip it belongs to, and a blank one means the
    default trip, which is how every row written before trips existed reads.
    ========================================================================== */
+/* The one trip there is while the Sheet lists none: the default trip as this
+   phone last knew it (kept in LS.trip0 on every sync that brings trips), or
+   else a trip spanning the dates the plan and its bookings use. */
+function firstTrip(){
+  var ok=/^\d{4}-\d{2}-\d{2}$/, saved=load(LS.trip0, null);
+  if(saved && saved.id && ok.test(saved.start||"") && ok.test(saved.end||"")) return saved;
+  var raw=store.raw||{}, dates=[];
+  (raw.schedule||[]).forEach(function(s){ dates.push(String(s.date||"")); });
+  (raw.bookings||[]).forEach(function(b){ dates.push(String(b.date||""), String(b.arr_date||"")); });
+  dates=dates.filter(function(d){ return ok.test(d); }).sort();
+  return dates.length ? blankTrip(dates[0], dates[dates.length-1]) : blankTrip();
+}
 function allTrips(){
+  var first=null;
   var list=((store.raw && store.raw.trips) || []).filter(function(t){ return t && t.id; }).map(function(t){
-    var o=Object.assign({}, t.id===LEGACY_TRIP.id ? LEGACY_TRIP : {});
+    if(!first) first=firstTrip();
+    var o=Object.assign({}, t.id===first.id ? first : {});
     Object.keys(t).forEach(function(k){ var v=t[k]==null?"":String(t[k]).trim(); if(v || !(k in o)) o[k]=v; });
     return o;
   }).filter(function(t){ return /^\d{4}-\d{2}-\d{2}$/.test(t.start) && /^\d{4}-\d{2}-\d{2}$/.test(t.end); });
-  return list.length ? list : [LEGACY_TRIP];
+  return list.length ? list : [first || firstTrip()];
 }
 function defaultTripId(){
   // The backend says which trip blank rows belong to — it may be one this key
