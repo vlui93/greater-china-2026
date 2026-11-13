@@ -323,7 +323,7 @@ function bookingForm(id, presetType){
       '<div class="hint" id="b_paste_status">Read on this phone — nothing is sent anywhere. Check each field before saving.</div></div>' : '<div style="height:12px"></div>')+
     '<div class="grid2"><div class="field"><label>Type</label><select id="b_type">'+types.map(function(t){
         return '<option'+(b.type===t?" selected":"")+'>'+t+'</option>'; }).join("")+'</select></div>'+
-      f("b_number","Flight no.",b.number,' autocapitalize="characters" placeholder="CX138"',"mv")+'</div>'+
+      f("b_number","Flight no.",b.number,' autocapitalize="characters" placeholder="XY123"',"mv")+'</div>'+
     '<div class="grid2 mv">'+f("b_from","From",b.from_place,' placeholder="SYD, or a station"')+f("b_to","To",b.to_place,' placeholder="HKG"')+'</div>'+
     '<div class="grid2">'+f("b_date","Departs",b.date,' type="date"')+f("b_time","Time",hhmm(b.time)||"",' type="time"')+'</div>'+
     '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="b_open"'+(isOpenTime(b.time)?" checked":"")+'> '+

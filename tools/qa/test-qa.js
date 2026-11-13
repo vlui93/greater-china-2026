@@ -64,6 +64,34 @@ ok(mail.status === 1 && /personal email/.test(mail.stdout), 'scan catches a pers
 const allowed = probe('const order = "12345678901"; // qa-allow: invented\n// npm: opencc-js@1.4.2, noreply@anthropic.com\n');
 ok(!/probe/.test(allowed.stdout.split('\n').filter(l => /scan-probe/.test(l)).join('')), 'qa-allow, package@version and noreply addresses are not flagged');
 
+// Privacy scan: names from the Sheet as read on this machine (invented reads, in a temp folder)
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-scan-')), reads = path.join(dir, 'reads', 'TEST-SHEET'), names = path.join(dir, 'names.json');
+  fs.mkdirSync(reads, { recursive: true });
+  const put = (tab, values) => fs.writeFileSync(path.join(reads, tab + '.json'), JSON.stringify({ t: '2030-01-01T00:00:00Z', range: tab + '!A1:Z9', values }));
+  put('Locations', [['id', 'name_en', 'name_zh', 'notes'], ['zq-invented-lookout', 'Invented Lookout Point', '虚构观景台', 'a private note that must not be copied']]);
+  put('Bookings', [['id', 'type', 'description', 'confirmation_no'], ['bk-01', 'flight', 'Nowhere to Elsewhere, invented airline', 'ZQ7Q7Z']]);
+  put('Members', [['id', 'name', 'key'], ['mem-1', 'Zedd', 'm-' + 'f'.repeat(64)]]);
+  put('Checklist', [['id', 'text', 'done_by', 'assignee'], ['ck-1', 'Buy travel insurance', 'Quillon', 'Zedd, Quillon']]);
+  const scan = text => { fs.writeFileSync(tmp, text); try { spawnSync('git', ['add', '-N', tmp], { cwd: ROOT });
+      return spawnSync(process.execPath, [path.join(__dirname, 'trip-scan.js')], { encoding: 'utf8', cwd: ROOT, env: Object.assign({}, process.env, { QA_SCAN_READS: path.join(dir, 'reads'), QA_SCAN_NAMES: names }) }); }
+    finally { spawnSync('git', ['rm', '--cached', '-q', '-f', tmp], { cwd: ROOT }); fs.unlinkSync(tmp); } };
+  const hit = (r, why) => r.stdout.split('\n').filter(l => /scan-probe/.test(l) && l.includes(why)).length;
+  let r = scan('const a = "zq-invented-lookout";\nconst b = "虚构观景台";\nconst c = "ref ZQ7Q7Z";\n// thanks Quillon\n');
+  ok(r.status === 1 && hit(r, 'Sheet Locations.id') === 1 && hit(r, 'Sheet Locations.name_zh') === 1 && hit(r, 'Sheet Bookings.confirmation_no') === 1 && hit(r, "a person's name") === 1,
+     'scan catches a place id, a Chinese place name, a booking reference and a person\'s name taken from Sheet reads');
+  ok(!/zq-invented-lookout|虚构观景台|ZQ7Q7Z|Quillon/.test(r.stdout), 'and reports where, without printing the name itself');
+  ok(/names from the Sheet as read on this machine/.test(r.stdout), 'the summary says the Sheet reads were used');
+  const kept = fs.readFileSync(names, 'utf8');
+  ok(!kept.includes('f'.repeat(64)) && !kept.includes('private note') && !kept.includes('Buy travel insurance'), 'keys, notes and checklist text are never copied into the kept list');
+  r = scan('const who = "Zeddington"; const n = "Buy travel insurance"; const x = "bk-01";\n');
+  ok(!hit(r, 'Sheet'), 'a name inside a longer word, checklist text and plain numbering are not flagged');
+  fs.rmSync(path.join(dir, 'reads'), { recursive: true, force: true });
+  r = scan('const a = "zq-invented-lookout";\n');
+  ok(r.status === 1 && hit(r, 'Sheet Locations.id') === 1, 'names stay known after the reads themselves are gone');
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // Plan check: the scheduling rules from the first trip, on an invented plan
 {
   const P = (id, type, notes) => ({ id, name_en: 'Place ' + id, name_zh: '地' + id, city: 'Testville', type, lat: '1', lng: '2', nav_app: 'amap', notes: notes || '' });

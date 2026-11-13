@@ -17,6 +17,7 @@ Each rule below exists because the mistake behind it actually happened. The same
   - Tests use the invented trip in `tests/e2e/fixtures/`. *(Day titles once sat in the app code. A real booking reference was once copied into a QA test as an "example". A person's name went into the README.)*
 - `tools/qa/trip-scan.js` checks every file git would commit:
   - against the real trip data when `src/seed.json` is present;
+  - against names from the Sheet itself, once this machine has read it: ids, place names, booking descriptions and references, people's names. The Sheet gate keeps each read; the scan remembers the names in `.qa/scan-names.local.json` (gitignored). **In a new session, before the first commit, read `Locations!A1:C400` and `Bookings!A1:F200`** so the scan has them. *(Without them the scan missed a real flight number used as a placeholder for months.)*
   - against `.qa/private-words.local.txt` (gitignored: names, emails);
   - against itinerary shapes, emails and 10+ digit numbers.
   - Mark a genuine false positive with `qa-allow` and the reason on that line. Never loosen the scan to get a pass.
