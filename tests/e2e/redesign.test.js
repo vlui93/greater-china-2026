@@ -29,7 +29,7 @@ suite({}, async (env) => {
   ok(await A.$eval('.daychip.trip', e => e.getAttribute('aria-current')) === 'true', 'Trip chip selected');
   await A.click('button.daychip[data-date="2026-10-19"]'); await wait(250);
   ok(await A.$('#view-today .triphero') === null && /Day 4 · 第4天/.test(await A.textContent('#viewTitle')), 'day chip opens the day: ' + await A.textContent('#viewTitle'));
-  await A.click('nav.tabs button[data-view="prep"]'); await wait(150);
+  await env.go(A, 'prep'); await wait(150);
   await A.click('nav.tabs button[data-view="today"]'); await wait(150);
   ok(await A.$('#stopList') !== null, 'Home stays on that day while the app is open');
   await A.click('.daychip.trip'); await wait(200);

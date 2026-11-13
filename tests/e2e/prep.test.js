@@ -18,7 +18,7 @@ suite({}, async (env) => {
   ok(new RegExp(nPlaces+' places').test(t1) && new RegExp(nCk+' checklist').test(t1) && new RegExp(nPk+' packing').test(t1) && new RegExp(nMiss+' places not on this phone').test(t1), 'toast: "'+t1+'"');
 
   console.log('\n2. Prep → Checklist');
-  await page.click('nav.tabs button[data-view="prep"]'); await wait(250);
+  await env.go(page, 'prep'); await wait(250);
   const heads=await page.$$eval('#view-prep .ckhead .ckslide > :first-child', e=>e.map(x=>x.textContent));
   ok(heads[0]==='Next up' && heads.includes('Bookings') && heads.includes('Documents'), 'sections: '+heads.join(' / '));
   const firstDue=await page.$eval('#view-prep .ckgroup .due', e=>e.textContent);
@@ -41,7 +41,7 @@ suite({}, async (env) => {
   ok(!(await page.$('.ckbox[data-id="ck-35"]')), 'deleted item hidden');
   await page.click('#btnSettings'); await wait(200);
   await page.setInputFiles('#importFile', fixturePath('trip-notes.json')); await wait(400);
-  await page.click('nav.tabs button[data-view="prep"]'); await wait(200);
+  await env.go(page, 'prep'); await wait(200);
   ok(!(await page.$('.ckbox[data-id="ck-35"]')) && await page.getAttribute('.ckbox[data-id="ck-01"]','aria-checked')==='true',
      're-import: deleted stays deleted, tick stays ticked');
 
@@ -96,7 +96,7 @@ suite({}, async (env) => {
   await page.click('#btnSettings'); await wait(200); page.once('dialog',d=>d.accept());
   await page.click('[data-act="reset-local"]'); await wait(900);
   ok(await page.evaluate(()=>store.data.checklist.length)>=nCk, 'checklist survives "Reset this phone"');
-  await page.click('nav.tabs button[data-view="prep"]'); await page.click('[data-act="prep-tab"][data-v="guide"]'); await wait(200);
+  await env.go(page, 'prep'); await page.click('[data-act="prep-tab"][data-v="guide"]'); await wait(200);
   ok((await page.$$('.guide .card')).length===6, 'guide: 6 sections');
   await page.screenshot({path:env.out('prep-guide.png')});
   await page.click('[data-act="prep-tab"][data-v="checklist"]'); await wait(200);

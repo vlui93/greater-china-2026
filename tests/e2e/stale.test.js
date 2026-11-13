@@ -29,7 +29,7 @@ suite({}, async (env) => {
   ok(/^Last synced with the Sheet 13 h ago — changes the others made since then aren't on this phone\./.test(b13), 'after 13 hours: "' + b13 + '"');
   ok(/Sync now/.test(b13), 'with a Sync now button');
   await page.screenshot({ path: env.out('stale.png') });
-  await page.click('[data-view="prep"]'); await wait(300);
+  await env.go(page, 'prep'); await wait(300);
   ok(/13 h ago/.test(await bar('#view-prep .stalebar')), 'the other tabs show it too');
   await page.click('[data-view="today"]'); await wait(300);
   await backAt(t0 + 74 * H);

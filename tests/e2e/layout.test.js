@@ -30,6 +30,8 @@ suite({}, async (env) => {
     };
     await check('Home, a day', () => { closeSheet(); homeMode = 'day'; ui.day = '2026-10-18'; setView('today'); });
     await check('Home, trip overview', () => { closeSheet(); homeMode = 'trip'; setView('today'); });
+    await check('Home, trip overview with the plan notes', () => { closeSheet(); homeMode = 'trip'; setView('today'); document.querySelector('#view-today').insertAdjacentHTML('beforeend', planNotesHTML()); });
+    await check('Trip hub', () => { closeSheet(); setView('trip'); });
     await check('All Days', () => { closeSheet(); setView('days'); });
     await check('Locations', () => { closeSheet(); setView('places'); });
     await check('Bookings', () => { closeSheet(); setView('bookings'); });

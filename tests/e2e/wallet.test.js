@@ -29,7 +29,7 @@ suite({}, async (env) => {
   ok(href === 'https://example.com/orders/hsr-123 _blank noopener', 'card now opens it: ' + href);
   ok(new RegExp('1 of ' + nTravel + ' linked').test(await A.textContent('#view-today')), 'count updates');
 
-  await A.click('nav.tabs button[data-view="bookings"]'); await wait(200);
+  await env.go(A, 'bookings'); await wait(200);
   ok(await A.$('.bk[data-bid="fx-bk-03"] .pill.ok') !== null, 'Bookings list marks it');
   await A.click('.bk[data-bid="fx-bk-03"] .bk-head'); await wait(150);
   ok(await A.$('.bk[data-bid="fx-bk-03"] .bk-acts a[href="https://example.com/orders/hsr-123"]') !== null, 'and opens it from the booking');
@@ -60,7 +60,7 @@ suite({}, async (env) => {
   ok(await A.$('.brief a.tklink[href="https://example.com/panda-entry"]') !== null, 'and the day briefing links it');
 
   console.log('\n6. removing');
-  await A.click('nav.tabs button[data-view="bookings"]'); await wait(150);
+  await env.go(A, 'bookings'); await wait(150);
   await A.click('.bk[data-bid="fx-bk-03"] .bk-head'); await wait(150);
   A.answers.push('');
   await A.click('.bk[data-bid="fx-bk-03"] [data-act="bk-ticket"]'); await wait(400);

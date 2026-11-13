@@ -26,12 +26,12 @@ suite({}, async (env) => {
   const size = fs.statSync(path.join(__dirname, '..', '..', 'index.html')).size;
   ok(size < 240 * 1024, 'index.html is ' + Math.round(size / 1024) + 'KB (it was 318KB with everything in it)');
 
-  await page.click('nav.tabs [data-view="prep"]'); await wait(500);
+  await env.go(page, 'prep'); await wait(500);
   ok(await loaded() === 'prep' && /To do|Packing/.test(await page.textContent('#view-prep')), 'opening Prep loads prep.js and shows the tab');
   ok((await page.textContent('#view-prep .syncbadge')).trim().length > 0, 'with its sync badge filled in');
-  await page.click('nav.tabs [data-view="today"]'); await page.click('nav.tabs [data-view="prep"]'); await wait(300);
+  await page.click('nav.tabs [data-view="today"]'); await env.go(page, 'prep'); await wait(300);
   ok(await tags() === 'prep.js', 'the second time it is already there (loaded once)');
-  await page.click('nav.tabs [data-view="bookings"]'); await wait(500);
+  await env.go(page, 'bookings'); await wait(500);
   ok(await loaded() === 'prep,bookings' && await page.$$eval('#view-bookings .bk', e => e.length) === T.bookings.length, 'Bookings loads bookings.js and lists the ' + T.bookings.length + ' bookings');
   ok((await page.textContent('#view-bookings .syncbadge')).trim().length > 0, 'and its sync badge is filled in, though the tab was drawn late: "' + (await page.textContent('#view-bookings .syncbadge')).trim() + '"');
   await page.click('#btnSettings'); await wait(500);
@@ -56,13 +56,13 @@ suite({}, async (env) => {
   const p3 = await env.phone({ context: { serviceWorkers: 'block' }, before: async ctx => {
     await ctx.route(/\/prep\.js(\?.*)?$/, route => block === 'prep' ? route.abort('internetdisconnected') : route.fallback()); } });
   block = 'prep';
-  await p3.click('nav.tabs [data-view="prep"]'); await wait(500);
+  await env.go(p3, 'prep'); await wait(500);
   ok(/Couldn't load that screen/.test(await p3.textContent('#toast')), 'toast: "' + (await p3.textContent('#toast')).trim() + '"');
   ok(!p3.errs.length, 'and no JS error');
   await p3.click('nav.tabs [data-view="today"]'); await wait(200);
   ok(await p3.isVisible('#view-today') && await p3.$$eval('#view-today *', e => e.length) > 5, 'the rest of the app carries on');
   block = null;
-  await p3.click('nav.tabs [data-view="prep"]'); await wait(500);
+  await env.go(p3, 'prep'); await wait(500);
   ok(/To do|Packing/.test(await p3.textContent('#view-prep')), 'and Prep opens on the next try');
 
   console.log('\n5. with no signal, from what the service worker kept');
@@ -72,9 +72,9 @@ suite({}, async (env) => {
   await p4.ctx.setOffline(true);
   await p4.reload(); await wait(900);
   ok(await p4.evaluate(() => store.data.locations.length) === T.locations.length, 'the app opens offline');
-  await p4.click('nav.tabs [data-view="prep"]'); await wait(600);
+  await env.go(p4, 'prep'); await wait(600);
   ok(/To do|Packing/.test(await p4.textContent('#view-prep')), 'Prep opens offline');
-  await p4.click('nav.tabs [data-view="bookings"]'); await wait(600);
+  await env.go(p4, 'bookings'); await wait(600);
   ok(await p4.$$eval('#view-bookings .bk', e => e.length) === T.bookings.length, 'Bookings opens offline');
   await p4.click('#btnSettings'); await wait(600);
   ok(/Web App URL/.test(await p4.textContent('#sheetBody')), 'Settings opens offline');

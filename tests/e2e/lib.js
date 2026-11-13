@@ -205,6 +205,8 @@ async function setup(opts) {
     }
     return page;
   };
+  /** To Prep or Bookings the way a person gets there: the Trip tab, then its row. */
+  env.go = async (page, view) => { await page.click('nav.tabs button[data-view="trip"]'); await page.click('#view-trip [data-act="go"][data-v="' + view + '"]'); };
   env.importFile = async (page, file, ms) => {
     await page.click('#btnSettings'); await env.wait(200);
     await page.setInputFiles('#importFile', file); await env.wait(ms || 600);

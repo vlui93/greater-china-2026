@@ -34,7 +34,7 @@ const probe = () => {
   tmp.remove();
   const r = nav.getBoundingClientRect(), vw = innerWidth, vh = innerHeight;
   const head = getComputedStyle(document.querySelector('header.top')), fade = getComputedStyle(document.querySelector('header.top'), '::before');
-  const btn = document.querySelector('.iconbtn'), bcs = getComputedStyle(btn);
+  const btn = document.querySelector('#btnSettings'), bcs = getComputedStyle(btn);   // the header's round button that is always shown
   return {
     alpha: glass[3], pillAlpha: pill[3], worst,
     blur: cs.backdropFilter || cs.webkitBackdropFilter, radius: parseFloat(cs.borderTopLeftRadius), h: r.height,

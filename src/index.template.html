@@ -735,7 +735,29 @@ nav.tabs{
 nav.tabs button{height:calc(var(--nav-h) - 12px); border-radius:var(--r-capsule); color:var(--ink-2);
   transition:background .18s ease,color .18s ease}
 nav.tabs button[aria-selected="true"]{background:var(--glass-pill); color:var(--brand-ink)}
+nav.tabs{grid-template-columns:repeat(4,1fr)}
 nav.tabs .tz{opacity:1}
+/* Chinese under each tab name only for a trip that uses Chinese */
+.nozh nav.tabs .tz.zh{display:none}
+.iconbtn[hidden]{display:none}   /* display:grid would otherwise beat the hidden attribute */
+.nozh nav.tabs button{gap:3px}
+/* The Trip tab: a hub of the screens that aren't the day-to-day ones */
+.hub{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.hubrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;min-height:64px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.hubrow:active{background:var(--surface-2)}
+.hubrow .hi{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;
+  background:color-mix(in srgb,var(--brand) 12%,var(--surface));color:var(--brand)}
+.hubrow .hb{flex:1;min-width:0}
+.hubrow .ht{font-weight:680;font-size:16px}
+.hubrow .hs{font-size:13px;color:var(--ink-3);margin-top:2px}
+.hubrow .hs.warn{color:var(--warn)}
+.hubrow .rowend{color:var(--ink-3);flex:none}
+.plannotes{padding:4px 14px}
+.plannotes .pn{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;padding:10px 0;border-top:1px solid var(--line);font-size:14px;line-height:1.4}
+.plannotes .pn:first-child{border-top:0}
+.plannotes .pn b{font-weight:650}
+.plannotes .pn .pd{color:var(--ink-3);font-size:13px;display:block}
 /* The header: no hairline. The page fades and blurs out under it instead. */
 header.top,.sheet-top{background:transparent; border-bottom:0; -webkit-backdrop-filter:none; backdrop-filter:none}
 header.top::before,.sheet-top::before{
@@ -777,6 +799,7 @@ header.top::before,.sheet-top::before{
 <div id="app">
   <header class="top">
     <div class="top-row">
+      <button class="iconbtn" id="btnHub" aria-label="Back to Trip" hidden></button>
       <div style="flex:1;min-width:0">
         <h1 id="viewTitle">Today</h1>
         <div class="sub" id="viewSub"></div>
@@ -790,6 +813,7 @@ header.top::before,.sheet-top::before{
     <section id="view-places" hidden></section>
     <section id="view-bookings" hidden></section>
     <section id="view-prep" hidden></section>
+    <section id="view-trip" hidden></section>
   </main>
 </div>
 
@@ -816,10 +840,9 @@ header.top::before,.sheet-top::before{
 
 <nav class="tabs" id="tabs" role="tablist">
   <button role="tab" data-view="today" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.2v5.1l3.3 2"/></svg><span>Home</span><span class="tz zh">首页</span></button>
-  <button role="tab" data-view="days" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5" width="16.8" height="15.2" rx="2.6"/><path d="M3.6 9.6h16.8M8.4 3.4v3.4M15.6 3.4v3.4"/></svg><span>All Days</span><span class="tz zh">行程</span></button>
-  <button role="tab" data-view="places" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.2s6.6-6 6.6-10.7a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.2 12 21.2Z"/><circle cx="12" cy="10.3" r="2.5"/></svg><span>Locations</span><span class="tz zh">地点</span></button>
-  <button role="tab" data-view="bookings" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.8" y="5.6" width="18.4" height="12.8" rx="2.4"/><path d="M2.8 10.2h18.4M7 14.6h4"/></svg><span>Bookings</span><span class="tz zh">预订</span></button>
-  <button role="tab" data-view="prep" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.6" y="3.8" width="14.8" height="17" rx="2.4"/><path d="m8.2 9.4 1.6 1.6 3-3M8.2 15.4l1.6 1.6 3-3M14.6 10h1.6M14.6 16h1.6"/></svg><span>Prep</span><span class="tz zh">准备</span></button>
+  <button role="tab" data-view="days" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5" width="16.8" height="15.2" rx="2.6"/><path d="M3.6 9.6h16.8M8.4 3.4v3.4M15.6 3.4v3.4"/></svg><span>Days</span><span class="tz zh">行程</span></button>
+  <button role="tab" data-view="places" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.2s6.6-6 6.6-10.7a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.2 12 21.2Z"/><circle cx="12" cy="10.3" r="2.5"/></svg><span>Places</span><span class="tz zh">地点</span></button>
+  <button role="tab" data-view="trip" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.4" y="7.6" width="17.2" height="12.4" rx="2.6"/><path d="M9 7.6V5.8a1.8 1.8 0 0 1 1.8-1.8h2.4A1.8 1.8 0 0 1 15 5.8v1.8M3.4 12.6h17.2"/></svg><span>Trip</span><span class="tz zh">旅程</span></button>
 </nav>
 
 <div class="sheet" id="sheet" role="dialog" aria-modal="true">
@@ -1060,6 +1083,7 @@ var IC = {
   info:  ic('<circle cx="12" cy="12" r="8.6"/><path d="M12 11.3v5M12 7.9h.01"/>'),
   plus:  ic('<path d="M12 5.6v12.8M5.6 12h12.8"/>'),
   check: ic('<path d="m5.8 12.4 4 4 8.4-8.6"/>'),
+  people: ic('<circle cx="9" cy="9" r="3.2"/><path d="M3.4 19c.6-3.2 2.9-5 5.6-5s5 1.8 5.6 5M16.2 6.2a3 3 0 0 1 0 5.6M17.4 14.4c1.8.6 3 2.2 3.4 4.6"/>'),
   mag:   ic('<circle cx="10.6" cy="10.6" r="6.4"/><path d="m15.4 15.4 4.2 4.2"/>'),
   pen:   ic('<path d="M4.5 19.5h3.2L18.9 8.3a2.2 2.2 0 0 0-3.2-3.2L4.5 16.3z"/><path d="m14.6 6.2 3.2 3.2"/>'),
   nav:   ic('<path d="M20.6 3.4 3.9 10.6a.55.55 0 0 0 .04 1.02l6.6 2.2 2.2 6.6a.55.55 0 0 0 1.02.04z"/>', 'fill'),
@@ -1640,6 +1664,7 @@ function applyTrip(){
   packing.load();
   var script = TRIP.zh_script || (tripHasChina() ? "simplified" : "original");
   ZH_SIMPLIFY = script==="simplified";
+  document.body.classList.toggle("nozh", !tripHasChina());
   if(!ui.day || DAYS.indexOf(ui.day)<0) ui.day = defaultDay();
   // Opening the app (or another trip) during the trip lands on today's plan
   if(applyTrip.open!==cur){
@@ -1950,14 +1975,19 @@ function staleText(){
   return "Last synced with the Sheet "+ago+" ago — changes the others made since then aren't on this phone.";
 }
 
+/* Four tabs: Home, Days, Places and Trip. Prep and Bookings are screens of
+   the Trip tab: reached from its hub, with a way back in the header. */
+var VIEWS = ["today","days","places","bookings","prep","trip"], HUB_VIEWS = { trip:1, prep:1, bookings:1 };
 function setView(v){
+  if(VIEWS.indexOf(v)<0) v="today";
   ui.view=v; save(LS.ui,ui);
-  ["today","days","places","bookings","prep"].forEach(function(name){
+  VIEWS.forEach(function(name){
     $("#view-"+name).hidden = (name!==v);
   });
   document.querySelectorAll("nav.tabs button").forEach(function(b){
-    b.setAttribute("aria-selected", String(b.dataset.view===v));
+    b.setAttribute("aria-selected", String(b.dataset.view===v || (b.dataset.view==="trip" && !!HUB_VIEWS[v])));
   });
+  $("#btnHub").hidden = !(v==="prep" || v==="bookings");
   window.scrollTo(0,0);
   render();
 }
@@ -1985,6 +2015,7 @@ function render(){
   if(ui.view==="today")    renderDay();
   if(ui.view==="days")     renderDays();
   if(ui.view==="places")   renderPlaces();
+  if(ui.view==="trip")     renderHub();
   // These two live in their own files; the first time, the screen is drawn
   // once its file has arrived (see PARTS), and the status badge after it.
   if(ui.view==="bookings") later=renderBookings();
@@ -2569,6 +2600,80 @@ function autoDayLabel(date){
   if(here && cs.length===1 && cs[0]!==here) return cs[0]+" day trip";
   return cs.join(" · ");
 }
+/* ==========================================================================
+   The Trip tab. A hub for the screens that aren't used hour to hour on the
+   road: Prep, Bookings, People, Settings. Each row says where things stand.
+   ========================================================================== */
+function hubRow(act, attrs, icon, title, status, warn){
+  return '<button class="hubrow" data-act="'+act+'"'+(attrs||"")+'><span class="hi">'+icon+'</span>'+
+    '<span class="hb"><span class="ht">'+title+'</span><span class="hs'+(warn?" warn":"")+'" style="display:block">'+status+'</span></span>'+
+    '<span class="rowend">'+IC.chev+'</span></button>';
+}
+function prepStatus(){
+  var t=store.data.checklist.filter(function(i){ return i.kind==="task" && !i.removed; });
+  if(!t.length) return { text:"No checklist yet", warn:false };
+  var done=t.filter(function(i){ return i.done; }).length, today=todayISO();
+  var late=t.filter(function(i){ return !i.done && i.due && i.due<today; }).length;
+  return { text:done+" of "+t.length+" tasks done"+(late ? " · "+late+" overdue" : ""), warn:late>0 && tripPhase()==="before" };
+}
+function bookingsStatus(){
+  var b=store.data.bookings, nb=nextBooking();
+  if(!b.length) return "None yet";
+  return b.length+" booking"+(b.length===1?"":"s")+(nb && bookingWhen(nb)>Date.now() ? " · next "+fmtDate(nb.date,false) : "");
+}
+function renderHub(){
+  $("#viewTitle").textContent = tripHasChina() ? "Trip · 旅程" : "Trip";
+  $("#viewSub").textContent = TRIP.name+" · "+tripRange();
+  var ps=prepStatus(), me=whoAmI(), others=allTrips().length-1;
+  var rows=hubRow("go",' data-v="prep"', IC.check, "Prep", esc(ps.text), ps.warn)+
+    hubRow("go",' data-v="bookings"', BK_ICON.train, "Bookings", esc(bookingsStatus()));
+  if(store.configured() && store.raw.me)
+    rows+=hubRow(me.owner ? "people" : "settings", "", IC.people, "People",
+      me.owner ? "Who can see which trip" : "Signed in as "+esc(me.name||"a guest")+(me.role==="viewer" ? " · view only" : ""));
+  rows+=hubRow("settings", "", IC.gear, "Settings",
+    esc(others>0 ? "Connection, "+(others+1)+" trips, cities, this phone" : "Connection, trips, cities, this phone"));
+  $("#view-trip").innerHTML = statusBar()+'<div class="hub">'+rows+'</div>';
+}
+
+/* What stands out in the plan before leaving: days with nothing on them, heavy
+   days back to back, and days with no meal planned. The rules are the ones in
+   tools/qa/plan-check.js, kept to what a traveller would act on. A day is
+   heavy when its name says so, when it has a flight, train or ferry and three
+   or more stops, or when a stop's notes say day trip, altitude, full day, all
+   day or early start; a name with "light" or "flex" overrides. */
+var HEAVY_WORDS = /day trip|altitude|full day|all day|early start/i;
+function planNotes(){
+  var out=[], run=[], firstDay=DAYS[0], lastDay=DAYS[DAYS.length-1];
+  var flush=function(){ if(run.length>=2) out.push({ date:run[0], kind:"heavy",
+    text:run.length+" heavy days in a row", detail:fmtDate(run[0],false)+" to "+fmtDate(run[run.length-1],false)+" — put a lighter day between" }); run=[]; };
+  DAYS.forEach(function(d){
+    var label=String((store.raw.days||[]).filter(function(x){ return x.date===d && tripOf(x)===TRIP.id; }).map(function(x){ return x.label; })[0]||"");
+    var planned=store.dayStops(d).filter(function(s){ return !isOptionalStop(s); });
+    var stops=planned.filter(function(s){ var l=store.loc(s.location_id); return l && l.type!=="hotel"; });
+    var meals=planned.filter(function(s){ var l=store.loc(s.location_id); return l && l.type==="restaurant"; });
+    var moves=store.data.bookings.filter(function(b){ return b.date===d && MOVE_TYPES[b.type]; });
+    var heavy=/heavy/i.test(label) || (moves.length && stops.length>=3) ||
+      planned.some(function(s){ var l=store.loc(s.location_id); return HEAVY_WORDS.test((s.notes||"")+" "+((l && l.notes)||"")); });
+    if(/light|flex/i.test(label)) heavy=false;
+    var flex=/flex|rest|free/i.test(label);
+    if(heavy) run.push(d); else flush();
+    if(!stops.length && !moves.length && !flex && d!==firstDay && d!==lastDay)
+      out.push({ date:d, kind:"empty", text:"Nothing planned", detail:"Day "+dayNumber(d)+" · "+fmtDate(d,false) });
+    else if(stops.length && !moves.length && !flex && meals.length<2)
+      out.push({ date:d, kind:"meal", text:meals.length ? "Only one meal planned" : "No meals planned", detail:"Day "+dayNumber(d)+" · "+fmtDate(d,false) });
+  });
+  flush();
+  return out.sort(function(a,b){ return a.date<b.date ? -1 : a.date>b.date ? 1 : 0; });
+}
+function planNotesHTML(){
+  var n=planNotes(); if(!n.length) return "";
+  var MAXN=6, more=n.length-MAXN;
+  return '<div class="h2">The plan<span class="zh">行程</span><span class="more" style="font-weight:600">'+n.length+' to look at</span></div>'+
+    '<div class="card plannotes">'+n.slice(0,MAXN).map(function(x){
+      return '<button class="pn" data-act="day" data-date="'+esc(x.date)+'"><span><b>'+esc(x.text)+'</b><span class="pd">'+esc(x.detail)+'</span></span></button>';
+    }).join("")+(more>0 ? '<button class="pn" data-act="go" data-v="days"><span class="pd">and '+more+' more — see Days</span></button>' : '')+'</div>';
+}
+
 function tripRange(){ return rangeText(TRIP_START, TRIP_END); }
 function rangeText(start, end){
   var first=parseISO(start), last=parseISO(end);
@@ -2697,7 +2802,7 @@ function renderTrip(){
         '<span>An attraction, a show, a tour — or an open return</span></button></div>';
   }
 
-  $("#view-today").innerHTML = statusBar()+dayStrip(null)+hero+next+route+tiles+wallet+prep;
+  $("#view-today").innerHTML = statusBar()+dayStrip(null)+hero+next+route+tiles+wallet+prep+(phase==="before" ? planNotesHTML() : "");
 }
 
 function renderDays(){
@@ -3786,6 +3891,8 @@ $("#placesFile").addEventListener("change", function(){ var f=this.files && this
 $("#btnSettings").innerHTML = IC.gear;
 $("#sheetBack").innerHTML = IC.back;
 $("#btnSettings").addEventListener("click", settingsForm);
+$("#btnHub").innerHTML = IC.back;
+$("#btnHub").addEventListener("click", function(){ setView("trip"); });
 $("#sheetBack").addEventListener("click", closeSheet);
 document.querySelectorAll("nav.tabs button").forEach(function(b){
   b.addEventListener("click", function(){ setView(b.dataset.view); });

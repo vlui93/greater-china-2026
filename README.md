@@ -128,6 +128,10 @@ If you ever need to re-enable it: **Settings → Pages → Source: Deploy from a
 
 ## 4. Using it
 
+**Four tabs: Home, Days, Places, Trip.** Home and Places are the ones for the road. **Trip** is a hub for the rest — **Prep**, **Bookings**, **People** and **Settings** — and each row says where things stand (*4 of 12 tasks done · 1 overdue*, *9 bookings · next Fri 16 Oct*). Prep and Bookings open from it, with a back button in the header. The Chinese under each tab name shows only for a trip that uses Chinese.
+
+**Before the trip, Home also lists what to look at in the plan** (*The plan*): days with nothing on them, heavy days back to back, and days with fewer than two meals. A day counts as heavy when its name says *heavy*, when it has a flight, train or ferry plus three or more stops, or when a stop's notes mention a day trip, altitude, a full or all day, or an early start. Naming a day *light* or *flex* (rename it in Days) overrides that; a *flex*, *rest* or *free* day isn't flagged for being empty. Tap a line to open that day. The same rules, in full, are `tools/qa/plan-check.js`.
+
 **Home.** Before and after the trip, Home opens on the **trip overview**: the cities, a countdown to departure and to the next booking, the route between hotel stays (worked out from the hotels on the schedule, with the train or flight between them from Bookings), counts of hotels, transport and things still to book, and checklist and packing progress. During the trip it opens on today. The chips along the top switch between the overview (*Trip 总览*) and any day.
 
 **Days.** Each stop is a card: tap the body for the full guide entry, tap the arrow to navigate. Stops are grouped into Morning, Afternoon, Evening and Any time by their planned time. A stop shows **Booked · 已订** or **To book · 待订** when the Prep checklist has a task for that place starting "Book", "Reserve" or "Arrange" — ticked or not. A place's page has **Nearby** buttons for coffee, food and toilets, which search around its pin in the same map app as its directions.
@@ -144,7 +148,7 @@ If you ever need to re-enable it: **Settings → Pages → Source: Deploy from a
 
 **Adding.** *+ Add a stop* picks from the places you already have. *+ New place* creates one — and the quickest way is to paste a map link into the box at the top. In Google Maps or Amap, tap **Share → Copy**, then tap **Paste** in the app. It fills in the name, city, map app, a best guess at the type, the address into notes, and the pin. Pins from the mainland come on the Chinese map grid (GCJ-02) and are moved back to GPS for you — usually 300–700 m. Hong Kong and Macau pins are left as they are. On the mainland, share from Amap rather than Google: Amap gives you the Chinese name, and Google usually only the English one. If the place is already on your list, it says so.
 
-Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the backend, since a page can't follow a redirect to another site; that needs the backend update in §9. Full links, and the Chinese name and address in Amap's share text, work without it — and a place with only a Chinese name still navigates, because the map app searches for it.
+Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the backend, since a page can't follow a redirect to another site;. Full links, and the Chinese name and address in Amap's share text, work without it — and a place with only a Chinese name still navigates, because the map app searches for it.
 
 **Search.** Works on both names, and on partial Chinese — two or three characters of a name is enough to find it, and the romanised English spelling finds it too. No need to type the whole thing either way.
 
