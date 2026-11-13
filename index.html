@@ -688,6 +688,89 @@ a.btn{text-decoration:none}
   #printView .pv{padding:0;border:0}
   @page{margin:14mm 12mm}
 }
+
+/* ---------- Glass: the layer that floats above the content ----------
+   The tab bar, the header, the round buttons and the toast are frosted: a
+   tinted, blurred surface with a light top edge and a soft shadow, in capsule
+   shapes, lifted off the screen edges. Content — cards, lists, forms — stays
+   solid, so text keeps its contrast. The tint (--glass) is strong enough that
+   the tab labels pass 4.5:1 over the darkest and the lightest thing that can
+   scroll underneath (the glass suite measures it). Reduce Transparency and
+   Increase Contrast get solid surfaces. A browser can't bend light the way
+   the system's own glass does; this is blur, tint, edge and shape. */
+:root{
+  --glass:color-mix(in srgb,var(--surface) 84%,transparent);
+  --glass-edge:rgba(255,255,255,.7);
+  --glass-line:color-mix(in srgb,var(--ink) 10%,transparent);
+  --glass-pill:color-mix(in srgb,var(--ink) 9%,transparent);
+  --glass-blur:saturate(180%) blur(22px);
+  --glass-shadow:0 1px 2px rgba(27,25,23,.06),0 10px 30px rgba(27,25,23,.16);
+  --glass-shadow-sm:0 1px 2px rgba(27,25,23,.06),0 4px 14px rgba(27,25,23,.10);
+  --brand-ink:#7f3d1e;                     /* the brand colour, dark enough for small text on glass */
+  --r-capsule:999px; --r-xl:28px;
+  --radius:20px; --radius-sm:14px;
+  --nav-h:62px;
+  --nav-gap:max(10px, calc(var(--safe-b) - 12px));   /* how far the tab bar floats above the bottom edge */
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --glass-edge:rgba(255,255,255,.12); --brand-ink:#f3c6a8;
+    --glass-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.5);
+    --glass-shadow-sm:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --glass-edge:rgba(255,255,255,.12); --brand-ink:#f3c6a8;
+  --glass-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.5);
+  --glass-shadow-sm:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.4);
+}
+#app{padding-bottom:calc(var(--nav-h) + var(--nav-gap) + 18px)}
+nav.tabs{
+  left:12px; right:12px; bottom:var(--nav-gap); max-width:520px; margin:0 auto;
+  padding:5px; border-radius:var(--r-capsule);
+  background:var(--glass); border:1px solid var(--glass-line);
+  -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur);
+  box-shadow:var(--glass-shadow), inset 0 1px 0 var(--glass-edge);
+}
+nav.tabs button{height:calc(var(--nav-h) - 12px); border-radius:var(--r-capsule); color:var(--ink-2);
+  transition:background .18s ease,color .18s ease}
+nav.tabs button[aria-selected="true"]{background:var(--glass-pill); color:var(--brand-ink)}
+nav.tabs .tz{opacity:1}
+/* The header: no hairline. The page fades and blurs out under it instead. */
+header.top,.sheet-top{background:transparent; border-bottom:0; -webkit-backdrop-filter:none; backdrop-filter:none}
+header.top::before,.sheet-top::before{
+  content:""; position:absolute; inset:0 0 -16px 0; z-index:-1; pointer-events:none;
+  background:linear-gradient(to bottom, color-mix(in srgb,var(--bg) 90%,transparent) 58%, transparent);
+  -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  -webkit-mask-image:linear-gradient(to bottom,#000 64%,transparent); mask-image:linear-gradient(to bottom,#000 64%,transparent);
+}
+.iconbtn{
+  background:var(--glass); border:1px solid var(--glass-line);
+  -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur);
+  box-shadow:var(--glass-shadow-sm), inset 0 1px 0 var(--glass-edge);
+}
+.btn,.btn.sm,.seg,.seg button{border-radius:var(--r-capsule)}
+/* A sheet stops short of the top, with round shoulders, and dims the page behind */
+.sheet{top:calc(var(--safe-t) + 10px); border-radius:var(--r-xl) var(--r-xl) 0 0;
+  box-shadow:0 0 0 100vmax rgba(10,8,6,.36)}
+.sheet-top{padding-top:10px}
+#toast{
+  bottom:calc(var(--nav-h) + var(--nav-gap) + 14px); border-radius:22px;
+  background:color-mix(in srgb,var(--ink) 88%,transparent);
+  -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur);
+  box-shadow:0 8px 28px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.14);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more){
+  :root{--glass:var(--surface)}
+  nav.tabs,.iconbtn,#toast{-webkit-backdrop-filter:none; backdrop-filter:none}
+  #toast{background:var(--ink)}
+  header.top::before,.sheet-top::before{-webkit-backdrop-filter:none; backdrop-filter:none; background:var(--bg);
+    -webkit-mask-image:none; mask-image:none; inset:0; border-bottom:1px solid var(--line)}
+}
+@media (prefers-contrast: more){
+  :root{--glass-line:var(--line-strong)}
+}
+@media print{ nav.tabs,#toast{display:none!important} }
 </style>
 </head>
 <body>
