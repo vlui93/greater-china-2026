@@ -61,5 +61,28 @@ suite({}, async (env) => {
   ok(named.length === 0, 'no shipped file carries the first trip\'s name or id' + (named.length ? ': ' + named.join(', ') : ''));
   const dated = shipped.filter(f => new RegExp(first + '|' + last).test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
   ok(dated.length === 0, 'or its first or last day' + (dated.length ? ': ' + dated.join(', ') : ''));
-  ok(!page.errs.length, 'no JS errors ' + page.errs.join('; '));
+
+  console.log('\n6. city facts come from the Sheet\'s Cities tab, not the app');
+  const built = shipped.filter(f => /LEGACY_CITIES|var TAXI\b/.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+  ok(built.length === 0, 'no shipped file carries a table of cities or taxi tariffs' + (built.length ? ': ' + built.join(', ') : ''));
+  const hk = await page.evaluate(() => { const c = cityInfo('Hong Kong'); return c && { tz: c.tz, region: c.region, flag: c.taxi && c.taxi.flag, app: mapAppFor('Hong Kong'), cn: mapAppFor('Guangzhou') }; });
+  ok(hk && hk.tz === 'Asia/Hong_Kong' && hk.region === 'hk' && hk.flag === 29 && hk.app === 'google' && hk.cn === 'amap', 'with the rows in the Sheet: time zone, region, taxi meter and map app as before');
+  env.box.post('saveCity', { id: 'city-hong-kong', flag: 31 });
+  await page.evaluate(() => store.sync({ quiet: true })); await wait(500);
+  ok(await page.evaluate(() => taxiFor('Hong Kong').flag) === 31, 'a tariff changed in the Sheet is the tariff the app uses');
+  // a Sheet with no city rows at all
+  env.tab('Cities').d.splice(1);
+  const bare = await env.phone({ trip0: false, clock: '2026-10-18T09:00:00+08:00', clockMode: 'install' });
+  ok(await bare.evaluate(() => cityInfo('Hong Kong') === null && cityList().length === 0), 'with no rows, the app knows no cities');
+  await bare.evaluate(() => { homeMode = 'day'; setView('today'); }); await wait(400);
+  ok(await bare.$$eval('#stopList .stop', e => e.length).catch(() => 0) > 0 || await bare.$$eval('#view-today [data-lid]', e => e.length) > 0, 'the day\'s plan still shows');
+  const legs = await bare.$$eval('.stop-leg', e => e.map(x => x.innerText).join(' | '));
+  ok(!/HK\$|¥|MOP/.test(legs), 'with no fare quoted between stops (there is no tariff to work from)');
+  await bare.evaluate(() => setView('places')); await wait(300);
+  ok(await bare.$$eval('#placeResults .locrow', e => e.length) === T.locations.length, 'and every place still lists');
+  env.box.post('saveCity', { id: 'city-hong-kong', name: 'Hong Kong', tz: 'Asia/Hong_Kong', region: 'hk', currency: 'HK$', round: 5, flag: 29, flag_km: 2, per_km: 10.5, transit: 'MTR', car: 'taxi' });
+  await bare.evaluate(() => store.sync({ quiet: true })); await wait(500);
+  await bare.evaluate(() => { homeMode = 'day'; setView('today'); }); await wait(400);
+  ok(/HK\$/.test(await bare.$$eval('.stop-leg', e => e.map(x => x.innerText).join(' | '))), 'adding the city\'s row brings its fares back');
+  ok(!page.errs.length && !bare.errs.length, 'no JS errors ' + page.errs.concat(bare.errs).join('; '));
 });

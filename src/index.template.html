@@ -920,45 +920,22 @@ function runAct(name, t, ev){
 /* ==========================================================================
    Getting between stops
    Worked out from the coordinates rather than stored, so it stays right when a
-   day is reordered. Meter tariffs as published by each city (checked Sep 2026);
+   day is reordered. Fares come from each city's meter tariff in the Cities tab;
    the range on top allows for traffic and waiting time, which meters also charge.
    Night surcharges (roughly 23:00–05:00 on the mainland) are not included.
    ========================================================================== */
-var TAXI = {
-  "Hong Kong": { cur:"HK$", step:5, flag:29, flagKm:2, perKm:10.5, highAt:102.5, perKmHigh:7,
-                 transit:"MTR", car:"taxi" },
-  "Macau":     { cur:"MOP ", step:5, flag:21, flagKm:1.6, perKm:9.1, transit:"bus", car:"taxi" },
-  // Mainland meters add a "return empty" surcharge on long rides (Guangzhou
-  // past 15 km, Chengdu past 10 km...). DiDi does not, and DiDi is what these
-  // lines recommend, so the estimate leaves it out — a street taxi on a long
-  // ride will come in 20–50% higher.
-  "Guangzhou": { cur:"¥", step:1, flag:12, flagKm:3,   perKm:2.6, transit:"metro", car:"DiDi" },
-  "Foshan":    { cur:"¥", step:1, flag:10, flagKm:2.5, perKm:2.8, transit:"metro", car:"DiDi" },
-  "Chongqing": { cur:"¥", step:1, flag:10, flagKm:3,   perKm:2,   transit:"metro", car:"DiDi" },
-  "Chengdu":   { cur:"¥", step:1, flag:9,  flagKm:2,   perKm:1.9, transit:"metro", car:"DiDi" }
-};
-/* Cities: a centre, a time zone, a region, the map app that works there and,
-   when known, taxi fares. The Sheet's Cities tab adds cities and overrides any
-   field of these, which are the first trip's, kept so the app works before the
-   backend has that tab. Regions: cn (mainland China), hk, mo, tw, or blank. */
-var LEGACY_CITIES = [
-  ["Hong Kong","香港",22.30,114.17,"Asia/Hong_Kong","hk"],
-  ["Macau","澳门",22.17,113.55,"Asia/Macau","mo"],
-  ["Guangzhou","广州",23.13,113.26,"Asia/Shanghai","cn"],
-  ["Foshan","佛山",23.02,113.12,"Asia/Shanghai","cn"],
-  ["Chongqing","重庆",29.56,106.55,"Asia/Shanghai","cn"],
-  ["Chengdu","成都",30.66,104.07,"Asia/Shanghai","cn"],
-  ["Sydney","悉尼",-33.87,151.21,"Australia/Sydney",""]
-].map(function(c){
-  return { id:"", name:c[0], name_zh:c[1], lat:c[2], lng:c[3], tz:c[4], region:c[5], map_app:"", taxi:TAXI[c[0]]||null };
-});
+/* Cities. Each city's facts — pin, time zone, region (cn: mainland China),
+   map app and taxi meter — are rows in the Sheet's Cities tab, added in
+   ⚙ Settings › Cities. None are built into the app. The mainland-meter note
+   that used to sit with the built-in tariffs: mainland meters add a "return
+   empty" surcharge on long rides; DiDi does not, and DiDi is what the
+   estimates name there, so a street taxi on a long ride comes in higher. */
 var CHINA_REGIONS = { cn:1, hk:1, mo:1 };
 var _cities=null, _citiesSrc=null;
 function cityList(){
   var src=store.raw && store.raw.cities;
   if(_cities && _citiesSrc===src) return _cities;
   var by={}, out=[];
-  LEGACY_CITIES.forEach(function(c){ var o=Object.assign({}, c); by[c.name.toLowerCase()]=o; out.push(o); });
   (src||[]).forEach(function(r){
     var name=String(r && r.name || "").trim(); if(!name) return;
     var o=by[name.toLowerCase()];

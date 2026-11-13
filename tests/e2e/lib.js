@@ -137,6 +137,10 @@ async function setup(opts) {
   env.deploy = which => { env.box = backend(env.SS, which, env.seed); return env.box; };
   env.deploy(opts.backend);
   if (opts.setup !== false) env.box.setup();
+  // City facts live in the Sheet's Cities tab, not in the app, so the suites' Sheet has them
+  // from the start (`cities: false` for a Sheet with none).
+  env.cities = opts.cities === false ? [] : require('./fixtures/cities.js')();
+  if (env.box.TABS.Cities) env.cities.forEach(c => env.box.post('saveCity', c));
   const s = await serve(); env.server = s.server; env.url = s.url;
   env.browser = await launch();
   env.ok = (c, m) => { env.checks++; console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) env.fails++; };
@@ -159,8 +163,17 @@ async function setup(opts) {
     await ctx.route('**/macros/s/**', async route => {
       const body = route.request().postData() || '{}';
       try { posted.push(JSON.parse(body)); } catch (e) { /* not JSON */ }
-      if (o.static) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: o.static(JSON.parse(body)) }) });
+      if (o.static) {
+        // A canned reply is the trip alone; the Sheet's city rows go with it, as a real reply's would
+        let d = o.static(JSON.parse(body));
+        if (env.cities.length && d && d.locations && !d.cities) d = Object.assign({}, d, { cities: env.cities });
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: d }) });
+      }
       let out = env.box.doPost({ postData: { contents: body }, parameter: {} })._t;
+      // The first release's backend has no Cities tab: with it, the app used facts built into
+      // the app. No backend that old is deployed any more and the app no longer carries them,
+      // so for the suites that still run it, its replies are given the rows.
+      if (!env.box.TABS.Cities && env.cities.length) { const j = JSON.parse(out); if (j.data && j.data.locations && !j.data.cities) { j.data.cities = env.cities; out = JSON.stringify(j); } }
       if (o.filter) out = JSON.stringify(o.filter(JSON.parse(out), JSON.parse(body)));
       route.fulfill({ status: 200, contentType: 'application/json', body: out });
     });

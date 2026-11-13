@@ -382,7 +382,7 @@ All of that lives in the Google Sheet, which is private to your Google account, 
 
 - The app itself: markup, styles, logic, icons, service worker, and Leaflet 1.9.4 under `vendor/leaflet/` (BSD-2-Clause, licence alongside) so maps work offline
 - The Apps Script backend, with an empty `SEED` and a placeholder key
-- The first trip's dates, day names and cities (`LEGACY_TRIP`, `DAY_LABELS`, `LEGACY_CITIES`), so the app works on a backend that has no Trips or Cities tab yet. The route is already in the repository description. Every later trip lives only in the Sheet.
+- In the tests only: an invented trip that borrows the first trip's name, dates and city names (the route is already in the repository's name and description). The app itself carries no trip and no cities; every trip lives only in the Sheet.
 
 Two guards keep it that way. `src/no-trip-content.js` runs inside both build scripts and refuses to write `index.html` or `Code.gs` if anything from `src/seed.json` has found its way in, or if either file is suspiciously large. `src/build-seed.js` still rejects any booking carrying a confirmation number or a reference buried in its notes.
 
@@ -409,7 +409,7 @@ One Sheet holds every trip. The app shows one at a time; switch in ⚙ Settings 
 
 **Only the open trip comes to the phone.** Each sync brings the open trip's rows, plus every trip's name and how many places it has — so a sync, and the copy each phone keeps for offline use, stay one trip's size however many trips the Sheet collects (the Sheet itself can hold thousands; Google's limit is 10 million cells). Opening another trip fetches it, so do that with a connection; with none, the trip that's open stays open. *Other trips* in Locations fetches the other trips' places when you tap it. A phone on a backend from before this still gets every trip, and keeps only the open one.
 
-**No trip is built into the app.** The Sheet's Trips tab says what the trips are. A Sheet whose Trips tab is still empty shows one trip, *My trip*, running over the dates its plan and bookings use; adding a second trip writes that first one into the tab. A phone remembers the default trip it last synced, for a reply that lists none. (Six cities' facts — pin, time zone, map app, taxi tariff — are still built in as reference data; a row in the Cities tab overrides them, and any other city is added there.)
+**No trip is built into the app.** The Sheet's Trips tab says what the trips are. A Sheet whose Trips tab is still empty shows one trip, *My trip*, running over the dates its plan and bookings use; adding a second trip writes that first one into the tab. A phone remembers the default trip it last synced, for a reply that lists none. Nor are any cities: each city's pin, time zone, region, map app and taxi tariff is a row in the Cities tab (⚙ Settings → **Cities**, or straight in the Sheet). A place in a city with no row still lists and navigates; it just has no time zone of its own and no fare estimate.
 
 **Archiving.** ⚙ Settings → Trips → **Archive** moves a finished trip under *Archived trips*, out of the list; it stays in the Sheet (`archived` = 1 in Trips) and **Unarchive** brings it back. The default trip and the open one can't be archived.
 
