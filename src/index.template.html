@@ -2852,6 +2852,8 @@ function renderPlaces(){
   var types=["All","attraction","restaurant","shopping","hotel"];
   var q=ui.q||"";
   var mode=ui.placesMode==="map" ? "map" : "list";
+  // first in its row, so it is on screen without scrolling the chips
+  var nearChip=all.some(hasXY) ? '<button class="chip" data-act="near" aria-pressed="'+!!nearPos+'">Near me</button>' : '';
   var hideChip=(all.some(isVisited) ? '<button class="chip" data-act="hide-visited" aria-pressed="'+!!ui.hideVisited+'">Hide visited</button>' : '')+
     (store.data.schedule.length ? '<button class="chip" data-act="on-plan" aria-pressed="'+!!ui.onPlan+'">On the plan</button>' : '')+
     (all.some(function(l){ return /none|mild/.test(spiceOf(l)); }) ? '<button class="chip" data-act="mild" aria-pressed="'+!!ui.mild+'">Mild-friendly</button>' : '')+
@@ -2862,7 +2864,7 @@ function renderPlaces(){
   var chips='<div class="filters">'+cities.map(function(c){
       return '<button class="chip" data-act="city" data-v="'+esc(c)+'" aria-pressed="'+(ui.city===c)+'">'+esc(c)+'</button>';
     }).join("")+'</div>'+
-    '<div class="filters" style="margin-top:-4px">'+types.map(function(t){
+    '<div class="filters" style="margin-top:-4px">'+nearChip+types.map(function(t){
       return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
         (t==="All"?"All types":esc(t))+'</button>';
     }).join("")+hideChip+'</div>';
@@ -2879,7 +2881,7 @@ function renderPlaces(){
     '<div class="filters">'+cities.map(function(c){
       return '<button class="chip" data-act="city" data-v="'+esc(c)+'" aria-pressed="'+(ui.city===c)+'">'+esc(c)+'</button>';
     }).join("")+'</div>'+
-    '<div class="filters" style="margin-top:-4px">'+types.map(function(t){
+    '<div class="filters" style="margin-top:-4px">'+nearChip+types.map(function(t){
       return '<button class="chip" data-act="type" data-v="'+esc(t)+'" aria-pressed="'+(ui.type===t)+'">'+
         (t==="All"?"All types":esc(t))+'</button>';
     }).join("")+hideChip+'</div>'+
@@ -2898,6 +2900,26 @@ function renderPlaces(){
     });
   }
 }
+
+/* Near me: the list nearest first, measured in a straight line from where
+   the phone says it is. Asked for once per tap, never stored, and off again
+   when the app is reopened. Pins are plain GPS, as the phone's position is. */
+var nearPos=null;
+function nearKm(l){ return nearPos && hasXY(l) ? roadKm(nearPos, { lat:+l.lat, lng:+l.lng })/ROAD_FACTOR : null; }
+function kmText(k){ return k<1 ? Math.max(10, Math.round(k*100)*10)+" m" : k<10 ? k.toFixed(1)+" km" : Math.round(k)+" km"; }
+onAct("near", function(){
+  if(nearPos){ nearPos=null; renderPlaces(); return; }
+  if(!navigator.geolocation){ toast("This phone won’t share where it is with the app"); return; }
+  toast("Finding where you are…", 10000);
+  navigator.geolocation.getCurrentPosition(function(p){
+    nearPos={ lat:p.coords.latitude, lng:p.coords.longitude };
+    toast("Nearest first, measured in a straight line");
+    if(ui.view==="places") renderPlaces();
+  }, function(e){
+    toast(e && e.code===1 ? "Location is off for this app — allow it for this site in the phone’s settings, then tap Near me again"
+                          : "Couldn’t find where you are just now — try again, outdoors if you can", 7000);
+  }, { enableHighAccuracy:true, timeout:10000, maximumAge:60000 });
+});
 
 /** The Locations filters other than the search box, shared by the list and the map. */
 function placeFilter(ix){
@@ -2922,8 +2944,14 @@ function planProgress(ix){
 function placeResults(q){
   var all=store.data.locations, ix=planIndex(), keep=placeFilter(ix);
   var list=all.filter(function(l){ return matches(l,q) && keep(l); });
+  if(nearPos){
+    // nearest first; a place with no pin can't be measured, so it goes last
+    list=list.map(function(l,i){ return { l:l, k:nearKm(l), i:i }; }).sort(function(a,b){
+      return a.k===null ? (b.k===null ? a.i-b.i : 1) : b.k===null ? -1 : a.k-b.k || a.i-b.i;
+    }).map(function(x){ return x.l; });
+  }
   return '<div class="spread small muted" style="margin:4px 0 10px">'+
-      '<span>'+list.length+" of "+all.length+'</span>'+
+      '<span>'+list.length+" of "+all.length+(nearPos ? ' · nearest first' : '')+'</span>'+
       '<span class="row" style="gap:6px">'+(otherTripPlaces().length || allTrips().length>1 ? '<button class="btn sm ghost" data-act="library">Other trips</button>' : '')+
       '<button class="btn sm ghost" data-act="import-places">Import</button>'+
       '<button class="btn sm ghost" data-act="new-location">+ New place</button></span></div>'+
@@ -2935,7 +2963,8 @@ function placeResults(q){
         '<button class="lb" data-act="open" data-lid="'+esc(l.id)+'" style="text-align:left;background:none">'+
           '<div class="en">'+hilite(l.name_en,q)+'</div>'+
           '<div class="zh zh">'+hilite(l.name_zh,q)+'</div>'+
-          '<div class="mt">'+(isVisited(l)?'<b style="color:var(--ok)">Been · 已去</b> · ':'')+
+          '<div class="mt">'+(nearPos ? (nearKm(l)===null ? '<span class="nopin">no pin</span> · ' : '<b class="away">'+kmText(nearKm(l))+'</b> · ') : '')+
+            (isVisited(l)?'<b style="color:var(--ok)">Been · 已去</b> · ':'')+
             (planText(ix[l.id]) ? '<b>'+esc(planText(ix[l.id]))+'</b> · ' : '')+esc(l.city)+' · '+esc(l.type)+' · '+esc(mapLinkOf(l) ? mapLinkApp(mapLinkOf(l))+' link' : u.app)+
             (spicePill(l) ? ' '+spicePill(l) : '')+'</div>'+
         '</button>'+

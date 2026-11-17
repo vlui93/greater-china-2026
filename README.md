@@ -150,6 +150,8 @@ If you ever need to re-enable it: **Settings → Pages → Source: Deploy from a
 
 Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the backend, since a page can't follow a redirect to another site;. Full links, and the Chinese name and address in Amap's share text, work without it — and a place with only a Chinese name still navigates, because the map app searches for it.
 
+**Near me.** The *Near me* chip in Places asks the phone where it is, once, and sorts the list nearest first, with the straight-line distance on each row. Places with no pin go last, marked *no pin*. It works with the other chips and the search box — with *Hide visited* it is "what's left around here" — and tapping it again puts the list back. The position isn't stored, and it's off again when the app is reopened. If location is refused, the app says so and leaves the list alone.
+
 **Search.** Works on both names, and on partial Chinese — two or three characters of a name is enough to find it, and the romanised English spelling finds it too. No need to type the whole thing either way.
 
 **Navigation.** Every location carries a `nav_app` flag. Mainland places open **Amap 高德**, Hong Kong and Macau open **Google Maps**. The app tries the native URL scheme first and falls back to the web version after 1.4 seconds if the app is not installed — the Amap web fallback offers the App Store, the Google one just works in the browser. The magnifier button next to *Navigate* searches the Chinese name instead of dropping a pin, which is the better option when a coordinate looks off.
