@@ -65,10 +65,34 @@ suite({}, async (env) => {
   ok(/Web App URL/.test(await page.textContent('#sheetBody')) && /Archived trips \(1\)/.test(await page.textContent('#sheetBody')), 'Manage trips opens Settings, archived trips and all');
   await page.evaluate(() => closeSheet());
 
+  console.log('\n3b. archiving the default trip, and the open one');
+  await page.click('#btnTrip'); await wait(600);
+  await page.click('.trippick .tp[data-tid="gc2026"]'); await wait(1500);
+  ok(await page.evaluate(() => TRIP.id === 'gc2026' && TRIP.id === defaultTripId()), 'Greater China is open, and it is the default trip');
+  await page.click('#btnSettings'); await wait(600);
+  ok(await page.isVisible('[data-act="trip-archive"][data-tid="gc2026"]'), 'Settings offers Archive for it');
+  await page.click('[data-act="trip-archive"][data-tid="gc2026"]'); await wait(900);
+  const g = env.rows('Trips').find(t => t.id === 'gc2026');
+  ok(g.archived === '1' && String(g.is_default) === '1', 'archived in the Sheet, and still the default trip');
+  ok(/stays open until you switch/.test(await page.textContent('#toast')) && await page.evaluate(() => TRIP.id) === 'gc2026', 'it stays open, and the message says so');
+  ok(/open now · archived/.test(await page.textContent('#sheetBody')) && await page.isVisible('[data-act="trip-unarchive"][data-tid="gc2026"]'), 'Settings marks it archived, with Unarchive');
+  ok(await page.evaluate(() => store.data.locations.length) === T.locations.length && env.rows('Locations').filter(l => !l.trip_id).length === T.locations.length, 'its places are all still there');
+  await page.evaluate(() => closeSheet());
+  await page.click('#btnTrip'); await wait(600);
+  await page.click('.trippick .tp[data-tid="tw-soon"]'); await wait(1500);
+  await page.click('#btnTrip'); await wait(600);
+  ok(!await page.$('.trippick .tp[data-tid="gc2026"]') && /2 archived/.test(await page.textContent('#sheetBody')), 'once another trip is open, it leaves the list: "2 archived"');
+  await page.evaluate(() => closeSheet());
+  await page.click('#btnSettings'); await wait(600);
+  await page.click('details.archived summary'); await wait(200);
+  await page.click('[data-act="trip-unarchive"][data-tid="gc2026"]'); await wait(900);
+  ok(env.rows('Trips').find(t => t.id === 'gc2026').archived === '' && !/Archived trips \(2\)/.test(await page.textContent('#sheetBody')), 'Unarchive brings it back');
+  await page.evaluate(() => closeSheet());
+
   console.log('\n4. a trip with no connection');
   await page.route('**/macros/s/**', r => r.abort('internetdisconnected'));
   await page.click('#btnTrip'); await wait(600);
   await page.click('.trippick .tp[data-tid="tw-past"]'); await wait(1500);
-  ok(await page.evaluate(() => TRIP.id) === 'tw-later' && (await label()).trim().startsWith('Test Summer'), 'with no connection the open trip stays open, and the header with it');
+  ok(await page.evaluate(() => TRIP.id) === 'tw-soon' && (await label()).trim() === 'Test Spring Trip', 'with no connection the open trip stays open, and the header with it');
   ok(!page.errs.length, 'no JS errors ' + page.errs.join('; '));
 });

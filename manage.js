@@ -415,7 +415,8 @@ function setArchived(id, on){
   var row={ id:id, archived:on?"1":"", updated:nowISO() };
   store.write("saveTrip", row, function(){
     store.raw.trips=(store.raw.trips||[]).map(function(x){ return x.id===id ? Object.assign({}, x, row) : x; });
-  }).then(function(){ closeSheet(); settingsForm(); toast(on ? "Archived — it's under Archived trips" : "Back in the trip list"); });
+  }).then(function(){ closeSheet(); settingsForm();
+    toast(on ? (id===TRIP.id ? "Archived — it stays open until you switch to another trip, then it's under Archived trips" : "Archived — it's under Archived trips") : "Back in the trip list", on && id===TRIP.id ? 6000 : 0); });
 }
 
 function tripsSectionHTML(){
@@ -423,10 +424,12 @@ function tripsSectionHTML(){
   var row=function(t){
       var open=t.id===TRIP.id, n=placesIn(t), arch=isArchived(t);
       return '<div class="locrow"><div class="lb"><div class="en">'+esc(t.name)+(t.name_zh?' <span class="zh">'+escz(t.name_zh)+'</span>':'')+'</div>'+
-        '<div class="mt">'+esc(rangeText(t.start,t.end))+(n!==null?' · '+n+' place'+(n===1?'':'s'):'')+(open?' · open now':'')+'</div></div>'+
+        '<div class="mt">'+esc(rangeText(t.start,t.end))+(n!==null?' · '+n+' place'+(n===1?'':'s'):'')+(open?' · open now':'')+(open&&arch?' · archived':'')+'</div></div>'+
         (open ? (isOwner() ? '<button class="btn sm" data-act="trip-edit" data-tid="'+esc(t.id)+'">Edit</button>' : '')
               : '<button class="btn sm primary" data-act="trip-open" data-tid="'+esc(t.id)+'">Open</button>')+
-        (!open && canArchive() && isOwner() && t.id!==defaultTripId()
+        // Any trip can be archived, the default and the open one included: it only takes the trip
+        // out of the lists. Its places and stops stay where they are, and an open one stays open.
+        (canArchive() && isOwner()
           ? '<button class="btn sm ghost" data-act="'+(arch?'trip-unarchive':'trip-archive')+'" data-tid="'+esc(t.id)+'">'+(arch?'Unarchive':'Archive')+'</button>' : '')+
         '</div>';
     };

@@ -425,7 +425,7 @@ One Sheet holds every trip. The app shows one at a time; switch in ⚙ Settings 
 
 **Starting a trip from an old one.** *+ New trip* has **Start from**: pick a past trip and the new one opens with a fresh copy of its checklist tasks and packing lists — nothing ticked, nobody assigned, no task tied to a place, and due dates moved by the gap between the two first days (a task due 26 days before the old trip is due 26 days before the new one). This phone's own packing list for that trip is copied too. Places, stops and bookings are not. The old trip is left exactly as it was. Copying from a trip that isn't the open one needs a connection.
 
-**Archiving.** ⚙ Settings → Trips → **Archive** moves a finished trip under *Archived trips*, out of the list; it stays in the Sheet (`archived` = 1 in Trips) and **Unarchive** brings it back. The default trip and the open one can't be archived.
+**Archiving.** ⚙ Settings → Trips → **Archive** moves a finished trip under *Archived trips*, out of the list; it stays in the Sheet (`archived` = 1 in Trips) and **Unarchive** brings it back. Any trip can be archived, the default trip included: it only leaves the lists, and its places and stops stay where they are. Archiving the open trip keeps it open until you switch to another.
 
 ### Who sees which trip
 
