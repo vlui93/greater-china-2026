@@ -753,7 +753,29 @@ nav.tabs{grid-template-columns:repeat(4,1fr)}
 nav.tabs .tz{opacity:1}
 /* Chinese under each tab name only for a trip that uses Chinese */
 .nozh nav.tabs .tz.zh{display:none}
-.iconbtn[hidden]{display:none}   /* display:grid would otherwise beat the hidden attribute */
+.iconbtn[hidden]{display:none}
+/* The open trip, top right: tap to switch. A glass capsule like the round buttons beside it. */
+.tripbtn{display:inline-flex;align-items:center;gap:4px;min-height:44px;max-width:40vw;padding:0 10px 0 14px;flex:none;
+  border-radius:var(--r-capsule);background:var(--glass);border:1px solid var(--glass-line);color:var(--ink);font-weight:640;font-size:14px;
+  -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);box-shadow:var(--glass-shadow-sm), inset 0 1px 0 var(--glass-edge)}
+.tripbtn .tn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* On a narrow phone it takes its own line under the title, so neither is squeezed */
+@media (max-width:379px){
+  .top-row{flex-wrap:wrap;row-gap:6px}
+  .top-row > div{flex:1 1 calc(100% - 120px)!important}   /* the title and Settings fill the first row */
+  .tripbtn{order:3;max-width:100%;min-height:40px;margin-left:0}
+}
+.tripbtn .svgic{width:16px;height:16px;flex:none;color:var(--ink-3)}
+.tripbtn:active{background:var(--surface-2)}
+.trippick{display:flex;flex-direction:column;gap:9px;margin-top:12px}
+.trippick .tp{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;min-height:64px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.trippick .tp.on{border-color:var(--brand);box-shadow:0 0 0 2px color-mix(in srgb,var(--brand) 28%,transparent)}
+.trippick .tp .tb{flex:1;min-width:0}
+.trippick .tp .tt{font-weight:680;font-size:16px}
+.trippick .tp .ts{font-size:13px;color:var(--ink-3);margin-top:2px}
+.trippick .tp .tick{color:var(--brand);flex:none}
+.trippick .tp .ph{font-size:12px;font-weight:650;color:var(--accent);margin-left:6px}   /* display:grid would otherwise beat the hidden attribute */
 .nozh nav.tabs button{gap:3px}
 /* The Trip tab: a hub of the screens that aren't the day-to-day ones */
 .hub{display:flex;flex-direction:column;gap:9px;margin-top:4px}
@@ -821,6 +843,7 @@ header.top::before,.sheet-top::before{
         <h1 id="viewTitle">Today</h1>
         <div class="sub" id="viewSub"></div>
       </div>
+      <button class="tripbtn" id="btnTrip" data-act="trip-pick" aria-haspopup="dialog" aria-label="Switch trip"><span class="tn"></span><svg class="svgic" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
       <button class="iconbtn" id="btnSettings" aria-label="Settings"></button>
     </div>
   </header>
@@ -918,7 +941,7 @@ var TRIP_TABS = ["bookings", "locations", "schedule", "checklist"];   // rows th
    the part itself put on screen (by then the real function is in place).
    A helper that two files need stays in this one.
    ========================================================================== */
-var PARTS = {"prep":["shortDate","dueInfo","byOrder","taskSort","groupBySection","setEachTick","ckRow","ckGroupHTML","countDone","renderPrep","prepChecklist","swipeHint","prepPacking","prepGuide","checklistForm","fillSections","formSection","tripPeople","removeItems","sectionForm","myTemplates","packingKeyFor","templateSources","templatesForm","useTemplate","saveTemplate","deleteTemplate"],"bookings":["bkWhenText","setBookingTicket","setBookingTz","renderBookings","icsText","icsFold","icsUtc","icsDate","buildIcs","icsForm","fileName","exportIcs","printHTML","printForm","printNow","guessYear","findDates","findTimes","after","findRef","parseBookingText","bookingForm","bookingFormShape","readPasted","saveBookingForm","deleteBookingForm"],"manage":["isOwner","renameDay","binSheet","locationForm","collectLocationForm","isShortMapLink","nameFromTitle","mergeResolved","placeFromParsed","linkBoxHTML","setField","applyPlace","fillFromLink","bindLinkBox","quickAddForm","guessCity","pickLocationForDay","pickDayForLocation","backendNoteHTML","settingsForm","peopleSectionHTML","isArchived","canArchive","placesIn","setArchived","tripsSectionHTML","citiesSectionHTML","tripForm","saveTripForm","copyChecklist","deleteTrip","cityForm","saveCityForm","routeKm","bestInsert","orderDay","bestOrder","findBoxHTML","bindFindBox","osmSearch","osmPlace","findPlace","pickFound","libraryForm","libraryShow","copyPlace","stopNoteForm"],"extras":["importNotes","unzipFirst","stripTags","parseKml","parseGeoJson","parseCsv","parseCsvPlaces","readPlacesFile","importPlacesFile","applyImport","aiFormKey","aiCitiesGuess","aiValues","aiCollect","aiForm","aiPrompt","aiRules","aiFormat","aiBack","aiDayPrompt","aiDayForm","aiCopy","aiParse","aiKey","aiNormalize","aiRead","aiPreview","aiNotes","aiImport","peopleSheet","tripNames","peopleList","personForm","savePerson","inviteLink","inviteText","inviteSheet","copyInvite","removePerson"],"more":["recapData","recapLine","recapText","recapSheet","inboxSheet","inboxDone","shareSetupSheet"]};
+var PARTS = {"prep":["shortDate","dueInfo","byOrder","taskSort","groupBySection","setEachTick","ckRow","ckGroupHTML","countDone","renderPrep","prepChecklist","swipeHint","prepPacking","prepGuide","checklistForm","fillSections","formSection","tripPeople","removeItems","sectionForm","myTemplates","packingKeyFor","templateSources","templatesForm","useTemplate","saveTemplate","deleteTemplate"],"bookings":["bkWhenText","setBookingTicket","setBookingTz","renderBookings","icsText","icsFold","icsUtc","icsDate","buildIcs","icsForm","fileName","exportIcs","printHTML","printForm","printNow","guessYear","findDates","findTimes","after","findRef","parseBookingText","bookingForm","bookingFormShape","readPasted","saveBookingForm","deleteBookingForm"],"manage":["isOwner","renameDay","binSheet","locationForm","collectLocationForm","isShortMapLink","nameFromTitle","mergeResolved","placeFromParsed","linkBoxHTML","setField","applyPlace","fillFromLink","bindLinkBox","quickAddForm","guessCity","pickLocationForDay","pickDayForLocation","backendNoteHTML","settingsForm","peopleSectionHTML","isArchived","canArchive","placesIn","setArchived","tripsSectionHTML","citiesSectionHTML","tripForm","saveTripForm","copyChecklist","deleteTrip","cityForm","saveCityForm","routeKm","bestInsert","orderDay","bestOrder","findBoxHTML","bindFindBox","osmSearch","osmPlace","findPlace","pickFound","libraryForm","libraryShow","copyPlace","stopNoteForm","tripPicker"],"extras":["importNotes","unzipFirst","stripTags","parseKml","parseGeoJson","parseCsv","parseCsvPlaces","readPlacesFile","importPlacesFile","applyImport","aiFormKey","aiCitiesGuess","aiValues","aiCollect","aiForm","aiPrompt","aiRules","aiFormat","aiBack","aiDayPrompt","aiDayForm","aiCopy","aiParse","aiKey","aiNormalize","aiRead","aiPreview","aiNotes","aiImport","peopleSheet","tripNames","peopleList","personForm","savePerson","inviteLink","inviteText","inviteSheet","copyInvite","removePerson"],"more":["recapData","recapLine","recapText","recapSheet","inboxSheet","inboxDone","shareSetupSheet"]};
 var partJs = {};
 function loadPart(name){
   if(!partJs[name]) partJs[name]=new Promise(function(res, rej){
@@ -946,7 +969,7 @@ Object.keys(PARTS).forEach(function(part){
 /* Actions a part handles itself: a part calls onAct("name", fn) as it loads,
    and the build lists which part owns which name, so a tap on one loads its
    part first. Older actions are still in the switch under "Events". */
-var ACTS = {}, PART_ACTS = {"ai-day":"extras","aid-copy":"extras","recap":"more","recap-copy":"more","inbox":"more","inbox-dismiss":"more","inbox-place":"more","share-setup":"more","share-copy":"more"};
+var ACTS = {}, PART_ACTS = {"trip-pick":"manage","trip-pick-close":"manage","ai-day":"extras","aid-copy":"extras","recap":"more","recap-copy":"more","inbox":"more","inbox-dismiss":"more","inbox-place":"more","share-setup":"more","share-copy":"more"};
 function onAct(name, fn){ ACTS[name]=fn; }
 function runAct(name, t, ev){
   if(ACTS[name]){ ACTS[name](t, ev); return true; }
@@ -1693,6 +1716,7 @@ function applyTrip(){
   var script = TRIP.zh_script || (tripHasChina() ? "simplified" : "original");
   ZH_SIMPLIFY = script==="simplified";
   document.body.classList.toggle("nozh", !tripHasChina());
+  var tb=$("#btnTrip"); if(tb) tb.querySelector(".tn").textContent=TRIP.name||"Trip";
   if(!ui.day || DAYS.indexOf(ui.day)<0) ui.day = defaultDay();
   // Opening the app (or another trip) during the trip lands on today's plan
   if(applyTrip.open!==cur){

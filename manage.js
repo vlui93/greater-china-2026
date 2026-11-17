@@ -812,3 +812,32 @@ function stopNoteForm(sid){
       '<div class="hint">Shown in full under this stop on the day. It belongs to this day only — notes for the place itself go in Edit this place.</div></div>'+
     '<div class="formactions"><button class="btn primary" data-act="save-stop-note" data-sid="'+esc(sid)+'">Save</button></div>');
 }
+
+/* ==========================================================================
+   Switching trips from the header: the open trip's name, top right, opens
+   this list. Coming and current trips first, then past ones; archived ones
+   behind Settings. One tap opens a trip.
+   ========================================================================== */
+function tripPicker(){
+  var today=todayISO(), live=allTrips().filter(function(t){ return !isArchived(t) || t.id===TRIP.id; });
+  var when=function(t){ return t.end<today ? "past" : t.start<=today ? "now" : "soon"; };
+  var rank={ now:0, soon:1, past:2 };
+  live.sort(function(a,b){ var x=rank[when(a)], y=rank[when(b)]; if(x!==y) return x-y;
+    return x===2 ? (a.start<b.start?1:-1) : (a.start<b.start?-1:1); });
+  var arch=allTrips().length-live.length;
+  var row=function(t){
+    var on=t.id===TRIP.id, n=placesIn(t), w=when(t);
+    return '<button class="tp'+(on?" on":"")+'" data-act="'+(on?"trip-pick-close":"trip-open")+'" data-tid="'+esc(t.id)+'"'+(on?' aria-current="true"':'')+'>'+
+      '<span class="tb"><span class="tt" style="display:block">'+esc(t.name)+(w==="now"?'<span class="ph">ON NOW</span>':'')+'</span>'+
+      '<span class="ts" style="display:block">'+esc(rangeText(t.start,t.end))+(n!==null?' · '+n+' place'+(n===1?'':'s'):'')+'</span></span>'+
+      (on ? '<span class="tick">'+IC.check+'</span>' : '<span class="rowend">'+IC.chev+'</span>')+'</button>';
+  };
+  var html='<div class="trippick">'+live.map(row).join("")+'</div>'+
+    (arch ? '<p class="blurb small muted" style="margin:12px 0 0">'+arch+' archived — in <button class="linkbtn" data-act="settings">⚙ Settings › Trips</button>.</p>' : '')+
+    '<div class="formactions" style="margin-top:14px">'+
+      (isOwner() ? '<button class="btn primary" data-act="trip-new">+ New trip</button>' : '')+
+      '<button class="btn" data-act="settings">Manage trips</button></div>';
+  openSheet("Trips", html);
+}
+onAct("trip-pick", function(){ tripPicker(); });
+onAct("trip-pick-close", function(){ closeSheet(); });
