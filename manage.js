@@ -351,7 +351,8 @@ function settingsForm(){
     backendNoteHTML()+
     (store.lastError && store.lastError.kind ? '<div class="loclist" style="margin-top:12px"><div class="locrow syncerr"><div class="lb"><div class="en">Last sync</div>'+
       '<div class="mt">'+esc(syncProblem(store.lastError))+'</div></div></div></div>' : '')+
-    peopleSectionHTML()+tripsSectionHTML()+citiesSectionHTML()+
+    peopleSectionHTML()+(store.configured() && !isViewer() ? '<div class="section-title">Share to Trip</div><div class="loclist"><div class="locrow"><div class="lb"><div class="en">Send from other apps</div>'+
+      '<div class="mt">An iPhone Shortcut for the Share button, into this trip’s Inbox</div></div><button class="btn sm" data-act="share-setup">Set up</button></div></div>' : '')+tripsSectionHTML()+citiesSectionHTML()+
     '<div class="section-title">Data</div>'+
     '<div class="loclist">'+
       '<div class="locrow"><div class="lb"><div class="en">Pending changes</div>'+

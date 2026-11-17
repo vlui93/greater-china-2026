@@ -767,6 +767,9 @@ nav.tabs .tz{opacity:1}
 .hubrow .hs{font-size:13px;color:var(--ink-3);margin-top:2px}
 .hubrow .hs.warn{color:var(--warn)}
 .hubrow .rowend{color:var(--ink-3);flex:none}
+.inboxbar{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:11px 14px;margin:0 0 12px;font-size:14px;
+  background:color-mix(in srgb,var(--brand) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--brand) 30%,var(--line));border-radius:var(--radius-sm);color:var(--ink)}
+.inboxbar svg{width:20px;height:20px;color:var(--brand);flex:none}
 .plannotes{padding:4px 14px}
 .plannotes .pn{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;padding:10px 0;border-top:1px solid var(--line);font-size:14px;line-height:1.4}
 .plannotes .pn:first-child{border-top:0}
@@ -2929,6 +2932,7 @@ function renderPlaces(){
         (t==="All"?"All types":esc(t))+'</button>';
     }).join("")+hideChip+'</div>'+
     planProgress(planIndex())+
+    (inboxItems().length ? '<button class="inboxbar" data-act="inbox">'+IC.plus+'<span><b>Inbox ('+inboxItems().length+')</b> · sent in from other apps — make them places</span></button>' : '')+
     '<div id="placeResults">'+placeResults(q)+'</div>';
 
   var input=$("#q");
@@ -2984,6 +2988,8 @@ function planProgress(ix){
     (pl.length ? '<div class="prog"><i style="width:'+pct+'%"></i></div>' : '')+'</div>';
 }
 
+/** What has been sent in from other apps for the open trip, not yet dealt with. */
+function inboxItems(){ return (store.raw.inbox||[]).filter(function(i){ return tripOf(i)===TRIP.id && !String(i.done||"").trim(); }); }
 function placeResults(q){
   var all=store.data.locations, ix=planIndex(), keep=placeFilter(ix);
   var list=all.filter(function(l){ return matches(l,q) && keep(l); });
@@ -3892,8 +3898,12 @@ document.addEventListener("click", function(ev){
     case "save-location": {
       var r2=collectLocationForm(lid||"");
       if(r2.error){ toast(r2.error); return; }
+      // the inbox item this form was opened for, if any: kept on the form, so a cancelled one is forgotten with it
+      var fromInbox=!lid && $("#f_link") ? $("#f_link").dataset.inbox||"" : "";
       saveLocation(r2.value).then(function(){
-        closeSheet(); render(); toast("Saved");
+        if(fromInbox) store.write("saveInboxItem", { id:fromInbox, done:nowISO() }, function(){
+          store.raw.inbox=(store.raw.inbox||[]).filter(function(i){ return i.id!==fromInbox; }); });
+        closeSheet(); render(); toast(fromInbox ? "Saved — and off the Inbox" : "Saved");
         // back to the place's page, so the change can be seen
         if(lid && store.loc(lid)) locationDetail(lid);
       });
