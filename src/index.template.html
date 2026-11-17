@@ -1325,7 +1325,18 @@ var store = {
     updateStatus();
   },
 
+  /* One flush at a time: a second call while one is running gets the same
+     promise, so the same waiting changes are never sent twice over. Anything
+     queued meanwhile is picked up by the one that is running. */
   flush: function(){
+    var self=this;
+    if(this.flushRun) return this.flushRun;
+    var done=function(){ self.flushRun=null; };
+    var run=this.flushNow();
+    this.flushRun=run.then(function(n){ done(); return n; }, function(e){ done(); throw e; });
+    return this.flushRun;
+  },
+  flushNow: function(){
     var self=this;
     if(!this.configured() || !this.queue.length) return Promise.resolve(0);
     if(this.v>=2 && this.queue.length>1) return this.flushBatch(0);

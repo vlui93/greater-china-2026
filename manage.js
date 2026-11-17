@@ -466,6 +466,9 @@ function tripForm(id){
       '<div class="field"><label>First day</label><input id="t_start" type="date" value="'+esc(t.start)+'"></div>'+
       '<div class="field"><label>Last day</label><input id="t_end" type="date" value="'+esc(t.end)+'"></div>'+
     '</div>'+
+    (isNew && allTrips().length && (store.raw.trips||[]).length ? '<div class="field"><label>Start from</label><select id="t_from"><option value="">An empty trip</option>'+
+        allTrips().map(function(x){ return '<option value="'+esc(x.id)+'">'+esc(x.name)+'’s checklist and packing</option>'; }).join("")+'</select>'+
+        '<div class="hint">Copies that trip’s checklist tasks (unticked, due dates moved to suit the new first day) and packing lists. Places and bookings aren’t copied.</div></div>' : '')+
     (isNew ? '' : '<label class="row small" style="gap:8px;margin:-4px 0 14px"><input type="checkbox" id="t_move" checked> '+
       'Move the plan with the first day — stops, day names. Bookings stay put; change those yourself.</label>')+
     '<div class="field"><label>Time zone</label><input id="t_tz" list="tzlist" autocapitalize="off" value="'+esc(t.tz)+'">'+tzDatalist("tzlist")+
@@ -514,10 +517,36 @@ function saveTripForm(id){
     });
     store.data.schedule.forEach(function(e){ e.date=addDaysISO(e.date, shift); store.enqueue("saveScheduleEntry", e); });
   }
-  store.persist();
-  if(!old){ switchTrip(t.id, true); }
-  else { store.data=null; applyTrip(); store.persist(); closeSheet(); render(); toast(shift ? "Saved — plan moved "+Math.abs(shift)+" day"+(Math.abs(shift)===1?"":"s")+(shift>0?" later":" earlier") : "Saved"); }
-  if(store.configured()) store.flush().then(updateStatus).catch(function(){});
+  var finish=function(note){
+    store.persist();
+    if(!old){ switchTrip(t.id, true).then(function(){ if(note) toast(note, 6000); }); }
+    else { store.data=null; applyTrip(); store.persist(); closeSheet(); render(); toast(shift ? "Saved — plan moved "+Math.abs(shift)+" day"+(Math.abs(shift)===1?"":"s")+(shift>0?" later":" earlier") : "Saved"); }
+    if(store.configured()) store.flush().then(updateStatus).catch(function(){});
+  };
+  var from=!old && g("from") ? allTrips().filter(function(x){ return x.id===g("from"); })[0] : null;
+  if(!from){ finish(); return; }
+  // Start from another trip: its checklist and packing lists, as a fresh copy
+  if(from.id===TRIP.id){ finish(copyChecklist(from, t, store.data.checklist)); return; }
+  store.call("checklist").then(function(d){
+    finish(copyChecklist(from, t, ((d && d.checklist)||[]).filter(function(i){ return tripOf(i)===from.id; })));
+  }, function(){ finish("Created, but empty: "+from.name+"’s checklist couldn’t be read without a connection. Open it and start the new trip from there, or try again."); });
+}
+/** A fresh copy of one trip's shared checklist and packing lists, and this
+ *  phone's own packing list, for a new trip: nothing ticked, nobody assigned,
+ *  not tied to any place, due dates moved by the gap between the first days. */
+function copyChecklist(from, to, items){
+  var shift=daysBetween(from.start, to.start), now=nowISO(), n={ task:0, pack:0 };
+  items.filter(function(i){ return !i.removed && /^(task|pack|each)$/.test(i.kind); }).forEach(function(i, k){
+    var c={ id:uid("ck")+k, kind:i.kind, section:i.section||"", text:i.text||"", due:/^\d{4}-\d{2}-\d{2}$/.test(i.due||"") ? addDaysISO(i.due, shift) : "",
+            location_id:"", done:"", done_by:"", order_index:i.order_index||"", updated:now, removed:"", trip_id:to.id, assignee:"" };
+    store.raw.checklist.push(c); store.enqueue("saveChecklistItem", c);
+    n[i.kind==="task" ? "task" : "pack"]++;
+  });
+  var mine=load(from.id===defaultTripId() ? LS.packing : LS.packing+"."+from.id, []).filter(function(i){ return !i.removed; });
+  if(mine.length) save(LS.packing+"."+to.id, mine.map(function(i, k){ return Object.assign({}, i, { id:uid("pk")+k, done:"" }); }));
+  var bits=[]; if(n.task) bits.push(n.task+" task"+(n.task===1?"":"s"));
+  if(n.pack+mine.length) bits.push((n.pack+mine.length)+" packing item"+(n.pack+mine.length===1?"":"s"));
+  return bits.length ? "Started from "+from.name+": "+bits.join(" and ")+" copied, nothing ticked" : "Created — "+from.name+" has no checklist to copy";
 }
 
 function deleteTrip(id){

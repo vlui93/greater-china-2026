@@ -901,7 +901,7 @@ var TRIP_TABS = ["bookings", "locations", "schedule", "checklist"];   // rows th
    the part itself put on screen (by then the real function is in place).
    A helper that two files need stays in this one.
    ========================================================================== */
-var PARTS = {"prep":["shortDate","dueInfo","byOrder","taskSort","groupBySection","setEachTick","ckRow","ckGroupHTML","countDone","renderPrep","prepChecklist","swipeHint","prepPacking","prepGuide","checklistForm","fillSections","formSection","tripPeople","removeItems","sectionForm","myTemplates","packingKeyFor","templateSources","templatesForm","useTemplate","saveTemplate","deleteTemplate"],"bookings":["bkWhenText","setBookingTicket","setBookingTz","renderBookings","icsText","icsFold","icsUtc","icsDate","buildIcs","icsForm","fileName","exportIcs","printHTML","printForm","printNow","guessYear","findDates","findTimes","after","findRef","parseBookingText","bookingForm","bookingFormShape","readPasted","saveBookingForm","deleteBookingForm"],"manage":["isOwner","renameDay","binSheet","locationForm","collectLocationForm","isShortMapLink","nameFromTitle","mergeResolved","placeFromParsed","linkBoxHTML","setField","applyPlace","fillFromLink","bindLinkBox","quickAddForm","guessCity","pickLocationForDay","pickDayForLocation","backendNoteHTML","settingsForm","peopleSectionHTML","isArchived","canArchive","placesIn","setArchived","tripsSectionHTML","citiesSectionHTML","tripForm","saveTripForm","deleteTrip","cityForm","saveCityForm","routeKm","bestInsert","orderDay","bestOrder","findBoxHTML","bindFindBox","osmSearch","osmPlace","findPlace","pickFound","libraryForm","libraryShow","copyPlace","stopNoteForm"],"extras":["importNotes","unzipFirst","stripTags","parseKml","parseGeoJson","parseCsv","parseCsvPlaces","readPlacesFile","importPlacesFile","applyImport","aiFormKey","aiCitiesGuess","aiValues","aiCollect","aiForm","aiPrompt","aiCopy","aiParse","aiKey","aiNormalize","aiRead","aiPreview","aiNotes","aiImport","peopleSheet","tripNames","peopleList","personForm","savePerson","inviteLink","inviteText","inviteSheet","copyInvite","removePerson"],"more":["recapData","recapLine","recapText","recapSheet"]};
+var PARTS = {"prep":["shortDate","dueInfo","byOrder","taskSort","groupBySection","setEachTick","ckRow","ckGroupHTML","countDone","renderPrep","prepChecklist","swipeHint","prepPacking","prepGuide","checklistForm","fillSections","formSection","tripPeople","removeItems","sectionForm","myTemplates","packingKeyFor","templateSources","templatesForm","useTemplate","saveTemplate","deleteTemplate"],"bookings":["bkWhenText","setBookingTicket","setBookingTz","renderBookings","icsText","icsFold","icsUtc","icsDate","buildIcs","icsForm","fileName","exportIcs","printHTML","printForm","printNow","guessYear","findDates","findTimes","after","findRef","parseBookingText","bookingForm","bookingFormShape","readPasted","saveBookingForm","deleteBookingForm"],"manage":["isOwner","renameDay","binSheet","locationForm","collectLocationForm","isShortMapLink","nameFromTitle","mergeResolved","placeFromParsed","linkBoxHTML","setField","applyPlace","fillFromLink","bindLinkBox","quickAddForm","guessCity","pickLocationForDay","pickDayForLocation","backendNoteHTML","settingsForm","peopleSectionHTML","isArchived","canArchive","placesIn","setArchived","tripsSectionHTML","citiesSectionHTML","tripForm","saveTripForm","copyChecklist","deleteTrip","cityForm","saveCityForm","routeKm","bestInsert","orderDay","bestOrder","findBoxHTML","bindFindBox","osmSearch","osmPlace","findPlace","pickFound","libraryForm","libraryShow","copyPlace","stopNoteForm"],"extras":["importNotes","unzipFirst","stripTags","parseKml","parseGeoJson","parseCsv","parseCsvPlaces","readPlacesFile","importPlacesFile","applyImport","aiFormKey","aiCitiesGuess","aiValues","aiCollect","aiForm","aiPrompt","aiCopy","aiParse","aiKey","aiNormalize","aiRead","aiPreview","aiNotes","aiImport","peopleSheet","tripNames","peopleList","personForm","savePerson","inviteLink","inviteText","inviteSheet","copyInvite","removePerson"],"more":["recapData","recapLine","recapText","recapSheet"]};
 var partJs = {};
 function loadPart(name){
   if(!partJs[name]) partJs[name]=new Promise(function(res, rej){
@@ -1325,7 +1325,18 @@ var store = {
     updateStatus();
   },
 
+  /* One flush at a time: a second call while one is running gets the same
+     promise, so the same waiting changes are never sent twice over. Anything
+     queued meanwhile is picked up by the one that is running. */
   flush: function(){
+    var self=this;
+    if(this.flushRun) return this.flushRun;
+    var done=function(){ self.flushRun=null; };
+    var run=this.flushNow();
+    this.flushRun=run.then(function(n){ done(); return n; }, function(e){ done(); throw e; });
+    return this.flushRun;
+  },
+  flushNow: function(){
     var self=this;
     if(!this.configured() || !this.queue.length) return Promise.resolve(0);
     if(this.v>=2 && this.queue.length>1) return this.flushBatch(0);
