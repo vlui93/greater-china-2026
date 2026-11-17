@@ -47,6 +47,7 @@ suite({}, async (env) => {
     await page.waitForTimeout(500);
     await check('Plan with AI, the check before importing', t => { document.getElementById('ai_reply').value = t; aiRead(); }, fs.readFileSync(fixturePath('ai-reply.txt'), 'utf8'));
     await check('Recently deleted', () => { closeSheet(); deletePlace(store.data.locations[2].id).then(() => binSheet()); });
+    await check('Recap', () => { closeSheet(); store.data.locations.slice(0, 12).forEach(l => { l.visited = '2026-10-18'; }); recapSheet(); });
     await check('People', () => { closeSheet(); peopleSheet(); });
     await page.waitForTimeout(500);
     await check('Add a person', () => personForm(null));

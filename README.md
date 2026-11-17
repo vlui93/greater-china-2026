@@ -150,6 +150,8 @@ If you ever need to re-enable it: **Settings → Pages → Source: Deploy from a
 
 Short links (`maps.app.goo.gl`, `surl.amap.com`) have to be looked up by the backend, since a page can't follow a redirect to another site;. Full links, and the Chinese name and address in Amap's share text, work without it — and a place with only a Chinese name still navigates, because the map app searches for it.
 
+**Recap.** Once the trip is over, Home shows *How it went* — planned places visited out of those planned — and opens the recap: per city, how many planned places were visited, the ones skipped by name, the extras (an optional stop you took, or a place that was never on the plan) and planned meals kept. Hotels aren't counted. **Copy as text** puts the whole thing on the clipboard, for the next trip's plan or your notes. It is also a row in the Trip tab from the first tick. It is worked out from the schedule as it stands and the visited ticks; nothing extra is stored.
+
 **Near me.** The *Near me* chip in Places asks the phone where it is, once, and sorts the list nearest first, with the straight-line distance on each row. Places with no pin go last, marked *no pin*. It works with the other chips and the search box — with *Hide visited* it is "what's left around here" — and tapping it again puts the list back. The position isn't stored, and it's off again when the app is reopened. If location is refused, the app says so and leaves the list alone.
 
 **Search.** Works on both names, and on partial Chinese — two or three characters of a name is enough to find it, and the romanised English spelling finds it too. No need to type the whole thing either way.
@@ -192,7 +194,7 @@ The only control under 44px is the inline "Set up the backend" text link inside 
 | File | What | |
 |---|---|---|
 | `index.html` | The app's core — markup, styles, and what Home, All Days and Locations need. No trip content | committed |
-| `prep.js`, `bookings.js`, `manage.js`, `extras.js` | The rest of the app, each fetched the first time it's opened and kept offline: the Prep tab; Bookings, the calendar file and print; Settings, trips, cities, adding and editing places; importers, Plan with AI and People | committed |
+| `prep.js`, `bookings.js`, `manage.js`, `extras.js`, `more.js` | The rest of the app, each fetched the first time it's opened and kept offline: the Prep screen; Bookings, the calendar file and print; Settings, trips, cities, adding and editing places; importers, Plan with AI and People; the recap and the Inbox | committed |
 | `Code.gs` | Apps Script backend: `doGet`/`doPost` JSON API, `setup()`, `resetAndReseed()`. Empty `SEED`, placeholder key | committed |
 | `sw.js` | Service worker, caches the app shell so it runs with no connection | committed |
 | `t2s.js` | Traditional → Simplified character table (generated from OpenCC, Apache-2.0) | committed |

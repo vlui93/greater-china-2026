@@ -2621,6 +2621,11 @@ function bookingsStatus(){
   if(!b.length) return "None yet";
   return b.length+" booking"+(b.length===1?"":"s")+(nb && bookingWhen(nb)>Date.now() ? " · next "+fmtDate(nb.date,false) : "");
 }
+/** Planned places (hotels aside) and how many are ticked visited: the recap's headline, without loading it. */
+function recapHeadline(){
+  var ix=planIndex(), pl=store.data.locations.filter(function(l){ return l.type!=="hotel" && ix[l.id] && ix[l.id].planned.length; });
+  return { planned:pl.length, done:pl.filter(isVisited).length };
+}
 function renderHub(){
   $("#viewTitle").textContent = tripHasChina() ? "Trip · 旅程" : "Trip";
   $("#viewSub").textContent = TRIP.name+" · "+tripRange();
@@ -2630,6 +2635,8 @@ function renderHub(){
   if(store.configured() && store.raw.me)
     rows+=hubRow(me.owner ? "people" : "settings", "", IC.people, "People",
       me.owner ? "Who can see which trip" : "Signed in as "+esc(me.name||"a guest")+(me.role==="viewer" ? " · view only" : ""));
+  var rc=recapHeadline();
+  if(rc.done) rows+=hubRow("recap", "", IC.check, "Recap", rc.done+" of "+rc.planned+" planned places visited");
   rows+=hubRow("settings", "", IC.gear, "Settings",
     esc(others>0 ? "Connection, "+(others+1)+" trips, cities, this phone" : "Connection, trips, cities, this phone"));
   $("#view-trip").innerHTML = statusBar()+'<div class="hub">'+rows+'</div>';
@@ -2802,7 +2809,17 @@ function renderTrip(){
         '<span>An attraction, a show, a tour — or an open return</span></button></div>';
   }
 
-  $("#view-today").innerHTML = statusBar()+dayStrip(null)+hero+next+route+tiles+wallet+prep+(phase==="before" ? planNotesHTML() : "");
+  // Afterwards: how it went against the plan
+  var recap="";
+  if(phase==="after"){
+    var rc=recapHeadline();
+    if(rc.planned) recap='<div class="h2">How it went<span class="zh">回顾</span></div>'+
+      '<button class="card recapcard" data-act="recap" style="display:block;width:100%;text-align:left;padding:14px">'+
+        '<b>'+rc.done+' of '+rc.planned+' planned places visited</b>'+
+        '<div class="prog" style="margin:9px 0 8px"><i style="width:'+Math.round(rc.done/rc.planned*100)+'%"></i></div>'+
+        '<span class="small muted">By city, what was skipped, the extras — and a copy to keep ›</span></button>';
+  }
+  $("#view-today").innerHTML = statusBar()+dayStrip(null)+hero+next+recap+route+tiles+wallet+prep+(phase==="before" ? planNotesHTML() : "");
 }
 
 function renderDays(){

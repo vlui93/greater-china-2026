@@ -1,12 +1,12 @@
 /* index.html is the template with one thing filled in: the names of the
  * functions and actions that live in the on-demand files (prep.js,
- * bookings.js, manage.js, extras.js), so the page can fetch a file the first
+ * bookings.js, manage.js, extras.js, more.js), so the page can fetch a file the first
  * time something in it is called. No trip content is injected: the app arrives
  * on the phone empty and fills itself from the Sheet on first connect. */
 const fs = require('fs'), path = require('path');
 const assertNoTripContent = require('./no-trip-content');
 const d = __dirname, root = path.join(d, '..');
-const PART_FILES = ['prep', 'bookings', 'manage', 'extras'];
+const PART_FILES = ['prep', 'bookings', 'manage', 'extras', 'more'];
 let tpl = fs.readFileSync(path.join(d, 'index.template.html'), 'utf8');
 if (tpl.includes('/*__SEED__*/')) throw new Error('template still has the old seed placeholder');
 
