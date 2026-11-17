@@ -532,6 +532,10 @@ All Days → **Plan with AI** drafts a trip with whichever AI app you have — C
 Every imported place starts its notes with **AI draft — check before relying on it**, plus its spice level, hours, booking note and **Source**, and shows an *AI draft* tag in Locations until that line is deleted (*Edit this place*). Pins are never taken from an AI reply — they're usually made up; paste a map link into the place, or use *Search* in its edit form.
 
 
+### Ask AI about one day
+
+On the road the question is smaller: it's raining, there are three hours left, what now? Each day has **Ask AI**. Type what's changed, copy the prompt into any AI app, paste the reply back. The prompt carries what is still on that day's plan (with times), what you've already done, the other places on your list in the same city that you haven't visited yet, and who you are and how you eat from the Plan with AI form. It asks for no coordinates and sends none. The reply goes through the same check-before-import screen: it can **add** places and stops to the day (fall-back ideas as OPTIONAL, new places as *AI draft*, no pins taken). It never removes a stop; do that on the day.
+
 ### Places from other trips
 
 Every trip's places are on each phone, so **Locations → Other trips** lists the places from your other trips (search in English or 中文). **Copy** puts a new place into the open trip with all its notes, tickets and photo; editing the copy leaves the original alone. Places already in this trip show **Here**. The same list opens from **+ Add a stop** → *Copy a place from another trip*.

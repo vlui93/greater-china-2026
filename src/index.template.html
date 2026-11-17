@@ -2245,6 +2245,7 @@ function renderDayInto(el, date, withStrip){
     '<div class="dayacts">'+
       (stops.length ? '<button class="btn sm ghost" data-act="day-map" data-date="'+date+'">Map of the day</button>' : '')+
       (stops.length>2 ? '<button class="btn sm ghost" data-act="best-order" data-date="'+date+'">Best order</button>' : '')+
+      '<button class="btn sm ghost" data-act="ai-day" data-date="'+date+'">Ask AI</button>'+
       '<button class="btn sm ghost" data-act="rename-day" data-date="'+date+'">Rename day</button>'+
     '</div>';
 }
@@ -3777,7 +3778,7 @@ document.addEventListener("click", function(ev){
     case "ai-plan": withExtras(function(){ aiForm(); }); return;
     case "ai-copy": aiCopy(); return;
     case "ai-read": aiRead(); return;
-    case "ai-back": aiForm(); return;
+    case "ai-back": aiBack(); return;
     case "ai-import": aiImport(); return;
     case "bin": binSheet(); return;
     case "bin-restore": restorePlace(t.dataset.bid).then(function(it){

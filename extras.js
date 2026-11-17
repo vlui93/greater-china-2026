@@ -331,6 +331,7 @@ function aiCollect(){
   return v;
 }
 function aiForm(){
+  aiDay=null;
   var v=aiValues();
   var inp=function(id,label,val,ph,hint){ return '<div class="field"><label>'+label+'</label><input id="ai_'+id+'" value="'+esc(val)+'" placeholder="'+esc(ph||"")+'">'+(hint?'<div class="hint">'+hint+'</div>':'')+'</div>'; };
   var area=function(id,label,val,ph,hint){ return '<div class="field"><label>'+label+'</label><textarea id="ai_'+id+'" style="min-height:'+(id==="cities"?112:64)+'px" placeholder="'+esc(ph||"")+'">'+esc(val)+'</textarea>'+(hint?'<div class="hint">'+hint+'</div>':'')+'</div>'; };
@@ -404,20 +405,99 @@ function aiPrompt(v){
   if(v.inc.guide) add("- for each new place: background (2–3 sentences), what to do, what to order, what to buy.");
   if(v.inc.tasks) add("- tasks: what must be booked ahead, with the date booking opens if you know it.");
   add(""); add("RULES");
-  add("- Every fact needs a source you can name: put a URL in \"source\". If you're not sure of something (hours, prices, booking), leave it out or write \"check\".");
-  add("- No coordinates.");
-  add("- name_zh is the name as written locally: Simplified Chinese on the mainland, Traditional in Hong Kong, Macau and Taiwan.");
-  add("- Dates YYYY-MM-DD, times HH:MM (24-hour). type is attraction, restaurant, shopping or hotel. spice is none, mild or spicy.");
-  add("- In days, \"place\" is the place's name_en exactly as in places or in the list above.");
+  aiRules().forEach(add);
   add(""); add("FORMAT");
-  var f={ kind:"trip-ai-plan", version:1,
-    places:[{ name_en:"", name_zh:"", city:"", type:"attraction", area:"", background:"", what_to_do:"", what_to_order:"", what_to_buy:"",
-              spice:"", mild_dishes:"", hours:"", booking:"", getting_there:"", tickets:"", source:"" }] };
+  var f=aiFormat();
   if(v.inc.days) f.days=[{ date:"YYYY-MM-DD", label:"", load:"heavy | light | flex", stops:[{ place:"", time:"HH:MM", optional:false, note:"" }] }];
   if(v.inc.tasks) f.tasks=[{ text:"", due:"YYYY-MM-DD", section:"Bookings" }];
   add(JSON.stringify(f));
   return L.join("\n");
 }
+/** The rules every prompt carries, and the reply's shape for places. */
+function aiRules(){
+  return ["- Every fact needs a source you can name: put a URL in \"source\". If you're not sure of something (hours, prices, booking), leave it out or write \"check\".",
+    "- No coordinates.",
+    "- name_zh is the name as written locally: Simplified Chinese on the mainland, Traditional in Hong Kong, Macau and Taiwan.",
+    "- Dates YYYY-MM-DD, times HH:MM (24-hour). type is attraction, restaurant, shopping or hotel. spice is none, mild or spicy.",
+    "- In days, \"place\" is the place's name_en exactly as in places or in the list above."];
+}
+function aiFormat(){
+  return { kind:"trip-ai-plan", version:1,
+    places:[{ name_en:"", name_zh:"", city:"", type:"attraction", area:"", background:"", what_to_do:"", what_to_order:"", what_to_buy:"",
+              spice:"", mild_dishes:"", hours:"", booking:"", getting_there:"", tickets:"", source:"" }] };
+}
+
+/* ==========================================================================
+   Ask AI about one day. On the road the question is smaller than "plan the
+   trip": it's raining, there are three hours left, what now? This writes a
+   prompt holding what is still on that day's plan, what has been done, the
+   other places in the same city not yet visited, and who is travelling; the
+   reply comes back through the same reader and preview as Plan with AI. It
+   can add places and stops to the day. It never removes one — that stays a
+   tap on the day itself.
+   ========================================================================== */
+var aiDay=null;
+function aiBack(){ if(aiDay) aiDayForm(aiDay); else aiForm(); }
+function aiDayPrompt(date, ask){
+  var L=[], add=function(s){ L.push(s); }, p=load(AI_PROFILE, {});
+  var SP={ none:"no spice at all", mild:"less spicy to non-spicy — name the mild dishes", spicy:"spicy food is fine" };
+  var nm=function(l){ return (l.name_en||l.name_zh)+(l.name_zh&&l.name_en?" ("+l.name_zh+")":""); };
+  var stops=store.dayStops(date).map(function(s){ return { s:s, l:store.loc(s.location_id) }; }).filter(function(x){ return x.l; });
+  var left=stops.filter(function(x){ return !isVisited(x.l); }), done=stops.filter(function(x){ return isVisited(x.l); });
+  var cities=[]; stops.forEach(function(x){ if(x.l.city && cities.indexOf(x.l.city)<0) cities.push(x.l.city); });
+  var onDay={}; stops.forEach(function(x){ onDay[x.l.id]=1; });
+  var others=store.data.locations.filter(function(l){ return !onDay[l.id] && !isVisited(l) && l.type!=="hotel" && (!cities.length || cities.indexOf(l.city)>=0); });
+  add("You're helping re-plan one day of a trip that is under way. Reply with JSON only — no other text — in exactly the format at the end.");
+  add(""); add("THE DAY");
+  add("Date: "+date+" ("+fmtDate(date,true)+")"+(cities.length ? ", in "+cities.join(" and ") : ""));
+  if(date===todayISO()){ var d=new Date(); add("Time now: "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")); }
+  add(""); add("WHAT HAS CHANGED, OR WHAT WE WANT"); add(String(ask||"").trim() || "(nothing said — suggest how to make the most of what is left of the day)");
+  add(""); add("STILL ON THE DAY'S PLAN");
+  add(left.length ? left.map(function(x){ return "- "+(String(x.s.planned_time||"").slice(0,5)||"no time")+" "+nm(x.l)+" — "+x.l.type+(isOptionalStop(x.s)?" (optional)":""); }).join("\n") : "(nothing)");
+  if(done.length){ add(""); add("ALREADY DONE TODAY"); add(done.map(function(x){ return "- "+nm(x.l); }).join("\n")); }
+  if(others.length){ add(""); add("OTHER PLACES ON OUR LIST HERE, NOT YET VISITED — use these first, by their exact English name");
+    add(others.slice(0,40).map(function(l){ return "- "+nm(l)+" — "+l.type; }).join("\n")); }
+  var food=[SP[p.spice], p.diet && "diet and dislikes: "+p.diet, p.budget && "budget per meal: "+p.budget].filter(Boolean).join("; ");
+  var us=[p.who && "Travellers: "+p.who, p.langs && "Languages we speak: "+p.langs, food && "Food: "+food].filter(Boolean);
+  if(us.length){ add(""); add("US"); us.forEach(add); }
+  add(""); add("WHAT TO REPLY WITH");
+  add("- Up to five stops to add or swap in for the rest of this day, in order, each with a time.");
+  add("- Prefer places from the lists above. Add a new place only when it is clearly a better fit, and give its source.");
+  add("- In each stop's \"note\", say why, and which planned stop it would replace, if any. We remove stops ourselves.");
+  add("- Mark fall-back ideas optional: true. Don't repeat a stop already on the plan unless you are moving its time.");
+  add(""); add("RULES"); aiRules().forEach(add);
+  add(""); add("FORMAT");
+  var f=aiFormat(); f.days=[{ date:date, stops:[{ place:"", time:"HH:MM", optional:false, note:"" }] }];
+  add(JSON.stringify(f));
+  return L.join("\n");
+}
+function aiDayForm(date){
+  aiDay=date;
+  var stops=store.dayStops(date).map(function(s){ return store.loc(s.location_id); }).filter(Boolean);
+  var left=stops.filter(function(l){ return !isVisited(l); }).length;
+  var html='<div id="aiDayWrap">'+
+    '<p class="blurb small muted" style="margin:12px 0 14px">Say what’s changed, copy the prompt into any AI app, then paste its reply below. '+
+      'The prompt carries what is left of this day’s plan ('+left+' of '+stops.length+' stop'+(stops.length===1?"":"s")+'), what you’ve done, and the other places on your list nearby. '+
+      'A reply can <b>add</b> places and stops to the day; it never removes one — do that on the day itself.</p>'+
+    '<div class="field"><label>What’s changed, or what do you want?</label>'+
+      '<textarea id="aid_ask" style="min-height:84px" placeholder="It’s raining and we have three hours before dinner. Somewhere indoors, not far."></textarea></div>'+
+    '<div class="formactions" style="margin-top:4px"><button class="btn primary" data-act="aid-copy">Copy the prompt</button></div>'+
+    '<div class="field" style="margin-top:10px"><textarea id="ai_prompt" readonly style="min-height:90px;font-size:12px" aria-label="The prompt"></textarea></div>'+
+    '<div class="section-title">Paste the reply</div>'+
+    '<div class="field"><textarea id="ai_reply" style="min-height:110px;font-size:12.5px" placeholder="Paste the AI\'s whole reply here"></textarea></div>'+
+    '<div class="formactions" style="margin-top:10px"><button class="btn primary" data-act="ai-read">Read the reply</button></div>'+
+    '<div id="ai_err" class="hint" style="color:var(--warn)"></div></div>';
+  openSheet("Ask AI · Day "+dayNumber(date), html);
+  $("#ai_prompt").value=aiDayPrompt(date, "");
+  $("#aiDayWrap").addEventListener("input", function(e){ if(e.target.id==="aid_ask") $("#ai_prompt").value=aiDayPrompt(date, e.target.value); });
+}
+onAct("ai-day", function(t){ aiDayForm(t.dataset.date); });
+onAct("aid-copy", function(){
+  var p=$("#ai_prompt"); p.value=aiDayPrompt(aiDay, $("#aid_ask").value);
+  var done=function(){ toast("Prompt copied — paste it into your AI app", 3000); };
+  var byHand=function(){ p.select(); try{ document.execCommand("copy"); done(); }catch(e){ toast("Select the prompt and copy it"); } };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p.value).then(done, byHand); else byHand();
+});
 function aiCopy(){
   var p=$("#ai_prompt"); p.value=aiPrompt(aiCollect());
   var done=function(){ toast("Prompt copied — paste it into your AI app", 3000); };

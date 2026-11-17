@@ -915,7 +915,7 @@ var TRIP_TABS = ["bookings", "locations", "schedule", "checklist"];   // rows th
    the part itself put on screen (by then the real function is in place).
    A helper that two files need stays in this one.
    ========================================================================== */
-var PARTS = {"prep":["shortDate","dueInfo","byOrder","taskSort","groupBySection","setEachTick","ckRow","ckGroupHTML","countDone","renderPrep","prepChecklist","swipeHint","prepPacking","prepGuide","checklistForm","fillSections","formSection","tripPeople","removeItems","sectionForm","myTemplates","packingKeyFor","templateSources","templatesForm","useTemplate","saveTemplate","deleteTemplate"],"bookings":["bkWhenText","setBookingTicket","setBookingTz","renderBookings","icsText","icsFold","icsUtc","icsDate","buildIcs","icsForm","fileName","exportIcs","printHTML","printForm","printNow","guessYear","findDates","findTimes","after","findRef","parseBookingText","bookingForm","bookingFormShape","readPasted","saveBookingForm","deleteBookingForm"],"manage":["isOwner","renameDay","binSheet","locationForm","collectLocationForm","isShortMapLink","nameFromTitle","mergeResolved","placeFromParsed","linkBoxHTML","setField","applyPlace","fillFromLink","bindLinkBox","quickAddForm","guessCity","pickLocationForDay","pickDayForLocation","backendNoteHTML","settingsForm","peopleSectionHTML","isArchived","canArchive","placesIn","setArchived","tripsSectionHTML","citiesSectionHTML","tripForm","saveTripForm","copyChecklist","deleteTrip","cityForm","saveCityForm","routeKm","bestInsert","orderDay","bestOrder","findBoxHTML","bindFindBox","osmSearch","osmPlace","findPlace","pickFound","libraryForm","libraryShow","copyPlace","stopNoteForm"],"extras":["importNotes","unzipFirst","stripTags","parseKml","parseGeoJson","parseCsv","parseCsvPlaces","readPlacesFile","importPlacesFile","applyImport","aiFormKey","aiCitiesGuess","aiValues","aiCollect","aiForm","aiPrompt","aiCopy","aiParse","aiKey","aiNormalize","aiRead","aiPreview","aiNotes","aiImport","peopleSheet","tripNames","peopleList","personForm","savePerson","inviteLink","inviteText","inviteSheet","copyInvite","removePerson"],"more":["recapData","recapLine","recapText","recapSheet"]};
+var PARTS = {"prep":["shortDate","dueInfo","byOrder","taskSort","groupBySection","setEachTick","ckRow","ckGroupHTML","countDone","renderPrep","prepChecklist","swipeHint","prepPacking","prepGuide","checklistForm","fillSections","formSection","tripPeople","removeItems","sectionForm","myTemplates","packingKeyFor","templateSources","templatesForm","useTemplate","saveTemplate","deleteTemplate"],"bookings":["bkWhenText","setBookingTicket","setBookingTz","renderBookings","icsText","icsFold","icsUtc","icsDate","buildIcs","icsForm","fileName","exportIcs","printHTML","printForm","printNow","guessYear","findDates","findTimes","after","findRef","parseBookingText","bookingForm","bookingFormShape","readPasted","saveBookingForm","deleteBookingForm"],"manage":["isOwner","renameDay","binSheet","locationForm","collectLocationForm","isShortMapLink","nameFromTitle","mergeResolved","placeFromParsed","linkBoxHTML","setField","applyPlace","fillFromLink","bindLinkBox","quickAddForm","guessCity","pickLocationForDay","pickDayForLocation","backendNoteHTML","settingsForm","peopleSectionHTML","isArchived","canArchive","placesIn","setArchived","tripsSectionHTML","citiesSectionHTML","tripForm","saveTripForm","copyChecklist","deleteTrip","cityForm","saveCityForm","routeKm","bestInsert","orderDay","bestOrder","findBoxHTML","bindFindBox","osmSearch","osmPlace","findPlace","pickFound","libraryForm","libraryShow","copyPlace","stopNoteForm"],"extras":["importNotes","unzipFirst","stripTags","parseKml","parseGeoJson","parseCsv","parseCsvPlaces","readPlacesFile","importPlacesFile","applyImport","aiFormKey","aiCitiesGuess","aiValues","aiCollect","aiForm","aiPrompt","aiRules","aiFormat","aiBack","aiDayPrompt","aiDayForm","aiCopy","aiParse","aiKey","aiNormalize","aiRead","aiPreview","aiNotes","aiImport","peopleSheet","tripNames","peopleList","personForm","savePerson","inviteLink","inviteText","inviteSheet","copyInvite","removePerson"],"more":["recapData","recapLine","recapText","recapSheet"]};
 var partJs = {};
 function loadPart(name){
   if(!partJs[name]) partJs[name]=new Promise(function(res, rej){
@@ -943,7 +943,7 @@ Object.keys(PARTS).forEach(function(part){
 /* Actions a part handles itself: a part calls onAct("name", fn) as it loads,
    and the build lists which part owns which name, so a tap on one loads its
    part first. Older actions are still in the switch under "Events". */
-var ACTS = {}, PART_ACTS = {"recap":"more","recap-copy":"more"};
+var ACTS = {}, PART_ACTS = {"ai-day":"extras","aid-copy":"extras","recap":"more","recap-copy":"more"};
 function onAct(name, fn){ ACTS[name]=fn; }
 function runAct(name, t, ev){
   if(ACTS[name]){ ACTS[name](t, ev); return true; }
@@ -2245,6 +2245,7 @@ function renderDayInto(el, date, withStrip){
     '<div class="dayacts">'+
       (stops.length ? '<button class="btn sm ghost" data-act="day-map" data-date="'+date+'">Map of the day</button>' : '')+
       (stops.length>2 ? '<button class="btn sm ghost" data-act="best-order" data-date="'+date+'">Best order</button>' : '')+
+      '<button class="btn sm ghost" data-act="ai-day" data-date="'+date+'">Ask AI</button>'+
       '<button class="btn sm ghost" data-act="rename-day" data-date="'+date+'">Rename day</button>'+
     '</div>';
 }
@@ -3777,7 +3778,7 @@ document.addEventListener("click", function(ev){
     case "ai-plan": withExtras(function(){ aiForm(); }); return;
     case "ai-copy": aiCopy(); return;
     case "ai-read": aiRead(); return;
-    case "ai-back": aiForm(); return;
+    case "ai-back": aiBack(); return;
     case "ai-import": aiImport(); return;
     case "bin": binSheet(); return;
     case "bin-restore": restorePlace(t.dataset.bid).then(function(it){
