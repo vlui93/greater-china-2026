@@ -37,10 +37,10 @@ suite({}, async (env) => {
   await page.click('#btnSettings'); await wait(500);
   ok(await loaded() === 'prep,bookings,manage' && /Web App URL/.test(await page.textContent('#sheetBody')), 'Settings loads manage.js and opens');
   await page.evaluate(() => closeSheet());
-  ok(await tags() === 'prep.js,bookings.js,manage.js', 'extras.js (importers, Plan with AI, People) still hasn\'t been needed');
+  ok(await tags() === 'prep.js,bookings.js,manage.js', 'extras.js (importers, Plan with AI, People) and more.js (recap, Inbox) still haven\'t been needed');
 
   console.log('\n2. every function a part promises is really in it');
-  await page.evaluate(() => loadPart('extras')); await wait(200);
+  await page.evaluate(() => Promise.all(Object.keys(PARTS).map(loadPart))); await wait(300);
   const missing = await page.evaluate(() => { const m = []; Object.keys(PARTS).forEach(p => PARTS[p].forEach(f => { if (typeof window[f] !== 'function' || isStub(window[f])) m.push(p + '.' + f); })); return m; });
   ok(missing.length === 0, 'all ' + await page.evaluate(() => Object.keys(PARTS).reduce((n, p) => n + PARTS[p].length, 0)) + ' are the real ones once loaded' + (missing.length ? ': missing ' + missing.join(', ') : ''));
 
@@ -80,6 +80,8 @@ suite({}, async (env) => {
   ok(/Web App URL/.test(await p4.textContent('#sheetBody')), 'Settings opens offline');
   await p4.evaluate(() => { closeSheet(); return aiForm(); }); await wait(600);
   ok(await p4.$('#sheet.open') && /AI/.test(await p4.textContent('#sheetTitle')), 'Plan with AI opens offline');
+  await p4.evaluate(() => { closeSheet(); return recapSheet(); }); await wait(600);
+  ok(await p4.$('#sheet.open') && /Recap/.test(await p4.textContent('#sheetTitle')), 'the recap (more.js) opens offline');
   await p4.ctx.setOffline(false);
   ok(!page.errs.length && !p2.errs.length && !p4.errs.length, 'no JS errors ' + page.errs.concat(p2.errs, p4.errs).join('; '));
 });
