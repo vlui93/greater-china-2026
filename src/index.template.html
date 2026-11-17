@@ -621,6 +621,20 @@ a.btn{text-decoration:none}
 .mapbox{height:calc(100vh - 400px);height:calc(100dvh - 400px);min-height:300px;border-radius:var(--radius);
   overflow:hidden;border:1px solid var(--line);background:var(--surface-2);position:relative;z-index:0}
 .mapbox.tall{height:calc(100vh - 190px);height:calc(100dvh - 190px)}
+/* A map with its list underneath: the map takes the top of the screen and stays there while the list scrolls */
+.mapbox.half{--maph:max(44vh,230px);height:var(--maph);min-height:0;position:sticky;z-index:6;top:calc(var(--safe-t) + 66px);box-shadow:0 6px 18px rgba(27,25,23,.14)}
+.sheet .mapbox.half{top:66px}
+/* a row brought into view lands below the map and above the tab bar, not under either */
+.mlrow{scroll-margin-top:calc(max(44vh,230px) + var(--safe-t) + 80px);scroll-margin-bottom:calc(var(--nav-h) + var(--nav-gap) + 16px)}
+.maplist{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.mlrow{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:9px 12px;min-height:52px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.mlrow.on{border-color:var(--brand);box-shadow:0 0 0 2px color-mix(in srgb,var(--brand) 30%,transparent)}
+.mlrow .mn{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:750;font-size:12.5px}
+.mlrow .mb{flex:1;min-width:0}
+.mlrow .me{font-weight:640;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mlrow .mm{font-size:12.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mlrow.nopin{opacity:.62}
 .mapbox .mapmsg{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:var(--ink-2);font-size:14px}
 .mpin span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;color:#fff;font-weight:750;font-size:13px;
   border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
@@ -3448,23 +3462,49 @@ function showMap(which, el, pins, opts){
     el.innerHTML='<div class="mapmsg">The map needs a connection the first time it is opened.<br>Try again on wifi — after that it works offline.</div>';
   });
 }
+/* The list under a map. Tapping a row centres the map on its pin and opens
+   it; tapping a pin marks its row and brings it into view. `which` is the
+   map ("places" or "sheet"), rows are { id, n, color, name, sub, pin }. */
+function mapListHTML(which, rows){
+  return '<div class="maplist" id="maplist-'+which+'">'+rows.map(function(r){
+    return '<button class="mlrow'+(r.pin?"":" nopin")+'" data-act="map-row" data-which="'+which+'" data-pid="'+esc(r.id)+'">'+
+      '<span class="mn" style="background:'+r.color+'">'+esc(r.n||"")+'</span>'+
+      '<span class="mb"><span class="me" style="display:block">'+r.name+'</span><span class="mm" style="display:block">'+r.sub+'</span></span></button>';
+  }).join("")+'</div>';
+}
+function mapListMark(which, id, scroll){
+  var box=$("#maplist-"+which); if(!box) return;
+  box.querySelectorAll(".mlrow").forEach(function(b){ b.classList.toggle("on", b.dataset.pid===String(id)); });
+  var on=box.querySelector(".mlrow.on");
+  if(on && scroll && on.scrollIntoView) on.scrollIntoView({ block:"nearest", behavior:"smooth" });
+}
+onAct("map-row", function(t){
+  var which=t.dataset.which, id=t.dataset.pid, m=maps[which];
+  if(t.classList.contains("nopin")){ toast("No pin for this one — open it to add a map link"); return; }
+  if(!m || !window.TripMap || !window.TripMap.focus(m, id)) return;
+  mapListMark(which, id, false);
+});
 function renderPlacesMap(head){
   var all=store.data.locations;
   var list=all.filter(placeFilter(planIndex()));
   var pinned=list.filter(hasXY), missing=list.length-pinned.length;
   dropMap("places");
   $("#view-places").innerHTML=head+
-    '<div class="mapbox" id="placesMap"></div>'+
+    '<div class="mapbox half" id="placesMap"></div>'+
     '<div class="maplegend">'+["attraction","restaurant","shopping","hotel"].map(function(t){
       return '<span><i style="background:'+TYPE_COLOR[t]+'"></i>'+t+'</span>'; }).join("")+
       (list.some(isVisited) ? '<span><i style="background:'+VISITED_COLOR+'"></i>visited</span>' : '')+
-      '<span class="muted">'+pinned.length+' on the map'+(missing?' · '+missing+' without a pin':'')+'</span></div>';
+      '<span class="muted">'+pinned.length+' on the map'+(missing?' · '+missing+' without a pin':'')+'</span></div>'+
+    mapListHTML("places", pinned.concat(list.filter(function(l){ return !hasXY(l); })).map(function(l){
+      return { id:l.id, n:"", color:pinColor(l), pin:hasXY(l), name:esc(l.name_en||l.name_zh),
+               sub:(l.name_zh && l.name_en ? '<span class="zh">'+escz(l.name_zh)+'</span> · ' : '')+esc(l.city)+' · '+esc(l.type)+(hasXY(l)?'':' · no pin') };
+    }));
   var key=TRIP.id+"|"+ui.city+"|"+ui.type+"|"+!!ui.hideVisited+"|"+!!ui.onPlan+"|"+!!ui.mild;
   var v=ui.mapView && ui.mapView.key===key ? ui.mapView : null;
   var ctr=cityInfo(ui.city!=="All" ? ui.city : (cityOptions()[0]||""));
   showMap("places", $("#placesMap"), pinned.map(function(l){
-    return { lat:+l.lat, lng:+l.lng, kind:"place", color:pinColor(l), title:l.name_en, popup:mapPopup(l) };
-  }), { view: v, centre: ctr && hasXY(ctr) ? [+ctr.lat, +ctr.lng] : null }).then(function(){
+    return { id:l.id, lat:+l.lat, lng:+l.lng, kind:"place", color:pinColor(l), title:l.name_en, popup:mapPopup(l) };
+  }), { view: v, centre: ctr && hasXY(ctr) ? [+ctr.lat, +ctr.lng] : null, onPin:function(id){ mapListMark("places", id, true); } }).then(function(){
     if(maps.places) maps.places._filterKey=key;
   });
 }
@@ -3474,18 +3514,22 @@ function dayMap(date){
   if(!locs.length) return;
   var first=locs[0], last=locs[locs.length-1];
   var hFirst=first.type!=="hotel" ? hotelFor(first) : null, hLast=last.type!=="hotel" ? hotelFor(last) : null;
-  var pins=[], n=0, nopin=[];
+  var pins=[], n=0, nopin=[], rows=[];
   if(hFirst && hasXY(hFirst)) pins.push({ lat:+hFirst.lat, lng:+hFirst.lng, kind:"hotel", label:"H", color:TYPE_COLOR.hotel, title:hFirst.name_en, popup:mapPopup(hFirst,"Start") });
   locs.forEach(function(l){
     n++;
+    var st=stops[n-1], tm=String(st && st.planned_time || "").slice(0,5);
+    rows.push({ id:"s"+n, n:String(n), color:pinColor(l), pin:hasXY(l), name:esc(l.name_en||l.name_zh),
+                sub:(tm ? esc(tm)+' · ' : '')+(l.name_zh && l.name_en ? '<span class="zh">'+escz(l.name_zh)+'</span> · ' : '')+esc(l.type)+(hasXY(l)?'':' · no pin') });
     if(!hasXY(l)){ nopin.push(n+". "+l.name_en); return; }
-    pins.push({ lat:+l.lat, lng:+l.lng, kind:l.type==="hotel"?"hotel":"stop", label:String(n), color:pinColor(l), title:l.name_en, popup:mapPopup(l,"Stop "+n) });
+    pins.push({ id:"s"+n, lat:+l.lat, lng:+l.lng, kind:l.type==="hotel"?"hotel":"stop", label:String(n), color:pinColor(l), title:l.name_en, popup:mapPopup(l,"Stop "+n) });
   });
   if(hLast && hasXY(hLast)) pins.push({ lat:+hLast.lat, lng:+hLast.lng, kind:"hotel", label:"H", color:TYPE_COLOR.hotel, title:hLast.name_en, popup:mapPopup(hLast,"End") });
   openSheet("Day "+dayNumber(date)+" · "+fmtDate(date,false),
-    '<div class="mapbox tall" id="dayMap" style="margin-top:12px"></div>'+
-    (nopin.length ? '<p class="blurb small muted" style="margin-top:8px">Not on the map (no pin): '+nopin.map(esc).join(", ")+'</p>' : ''));
-  showMap("sheet", $("#dayMap"), pins, { route:true, dashedEnds:!!(hFirst||hLast) });
+    '<div class="mapbox half" id="dayMap" style="margin-top:12px"></div>'+
+    (nopin.length ? '<p class="blurb small muted" style="margin-top:8px">Not on the map (no pin): '+nopin.map(esc).join(", ")+'</p>' : '')+
+    mapListHTML("sheet", rows));
+  showMap("sheet", $("#dayMap"), pins, { route:true, dashedEnds:!!(hFirst||hLast), onPin:function(id){ mapListMark("sheet", id, true); } });
 }
 
 /* ==========================================================================

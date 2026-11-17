@@ -490,6 +490,8 @@ The new tabs and columns are added the first time the script runs. From a laptop
 - **Locations → Map** shows every place in the open trip with a pin, coloured by type. The city and type chips filter it. Tap a pin for its name, **Details** and **Navigate**. The ◎ button shows where you are (one reading, kept on the phone).
 - **Map of the day** (under each day's stops) numbers the stops in order, joins them up, and dashes the way from and back to the hotel.
 
+**Each map has its list under it.** The map takes the top of the screen and stays there while the list scrolls: the day's stops in order under the day map, the filtered places under the Places map. Tap a row and the map centres on its pin and opens it; tap a pin and its row is marked and brought into view. A stop or place with no pin is still listed, marked *no pin*.
+
 The map is OpenStreetMap's, drawn by Leaflet. OpenStreetMap uses plain GPS like the app, so pins are where they should be in China too. Both are loaded the first time a map is opened. Each map tile is kept on the phone once it has been looked at (up to about 3,000 tiles), so a city you have browsed on wifi still shows with no signal. Nothing is downloaded in advance — OpenStreetMap's tile servers don't allow that. Viewing a map tells OpenStreetMap which area you're looking at, as any web map does.
 
 ### Find by name

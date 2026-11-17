@@ -26,10 +26,12 @@
 
   /**
    * el      container element (sized by the page)
-   * pins    [{ lat, lng, label, color, popup, kind }] — kind "stop" | "hotel" | "place"
+   * pins    [{ lat, lng, label, color, popup, kind, id }] — kind "stop" | "hotel" | "place";
+   *           id lets the page find the pin again (focus) and hear it tapped (opts.onPin)
    * opts    { route: true to join pins in order, dashedEnds: true to dash
    *           the first and last legs (to and from the hotel),
-   *           view: {lat, lng, zoom} to open there instead of fitting the pins }
+   *           view: {lat, lng, zoom} to open there instead of fitting the pins,
+   *           onPin: function(id) called when a pin with an id is tapped }
    * Returns the Leaflet map; the page removes it when it's done with it.
    */
   function show(el, pins, opts) {
@@ -44,6 +46,7 @@
       }).addTo(map);
 
       var pts = [];
+      map._pins = {};
       pins.forEach(function (p) {
         var icon = L.divIcon({
           className: "mpin " + (p.kind || "place"),
@@ -52,6 +55,10 @@
         });
         var m = L.marker([p.lat, p.lng], { icon: icon, keyboard: true, title: p.title || "" }).addTo(map);
         if (p.popup) m.bindPopup(p.popup, { closeButton: true, maxWidth: 260 });
+        if (p.id != null) {
+          if (!map._pins[p.id]) map._pins[p.id] = m;
+          if (opts.onPin) m.on("click", function () { opts.onPin(p.id); });
+        }
         pts.push([p.lat, p.lng]);
       });
 
@@ -105,5 +112,14 @@
     });
   }
 
-  window.TripMap = { load: load, show: show };
+  /** Centre on the pin with this id, zoomed in enough to tell it apart, and open its popup. */
+  function focus(map, id) {
+    var m = map && map._pins && map._pins[id];
+    if (!m) return false;
+    map.setView(m.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
+    m.openPopup();
+    return true;
+  }
+
+  window.TripMap = { load: load, show: show, focus: focus };
 })();
